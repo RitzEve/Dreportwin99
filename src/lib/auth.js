@@ -212,6 +212,47 @@ export async function providerAddMaster({ companyId, name, email, password }) {
   return { ok: true, user: profileToUser(data) };
 }
 
+/** Provider renames a company. */
+export async function renameCompany(companyId, name) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!name || !name.trim()) return { ok: false, error: 'Enter a company name.' };
+  const { error } = await supabase.from('companies').update({ name: name.trim() }).eq('id', companyId);
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true };
+}
+
+/**
+ * Edit an account's Name/ID and/or login email. Pass only the fields you want to
+ * change (leave the other null/undefined). Name/ID updates the profiles table
+ * (RLS authorises by the caller's role). Email is the real login credential, so
+ * it goes through the admin_set_email DB function (updates auth + profiles).
+ */
+export async function updateAccountInfo(userId, { name, email } = {}) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not signed in.' };
+
+  if (name != null) {
+    if (!name.trim()) return { ok: false, error: 'Enter a Name/ID.' };
+    const { error } = await supabase.from('profiles')
+      .update({ name: name.trim(), username: name.trim() }).eq('id', userId);
+    if (error) return { ok: false, error: friendly(error) };
+  }
+
+  if (email != null) {
+    if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email.' };
+    const { error } = await supabase.rpc('admin_set_email', { target_id: userId, new_email: email.trim() });
+    if (error) {
+      if (/admin_set_email|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+        return { ok: false, error: 'Email editing needs a one-time database setup (run migration-003.sql in Supabase). Any Name/ID change was still saved.' };
+      }
+      return { ok: false, error: friendly(error) };
+    }
+  }
+
+  return { ok: true };
+}
+
 /** Provider deletes a company (cascades to its accounts + app data). Re-enters password. */
 export async function deleteCompany(companyId, password) {
   const me = await getCurrentUser();

@@ -5,6 +5,8 @@ import {
   providerAddMaster,
   deleteCompany,
   adminResetPassword,
+  renameCompany,
+  updateAccountInfo,
 } from '../lib/auth.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 
@@ -137,6 +139,45 @@ function CompanyCard({ company, onChanged }) {
   const [showDelete, setShowDelete] = useState(false);
   const [resettingId, setResettingId] = useState(null);
   const [resetPw, setResetPw] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(company.name);
+  const [editingMasterId, setEditingMasterId] = useState(null);
+  const [masterDraft, setMasterDraft] = useState({ name: '', email: '' });
+
+  async function doRenameCompany(e) {
+    e.preventDefault();
+    setError(''); setOk(''); setBusy(true);
+    const res = await renameCompany(company.id, nameDraft);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOk('Company name updated.');
+    setEditingName(false);
+    onChanged?.();
+  }
+
+  function startEditMaster(m) {
+    setEditingMasterId(m.id);
+    setMasterDraft({ name: m.name, email: m.email || '' });
+    setResettingId(null);
+    setError(''); setOk('');
+  }
+
+  async function doSaveMaster(e, m) {
+    e.preventDefault();
+    setError(''); setOk(''); setBusy(true);
+    const nameChanged = masterDraft.name.trim() !== (m.name || '');
+    const emailChanged = masterDraft.email.trim() !== (m.email || '');
+    if (!nameChanged && !emailChanged) { setBusy(false); setEditingMasterId(null); return; }
+    const payload = {};
+    if (nameChanged) payload.name = masterDraft.name;
+    if (emailChanged) payload.email = masterDraft.email;
+    const res = await updateAccountInfo(m.id, payload);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOk('Master details updated.');
+    setEditingMasterId(null);
+    onChanged?.();
+  }
 
   async function doReset(e, userId) {
     e.preventDefault();
@@ -162,18 +203,37 @@ function CompanyCard({ company, onChanged }) {
   return (
     <div style={styles.companyCard}>
       <div style={styles.companyHead}>
-        <div>
-          <div style={styles.companyName}>{company.name}</div>
-          <div style={styles.sub}>{company.masters.length} master · {company.managerCount} manager · {company.staffCount} staff</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {editingName ? (
+            <form onSubmit={doRenameCompany} style={styles.nameEditRow}>
+              <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
+                placeholder="Company name" style={{ flex: 1, minWidth: 0 }} />
+              <button type="submit" className="btn btn-primary btn-sm" disabled={!nameDraft.trim() || busy}>
+                <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> Save
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm"
+                onClick={() => { setEditingName(false); setNameDraft(company.name); }}>Cancel</button>
+            </form>
+          ) : (
+            <>
+              <div style={styles.companyName}>{company.name}</div>
+              <div style={styles.sub}>{company.masters.length} master · {company.managerCount} manager · {company.staffCount} staff</div>
+            </>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => { setAdding((a) => !a); setError(''); setOk(''); }}>
-            <i className="ti ti-user-plus" aria-hidden="true" /> Add master
-          </button>
-          <button className="btn btn-danger btn-sm" onClick={() => setShowDelete(true)}>
-            <i className="ti ti-trash" aria-hidden="true" /> Delete
-          </button>
-        </div>
+        {!editingName && (
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingName(true); setNameDraft(company.name); setError(''); setOk(''); }}>
+              <i className="ti ti-pencil" aria-hidden="true" /> Edit name
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setAdding((a) => !a); setError(''); setOk(''); }}>
+              <i className="ti ti-user-plus" aria-hidden="true" /> Add master
+            </button>
+            <button className="btn btn-danger btn-sm" onClick={() => setShowDelete(true)}>
+              <i className="ti ti-trash" aria-hidden="true" /> Delete
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
@@ -187,10 +247,36 @@ function CompanyCard({ company, onChanged }) {
               </div>
               <div style={styles.sub}>{m.operatorId} · {m.email}</div>
             </div>
-            <button className="btn btn-ghost btn-sm"
-              onClick={() => { setResettingId(resettingId === m.id ? null : m.id); setResetPw(''); setError(''); }}>
-              <i className="ti ti-key" aria-hidden="true" /> Reset password
-            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn btn-ghost btn-sm"
+                onClick={() => (editingMasterId === m.id ? setEditingMasterId(null) : startEditMaster(m))}>
+                <i className="ti ti-pencil" aria-hidden="true" /> Edit
+              </button>
+              <button className="btn btn-ghost btn-sm"
+                onClick={() => { setResettingId(resettingId === m.id ? null : m.id); setResetPw(''); setEditingMasterId(null); setError(''); }}>
+                <i className="ti ti-key" aria-hidden="true" /> Reset password
+              </button>
+            </div>
+            {editingMasterId === m.id && (
+              <form onSubmit={(e) => doSaveMaster(e, m)} style={styles.editBox}>
+                <div className="field" style={{ margin: 0 }}>
+                  <label>Name / ID (used for login)</label>
+                  <input value={masterDraft.name} onChange={(e) => setMasterDraft({ ...masterDraft, name: e.target.value })}
+                    placeholder="e.g. Mario" />
+                </div>
+                <div className="field" style={{ margin: 0 }}>
+                  <label>Login email</label>
+                  <input type="email" value={masterDraft.email} onChange={(e) => setMasterDraft({ ...masterDraft, email: e.target.value })}
+                    placeholder="mario@company.com" />
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditingMasterId(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
+                    <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
+              </form>
+            )}
             {resettingId === m.id && (
               <form onSubmit={(e) => doReset(e, m.id)} style={styles.resetRow}>
                 <input type="text" value={resetPw} onChange={(e) => setResetPw(e.target.value)}
@@ -324,5 +410,7 @@ const styles = {
   companyName: { fontSize: 14.5, fontWeight: 600 },
   masterRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
   resetRow: { display: 'flex', gap: 8, width: '100%', marginTop: 4 },
+  editBox: { display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border)' },
+  nameEditRow: { display: 'flex', gap: 8, alignItems: 'center', width: '100%' },
   addBox: { marginTop: 10, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
 };

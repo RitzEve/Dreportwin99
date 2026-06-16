@@ -7,6 +7,7 @@ import {
   setActive,
   removeAccount,
   adminResetPassword,
+  updateAccountInfo,
   creatableRoles,
   canActOn,
 } from '../lib/auth.js';
@@ -137,6 +138,8 @@ function AccountRow({ account, currentUser, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [newPw, setNewPw] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ name: '', email: '' });
   const isSelf = account.id === currentUser.id;
   const manageable = canActOn(currentUser, account);
   const canToggleRole = currentUser.role === ROLES.MASTER && manageable;
@@ -158,6 +161,28 @@ function AccountRow({ account, currentUser, onChanged }) {
     setError(''); setResetting(false); setNewPw('');
   }
 
+  function startEdit() {
+    setEditing(true);
+    setDraft({ name: account.name, email: account.email || '' });
+    setResetting(false);
+    setError('');
+  }
+
+  async function doSaveEdit(e) {
+    e.preventDefault();
+    setError(''); setBusy(true);
+    const nameChanged = draft.name.trim() !== (account.name || '');
+    const emailChanged = draft.email.trim() !== (account.email || '');
+    if (!nameChanged && !emailChanged) { setBusy(false); setEditing(false); return; }
+    const payload = {};
+    if (nameChanged) payload.name = draft.name;
+    if (emailChanged) payload.email = draft.email;
+    const res = await updateAccountInfo(account.id, payload);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setEditing(false); onChanged?.();
+  }
+
   return (
     <div style={styles.row}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -175,6 +200,10 @@ function AccountRow({ account, currentUser, onChanged }) {
 
         {manageable && (
           <>
+            <button className="btn btn-ghost btn-sm" disabled={busy}
+              onClick={() => (editing ? setEditing(false) : startEdit())}>
+              <i className="ti ti-pencil" aria-hidden="true" /> Edit
+            </button>
             {canToggleRole && (
               <button className="btn btn-ghost btn-sm" disabled={busy}
                 onClick={() => act(() => changeRole(account.id, account.role === ROLES.STAFF ? ROLES.MANAGER : ROLES.STAFF))}>
@@ -187,7 +216,7 @@ function AccountRow({ account, currentUser, onChanged }) {
               <i className={`ti ti-${account.active ? 'lock' : 'lock-open'}`} aria-hidden="true" />
               {account.active ? 'Disable' : 'Enable'}
             </button>
-            <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setResetting((r) => !r); setNewPw(''); }}>
+            <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setResetting((r) => !r); setNewPw(''); setEditing(false); }}>
               <i className="ti ti-key" aria-hidden="true" /> Reset pw
             </button>
             <button className="btn btn-danger btn-sm" disabled={busy}
@@ -197,6 +226,25 @@ function AccountRow({ account, currentUser, onChanged }) {
           </>
         )}
       </div>
+
+      {editing && (
+        <form onSubmit={doSaveEdit} style={styles.editBox}>
+          <div className="field" style={{ margin: 0 }}>
+            <label>Name / ID (used for login)</label>
+            <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Mario" />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label>Login email</label>
+            <input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="name@company.com" />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
+              <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Saving…' : 'Save changes'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {resetting && (
         <form onSubmit={doReset} style={styles.resetRow}>
@@ -256,4 +304,5 @@ const styles = {
   youTag: { fontSize: 10, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-bg)', padding: '1px 6px', borderRadius: 5 },
   rowActions: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   resetRow: { display: 'flex', gap: 8, width: '100%', marginTop: 4 },
+  editBox: { display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border)' },
 };

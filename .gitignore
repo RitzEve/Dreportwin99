@@ -1,0 +1,23 @@
+# Dependencies (re-created by `npm install`)
+node_modules/
+
+# Build output (re-created by `npm run build`)
+dist/
+
+# Local logs / scratch
+vite-dev.log
+*.log
+
+# Test/automation artifacts
+.playwright-mcp/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment secrets (NEVER commit real keys)
+.env
+.env.local
+.env.*.local

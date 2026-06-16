@@ -1,0 +1,125 @@
+/* Design tokens shared by the portal shell. The colours mirror the FinTrack
+   artifact's palette (blue #2563eb accent over warm neutrals) so the login /
+   console pages and the app feel like one product. Dark mode follows the OS. */
+
+:root {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --bg: #faf9f5;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --header: #f4f2ec;
+  --text: #1a1a18;
+  --muted: #5f5e5a;
+  --border: #d8d6cd;
+  --border-strong: #b4b2a9;
+  --accent: #2563eb;
+  --accent-press: #1d4ed8;
+  --accent-bg: #e6f1fb;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1917;
+    --surface: #23221f;
+    --surface-2: #2a2926;
+    --header: #2a2926;
+    --text: #f5f4f0;
+    --muted: #a8a69e;
+    --border: #3d3b36;
+    --border-strong: #54524c;
+    --accent: #2563eb;
+    --accent-press: #3b82f6;
+    --accent-bg: #1e3a5f;
+    --shadow: 0 12px 50px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- shared form controls ---- */
+
+.field { display: block; margin-bottom: 14px; }
+.field > label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+input, select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+input::placeholder { color: var(--muted); opacity: 0.7; }
+
+/* ---- buttons ---- */
+
+.btn {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-press); }
+.btn-ghost { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.btn-ghost:hover:not(:disabled) { border-color: var(--border-strong); }
+.btn-danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 12.5px; border-radius: 7px; }
+
+/* ---- misc ---- */
+
+.error-text { color: var(--danger); font-size: 13px; margin-top: 4px; }
+.success-text { color: var(--success); font-size: 13px; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.badge-master { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.badge-manager { background: color-mix(in srgb, #7c3aed 16%, transparent); color: #7c3aed; }
+.badge-provider { background: color-mix(in srgb, #0d9488 18%, transparent); color: #0d9488; }
+.badge-staff { background: var(--surface-2); color: var(--muted); }
+.badge-off { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }

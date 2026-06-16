@@ -1,383 +1,280 @@
 /*
- * auth.js — accounts, roles, sessions
- * -----------------------------------
- * Role hierarchy:
- *   provider — that's the distributor (you). Not part of any company.
- *              Creates companies + their master account; resets master passwords.
- *   master   — top of a company. Creates/manages manager + staff accounts.
- *   manager  — creates/manages staff accounts only. Also uses the app.
- *   staff    — uses the app only. No console.
+ * auth.js — accounts, roles, sessions (Supabase-backed)
+ * -----------------------------------------------------
+ * Login + passwords are handled by Supabase Auth (secure, server-side).
+ * Companies / accounts / roles live in Postgres tables (companies, profiles)
+ * protected by Row-Level Security — see supabase/schema.sql.
  *
- * Login is by EMAIL + PASSWORD (no company picker), so emails are globally unique.
+ * Roles: provider (no company) / master / manager / staff.
+ * Every function here is ASYNC (it talks to the database).
  *
- * SECURITY NOTE (read before going live):
- *   FRONTEND PROTOTYPE. Passwords are hashed with a fast non-crypto hash in
- *   localStorage. Fine for a one-machine demo, NOT secure and NOT multi-device.
- *   A real product must verify passwords on a SERVER (bcrypt/argon2) against a
- *   shared database. Keep all auth behind this module so the swap touches one file.
+ * Account creation note: to create a login without logging the creator out, we
+ * sign the new user up on an isolated client (makeSignupClient), then the creator
+ * inserts the profile row (RLS authorises it by the creator's role).
  */
 
-import {
-  createCompany,
-  deleteCompanyCascade,
-  listCompanies,
-  getCompany,
-  listUsers,
-  listAllUsers,
-  getUser,
-  findUserByEmailGlobal,
-  insertUser,
-  updateUser,
-  deleteUser,
-  nextOperatorId,
-  isEmpty,
-} from './store.js';
-import { removeCompanyAppData } from './storageBridge.js';
-
-const SESSION_KEY = 'mcp_session_v1';
+import { supabase, makeSignupClient } from './supabaseClient.js';
 
 export const ROLES = { PROVIDER: 'provider', MASTER: 'master', MANAGER: 'manager', STAFF: 'staff' };
 
-// Re-export so screens import everything company/account-related from here.
-export { listCompanies } from './store.js';
-
-// ---- password hashing (prototype only — see note above) -------------------
-
-function cyrb53(str, seed = 0) {
-  let h1 = 0xdeadbeef ^ seed;
-  let h2 = 0x41c6ce57 ^ seed;
-  for (let i = 0; i < str.length; i++) {
-    const ch = str.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
-  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
-  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
-}
-
-function makeSalt() {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-}
-
-function hashPw(password, salt) {
-  return cyrb53(`${salt}|${password}`, 0x9e3779b9);
-}
-
-// ---- validation helpers ----------------------------------------------------
+// ---- validation ------------------------------------------------------------
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const validateEmail = (e) => EMAIL_RE.test(String(e).trim());
+export const validatePassword = (p) => typeof p === 'string' && p.length >= 6;
 
-export function validateEmail(email) {
-  return EMAIL_RE.test(String(email).trim());
-}
+// ---- role helpers (pure) ---------------------------------------------------
 
-export function validatePassword(pw) {
-  return typeof pw === 'string' && pw.length >= 6;
-}
-
-// ---- session ---------------------------------------------------------------
-
-function setSession(userId) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ userId }));
-}
-
-export function logout() {
-  localStorage.removeItem(SESSION_KEY);
-}
-
-/**
- * Returns the logged-in context, or null.
- *   provider -> { user, company: null }
- *   others   -> { user, company }
- */
-export function getActiveContext() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const { userId } = JSON.parse(raw);
-    const user = getUser(userId);
-    if (!user || !user.active) return null;
-    if (user.role === ROLES.PROVIDER) return { user, company: null };
-    const company = getCompany(user.companyId);
-    if (!company) return null;
-    return { company, user };
-  } catch {
-    return null;
-  }
-}
-
-export function isProvider() {
-  const ctx = getActiveContext();
-  return !!ctx && ctx.user.role === ROLES.PROVIDER;
-}
-
-/** Master + manager get the console (team management). */
 export function canAccessConsole(role) {
   return role === ROLES.MASTER || role === ROLES.MANAGER;
 }
-
-/** Which roles a given actor may create within their company. */
 export function creatableRoles(actorRole) {
   if (actorRole === ROLES.MASTER) return [ROLES.MANAGER, ROLES.STAFF];
   if (actorRole === ROLES.MANAGER) return [ROLES.STAFF];
   return [];
 }
-
-/** Can `actor` manage (edit/disable/reset/delete) `target`? */
 export function canActOn(actor, target) {
   if (!actor || !target) return false;
-  if (actor.id === target.id) return false; // never act on yourself here
+  if (actor.id === target.id) return false;
   if (actor.companyId !== target.companyId) return false;
   if (actor.role === ROLES.MASTER) return target.role === ROLES.MANAGER || target.role === ROLES.STAFF;
   if (actor.role === ROLES.MANAGER) return target.role === ROLES.STAFF;
   return false;
 }
 
-// ---- login -----------------------------------------------------------------
+// ---- mapping + small helpers ----------------------------------------------
 
-export function login({ email, password }) {
-  if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email address.' };
-  const user = findUserByEmailGlobal(email);
-  if (!user) return { ok: false, error: 'No account with that email.' };
-  if (!user.active) return { ok: false, error: 'This account is disabled. Contact your administrator.' };
-  if (user.hash !== hashPw(password, user.salt)) return { ok: false, error: 'Incorrect password.' };
-  setSession(user.id);
-  return { ok: true, user };
+function profileToUser(p, email) {
+  return {
+    id: p.id,
+    companyId: p.company_id,
+    name: p.name,
+    username: p.username,
+    email: email || p.email,
+    operatorId: p.operator_id,
+    role: p.role,
+    active: p.active,
+  };
 }
 
-// ---- provider: companies + master accounts --------------------------------
-
-/** Creates a company and its first master account. Does NOT change the session. */
-export function provisionCompany({ companyName, masterName, masterEmail, password }) {
-  if (!companyName || !companyName.trim()) return { ok: false, error: 'Enter a company name.' };
-  if (!masterName || !masterName.trim()) return { ok: false, error: "Enter the master's name." };
-  if (!validateEmail(masterEmail)) return { ok: false, error: 'Enter a valid master email.' };
-  if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
-  if (findUserByEmailGlobal(masterEmail)) return { ok: false, error: 'That email is already in use.' };
-
-  const company = createCompany(companyName);
-  const salt = makeSalt();
-  const ctx = getActiveContext();
-  const user = insertUser({
-    companyId: company.id,
-    name: masterName.trim(),
-    email: masterEmail.trim(),
-    operatorId: nextOperatorId(company.id),
-    role: ROLES.MASTER,
-    active: true,
-    salt,
-    hash: hashPw(password, salt),
-    createdAt: new Date().toISOString(),
-    createdBy: ctx ? ctx.user.email : 'seed',
-  });
-  return { ok: true, company, user };
+function friendly(error, fallback = 'Something went wrong.') {
+  if (!error) return fallback;
+  const m = error.message || String(error);
+  if (/row-level security|violates row-level/i.test(m)) return "You don't have permission to do that.";
+  if (/profiles_username_unique|username/i.test(m)) return 'That Name/ID is already taken — choose another.';
+  if (/duplicate key|already registered|already exists/i.test(m)) return 'That email is already in use.';
+  return m;
 }
 
-/** Companies, each with its master account(s) and headcount — for the provider page. */
-export function listCompaniesWithMasters() {
-  return listCompanies().map((c) => {
-    const team = listUsers(c.id);
+async function nextOperatorId(companyId) {
+  const { data } = await supabase.from('profiles').select('operator_id').eq('company_id', companyId);
+  const nums = (data || [])
+    .map((r) => parseInt(String(r.operator_id || '').replace(/\D/g, ''), 10))
+    .filter((n) => !Number.isNaN(n));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return `OP-${String(next).padStart(3, '0')}`;
+}
+
+/** Sign a new user up on an isolated client so the creator stays logged in. */
+async function createAuthUser(email, password) {
+  const temp = makeSignupClient();
+  const { data, error } = await temp.auth.signUp({ email: email.trim(), password });
+  if (error) return { ok: false, error: friendly(error) };
+  if (!data.user) return { ok: false, error: 'Could not create the login.' };
+  return { ok: true, userId: data.user.id };
+}
+
+// ---- current user / session ------------------------------------------------
+
+export async function getCurrentUser() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  if (!profile || !profile.active) return null;
+  return profileToUser(profile, user.email);
+}
+
+/** Full context for routing: provider -> {user, company:null}; others -> {user, company}. */
+export async function loadContext() {
+  const me = await getCurrentUser();
+  if (!me) return null;
+  if (me.role === ROLES.PROVIDER) return { user: me, company: null };
+  const { data: company } = await supabase.from('companies').select('*').eq('id', me.companyId).maybeSingle();
+  if (!company) return null;
+  return { user: me, company };
+}
+
+// ---- login / logout / own password ----------------------------------------
+
+/** Login by Name/ID OR email (+ password). */
+export async function login({ identifier, password }) {
+  const id = String(identifier || '').trim();
+  if (!id) return { ok: false, error: 'Enter your Name/ID or email.' };
+
+  let email = id;
+  if (!id.includes('@')) {
+    // Resolve a Name/ID to its login email (DB function, callable before sign-in).
+    const { data, error } = await supabase.rpc('email_for_login', { identifier: id });
+    if (error || !data) return { ok: false, error: 'Incorrect Name/ID or password.' };
+    email = data;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    if (/email not confirmed/i.test(error.message)) return { ok: false, error: 'Account not active yet — contact your administrator.' };
+    return { ok: false, error: 'Incorrect Name/ID, email, or password.' };
+  }
+  const me = await getCurrentUser();
+  if (!me) {
+    await supabase.auth.signOut();
+    return { ok: false, error: 'This account has no access yet. Contact your administrator.' };
+  }
+  return { ok: true, user: me };
+}
+
+export async function logout() {
+  await supabase.auth.signOut();
+}
+
+export async function changeOwnPassword(currentPassword, newPassword) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in.' };
+  const { error: e1 } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+  if (e1) return { ok: false, error: 'Current password is incorrect.' };
+  if (!validatePassword(newPassword)) return { ok: false, error: 'New password must be at least 6 characters.' };
+  const { error: e2 } = await supabase.auth.updateUser({ password: newPassword });
+  if (e2) return { ok: false, error: friendly(e2) };
+  return { ok: true };
+}
+
+// ---- provider: companies + masters ----------------------------------------
+
+export async function listCompaniesWithMasters() {
+  const { data: companies, error } = await supabase.from('companies').select('*').order('name');
+  if (error) return [];
+  const { data: profiles } = await supabase.from('profiles').select('*');
+  const all = profiles || [];
+  return companies.map((c) => {
+    const team = all.filter((p) => p.company_id === c.id);
     return {
       ...c,
-      masters: team.filter((u) => u.role === ROLES.MASTER),
-      managerCount: team.filter((u) => u.role === ROLES.MANAGER).length,
-      staffCount: team.filter((u) => u.role === ROLES.STAFF).length,
+      masters: team.filter((p) => p.role === ROLES.MASTER).map((p) => profileToUser(p)),
+      managerCount: team.filter((p) => p.role === ROLES.MANAGER).length,
+      staffCount: team.filter((p) => p.role === ROLES.STAFF).length,
     };
   });
 }
 
-/** Provider resets a master's password (only allowed on master accounts). */
-export function providerResetPassword(userId, newPassword) {
-  if (!isProvider()) return { ok: false, error: 'Not authorised.' };
-  const user = getUser(userId);
-  if (!user || user.role !== ROLES.MASTER) return { ok: false, error: 'Master account not found.' };
-  if (!validatePassword(newPassword)) return { ok: false, error: 'Password must be at least 6 characters.' };
-  const salt = makeSalt();
-  updateUser(userId, { salt, hash: hashPw(newPassword, salt) });
-  return { ok: true };
+export async function createCompany(name) {
+  if (!name || !name.trim()) return { ok: false, error: 'Enter a company name.' };
+  const { data, error } = await supabase.from('companies').insert({ name: name.trim() }).select().single();
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true, company: data };
 }
 
-/**
- * Provider deletes a company — and ALL its accounts and app data. Irreversible.
- * Requires the provider to re-enter their own password as the final confirmation.
- */
-export function deleteCompany(companyId, password) {
-  const ctx = getActiveContext();
-  if (!ctx || ctx.user.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
-  if (ctx.user.hash !== hashPw(password, ctx.user.salt)) return { ok: false, error: 'Password is incorrect.' };
-  const company = getCompany(companyId);
-  if (!company) return { ok: false, error: 'Company not found.' };
-  deleteCompanyCascade(companyId);
-  try { removeCompanyAppData(companyId); } catch { /* app data may not exist */ }
-  return { ok: true };
+/** Create a company, and (optionally) its first master account in one go. */
+export async function provisionCompany({ companyName, masterName, masterEmail, password }) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!companyName || !companyName.trim()) return { ok: false, error: 'Enter a company name.' };
+
+  const wantsMaster = masterName?.trim() || masterEmail?.trim() || password;
+  if (wantsMaster) {
+    if (!masterName?.trim()) return { ok: false, error: "Enter the master's name (or clear all master fields)." };
+    if (!validateEmail(masterEmail)) return { ok: false, error: 'Enter a valid master email.' };
+    if (!validatePassword(password)) return { ok: false, error: 'Master password must be at least 6 characters.' };
+  }
+
+  const created = await createCompany(companyName);
+  if (!created.ok) return created;
+
+  if (!wantsMaster) return { ok: true, company: created.company };
+
+  const res = await providerAddMaster({ companyId: created.company.id, name: masterName, email: masterEmail, password });
+  if (!res.ok) return { ok: false, error: `Company created, but master failed: ${res.error}` };
+  return { ok: true, company: created.company, user: res.user };
 }
 
-/** Provider can also add an extra master to a company. */
-export function providerAddMaster({ companyId, name, email, password }) {
-  if (!isProvider()) return { ok: false, error: 'Not authorised.' };
-  if (!getCompany(companyId)) return { ok: false, error: 'Company not found.' };
+export async function providerAddMaster({ companyId, name, email, password }) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
   if (!name || !name.trim()) return { ok: false, error: 'Enter a name.' };
   if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email.' };
   if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
-  if (findUserByEmailGlobal(email)) return { ok: false, error: 'That email is already in use.' };
-  const salt = makeSalt();
-  const user = insertUser({
-    companyId,
-    name: name.trim(),
-    email: email.trim(),
-    operatorId: nextOperatorId(companyId),
-    role: ROLES.MASTER,
-    active: true,
-    salt,
-    hash: hashPw(password, salt),
-    createdAt: new Date().toISOString(),
-    createdBy: 'provider',
-  });
-  return { ok: true, user };
+
+  const a = await createAuthUser(email, password);
+  if (!a.ok) return a;
+  const operatorId = await nextOperatorId(companyId);
+  const { data, error } = await supabase.from('profiles')
+    .insert({ id: a.userId, company_id: companyId, role: ROLES.MASTER, name: name.trim(), username: name.trim(), email: email.trim(), operator_id: operatorId, active: true })
+    .select().single();
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true, user: profileToUser(data) };
+}
+
+/** Provider deletes a company (cascades to its accounts + app data). Re-enters password. */
+export async function deleteCompany(companyId, password) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  const { error: authErr } = await supabase.auth.signInWithPassword({ email: me.email, password });
+  if (authErr) return { ok: false, error: 'Password is incorrect.' };
+  const { error } = await supabase.from('companies').delete().eq('id', companyId);
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true };
 }
 
 // ---- company team management (master / manager) ---------------------------
 
-export function listTeam(companyId) {
-  return listUsers(companyId);
+export async function listTeam(companyId) {
+  const { data, error } = await supabase.from('profiles').select('*').eq('company_id', companyId).order('created_at');
+  if (error) return [];
+  return data.map((p) => profileToUser(p));
 }
 
-function activeMasterCount(companyId) {
-  return listUsers(companyId).filter((u) => u.role === ROLES.MASTER && u.active).length;
-}
-
-/** Master/manager creates an account. Role must be one the actor may create. */
-export function createAccount({ name, email, password, role }) {
-  const ctx = getActiveContext();
-  if (!ctx || !canAccessConsole(ctx.user.role)) return { ok: false, error: 'Not authorised.' };
-  if (!creatableRoles(ctx.user.role).includes(role)) {
-    return { ok: false, error: `You can't create a ${role} account.` };
-  }
+export async function createAccount({ name, email, password, role }) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  if (!creatableRoles(me.role).includes(role)) return { ok: false, error: `You can't create a ${role} account.` };
   if (!name || !name.trim()) return { ok: false, error: 'Enter a name.' };
   if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email address.' };
   if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
-  if (findUserByEmailGlobal(email)) return { ok: false, error: 'That email is already in use.' };
 
-  const companyId = ctx.user.companyId;
-  const salt = makeSalt();
-  const user = insertUser({
-    companyId,
-    name: name.trim(),
-    email: email.trim(),
-    operatorId: nextOperatorId(companyId),
-    role,
-    active: true,
-    salt,
-    hash: hashPw(password, salt),
-    createdAt: new Date().toISOString(),
-    createdBy: ctx.user.operatorId,
-  });
-  return { ok: true, user };
+  const a = await createAuthUser(email, password);
+  if (!a.ok) return a;
+  const operatorId = await nextOperatorId(me.companyId);
+  const { data, error } = await supabase.from('profiles')
+    .insert({ id: a.userId, company_id: me.companyId, role, name: name.trim(), username: name.trim(), email: email.trim(), operator_id: operatorId, active: true })
+    .select().single();
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true, user: profileToUser(data) };
 }
 
-/** Master only: switch a manager/staff account between manager and staff. */
-export function changeRole(userId, role) {
-  const ctx = getActiveContext();
-  const target = getUser(userId);
-  if (!ctx || ctx.user.role !== ROLES.MASTER || !canActOn(ctx.user, target)) {
-    return { ok: false, error: 'Not authorised.' };
-  }
+export async function changeRole(userId, role) {
   if (role !== ROLES.MANAGER && role !== ROLES.STAFF) return { ok: false, error: 'Invalid role.' };
-  updateUser(userId, { role });
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
+  if (error) return { ok: false, error: friendly(error) };
   return { ok: true };
 }
 
-export function setActive(userId, active) {
-  const ctx = getActiveContext();
-  const target = getUser(userId);
-  if (!ctx || !canActOn(ctx.user, target)) return { ok: false, error: 'Not authorised.' };
-  updateUser(userId, { active });
+export async function setActive(userId, active) {
+  const { error } = await supabase.from('profiles').update({ active }).eq('id', userId);
+  if (error) return { ok: false, error: friendly(error) };
   return { ok: true };
 }
 
-export function removeAccount(userId) {
-  const ctx = getActiveContext();
-  const target = getUser(userId);
-  if (!ctx || !canActOn(ctx.user, target)) return { ok: false, error: 'Not authorised.' };
-  deleteUser(userId);
+export async function removeAccount(userId) {
+  const { error } = await supabase.from('profiles').delete().eq('id', userId);
+  if (error) return { ok: false, error: friendly(error) };
   return { ok: true };
 }
 
-/** Master/manager resets a managed account's password. */
-export function adminResetPassword(userId, newPassword) {
-  const ctx = getActiveContext();
-  const target = getUser(userId);
-  if (!ctx || !canActOn(ctx.user, target)) return { ok: false, error: 'Not authorised.' };
+/**
+ * Admin password reset (role hierarchy enforced inside the DB function):
+ * provider -> anyone; master -> manager/staff in own company; manager -> staff.
+ */
+export async function adminResetPassword(userId, newPassword) {
   if (!validatePassword(newPassword)) return { ok: false, error: 'Password must be at least 6 characters.' };
-  const salt = makeSalt();
-  updateUser(userId, { salt, hash: hashPw(newPassword, salt) });
+  const { error } = await supabase.rpc('admin_set_password', { target_id: userId, new_password: newPassword });
+  if (error) return { ok: false, error: friendly(error) };
   return { ok: true };
 }
-
-/** Anyone changes their own password (must supply the current one). */
-export function changeOwnPassword(userId, currentPassword, newPassword) {
-  const user = getUser(userId);
-  if (!user) return { ok: false, error: 'Account not found.' };
-  if (user.hash !== hashPw(currentPassword, user.salt)) return { ok: false, error: 'Current password is incorrect.' };
-  if (!validatePassword(newPassword)) return { ok: false, error: 'New password must be at least 6 characters.' };
-  const salt = makeSalt();
-  updateUser(userId, { salt, hash: hashPw(newPassword, salt) });
-  return { ok: true };
-}
-
-// ---- first-run seed --------------------------------------------------------
-
-/** Seeds a provider account + a demo company with one of each role for testing. */
-export function ensureSeed() {
-  if (!isEmpty() || listAllUsers().length > 0) return;
-
-  // Provider (you, the distributor)
-  const salt = makeSalt();
-  insertUser({
-    companyId: null,
-    name: 'Portal Admin',
-    email: 'provider@portal.com',
-    operatorId: 'PROVIDER',
-    role: ROLES.PROVIDER,
-    active: true,
-    salt,
-    hash: hashPw('provider123', salt),
-    createdAt: new Date().toISOString(),
-    createdBy: 'seed',
-  });
-
-  // Demo company with master + manager + staff so all logins can be tested
-  const { company } = provisionCompany({
-    companyName: 'Demo Company Pty Ltd',
-    masterName: 'Demo Master',
-    masterEmail: 'demo@demo.com',
-    password: 'demo1234',
-  });
-  const mkUser = (name, email, password, role) => {
-    const s = makeSalt();
-    insertUser({
-      companyId: company.id,
-      name,
-      email,
-      operatorId: nextOperatorId(company.id),
-      role,
-      active: true,
-      salt: s,
-      hash: hashPw(password, s),
-      createdAt: new Date().toISOString(),
-      createdBy: 'seed',
-    });
-  };
-  mkUser('Demo Manager', 'manager@demo.com', 'manager123', ROLES.MANAGER);
-  mkUser('Demo Staff', 'staff@demo.com', 'staff123', ROLES.STAFF);
-}
-
-export const SEED_LOGINS = [
-  { label: 'Provider (you)', email: 'provider@portal.com', password: 'provider123' },
-  { label: 'Master', email: 'demo@demo.com', password: 'demo1234' },
-  { label: 'Manager', email: 'manager@demo.com', password: 'manager123' },
-  { label: 'Staff', email: 'staff@demo.com', password: 'staff123' },
-];

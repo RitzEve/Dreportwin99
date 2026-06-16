@@ -93,7 +93,8 @@ const exportPDF = (rows,title) => {
   w.document.close();
 };
 
-const dark = typeof window!=="undefined" && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+const _themeAttr = typeof document!=="undefined" && document.documentElement && document.documentElement.dataset ? document.documentElement.dataset.theme : "";
+const dark = _themeAttr ? _themeAttr==="dark" : (typeof window!=="undefined" && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
 const C = {
   bg: dark ? "#1a1917" : "#ffffff",
   surface: dark ? "#23221f" : "#faf9f5",
@@ -392,14 +393,14 @@ export default function App() {
     return ()=>document.removeEventListener("mousedown",handler);
   },[]);
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if(!pwForm.current||!pwForm.next||!pwForm.confirm){setPwError("Fill all fields.");return;}
     if(pwForm.next.length<6){setPwError("New password must be at least 6 characters.");return;}
     if(pwForm.next!==pwForm.confirm){setPwError("New passwords do not match.");return;}
     // Host (the portal) wires this to the real account system; falls back to a
     // stub if the artifact is run standalone without a host.
     if(typeof window!=="undefined" && window.FINTRACK_CHANGE_PASSWORD){
-      const res = window.FINTRACK_CHANGE_PASSWORD(pwForm.current, pwForm.next);
+      const res = await window.FINTRACK_CHANGE_PASSWORD(pwForm.current, pwForm.next);
       if(res && res.ok===false){ setPwError(res.error||"Could not change password."); return; }
     }
     setPwError(""); setPwSuccess("Password updated.");
@@ -885,6 +886,17 @@ export default function App() {
                     <div style={{fontSize:13,fontWeight:500,color:C.text}}>{SESSION.operatorName||"Operator"}</div>
                     <div style={{fontSize:11,color:C.muted}}>ID: {SESSION.operatorId}</div>
                     <div style={{fontSize:11,color:C.muted}}>{SESSION.companyName}</div>
+                  </div>
+                  <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Theme</div>
+                    <div style={{display:"flex",gap:4,background:C.surface2,borderRadius:8,padding:3}}>
+                      <button onClick={()=>window.FINTRACK_SET_THEME&&window.FINTRACK_SET_THEME("light")} style={{flex:1,cursor:"pointer",border:"none",borderRadius:6,padding:"6px 8px",fontSize:12.5,fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,background:!dark?C.bg:"transparent",color:!dark?C.text:C.muted,fontWeight:!dark?600:400}}>
+                        <i className="ti ti-sun" aria-hidden="true"/> Light
+                      </button>
+                      <button onClick={()=>window.FINTRACK_SET_THEME&&window.FINTRACK_SET_THEME("dark")} style={{flex:1,cursor:"pointer",border:"none",borderRadius:6,padding:"6px 8px",fontSize:12.5,fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,background:dark?C.bg:"transparent",color:dark?C.text:C.muted,fontWeight:dark?600:400}}>
+                        <i className="ti ti-moon" aria-hidden="true"/> Dark
+                      </button>
+                    </div>
                   </div>
                   <button onClick={()=>{ setShowOperatorMenu(false); setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(true); }} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"11px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:13,color:C.text,textAlign:"left"}}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>

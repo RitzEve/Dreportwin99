@@ -16,7 +16,8 @@ import AppScreen from './app/AppScreen.jsx';
 export default function Root() {
   const [ctx, setCtx] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [screen, setScreen] = useState('console');
+  const [screen, setScreenState] = useState(() => sessionStorage.getItem('portal-screen') || 'console');
+  const setScreen = (s) => { sessionStorage.setItem('portal-screen', s); setScreenState(s); };
 
   useEffect(() => {
     let active = true;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { changeOwnPassword } from '../lib/auth.js';
+import { setTheme } from '../lib/theme.js';
 
 /*
  * AppScreen — hosts the FinTrack artifact for the logged-in company.
@@ -23,6 +24,9 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     window.FINTRACK_LOGOUT = () => onLogout();
     // Async now (hits Supabase). The artifact awaits this (see FinTrack handleChangePassword).
     window.FINTRACK_CHANGE_PASSWORD = (current, next) => changeOwnPassword(current, next);
+    // The artifact's colours are computed at load, so re-init by reloading after the
+    // theme is saved. Root restores the 'app' screen from sessionStorage on reload.
+    window.FINTRACK_SET_THEME = (t) => { setTheme(t); window.location.reload(); };
 
     let alive = true;
     import('./FinTrack.jsx').then((m) => { if (alive) setComp(() => m.default); });

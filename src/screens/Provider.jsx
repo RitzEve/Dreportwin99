@@ -4,8 +4,9 @@ import {
   provisionCompany,
   providerAddMaster,
   deleteCompany,
-  changeOwnPassword,
+  adminResetPassword,
 } from '../lib/auth.js';
+import AccountMenu from '../components/AccountMenu.jsx';
 
 /*
  * Provider — the distributor's backend (super-admin).
@@ -43,13 +44,7 @@ export default function Provider({ ctx, onLogout }) {
         </div>
         <div style={styles.userBox}>
           <span className="badge badge-provider"><i className="ti ti-shield-lock" aria-hidden="true" /> Provider</span>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 13.5, fontWeight: 500 }}>{user.name}</div>
-            <div style={styles.sub}>{user.email}</div>
-          </div>
-          <button className="btn btn-ghost btn-sm" onClick={onLogout}>
-            <i className="ti ti-logout" aria-hidden="true" /> Log out
-          </button>
+          <AccountMenu user={user} roleLabel="Provider" onLogout={onLogout} />
         </div>
       </header>
 
@@ -57,7 +52,6 @@ export default function Provider({ ctx, onLogout }) {
         <div style={styles.grid}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <CreateCompany onCreated={refresh} />
-            <ChangePasswordCard />
           </div>
 
           <section style={styles.card}>
@@ -118,8 +112,8 @@ function CreateCompany({ onCreated }) {
       <form onSubmit={submit}>
         <div className="field"><label>Company name</label>
           <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Acme Pty Ltd" /></div>
-        <div className="field"><label>Master name <span style={styles.opt}>(optional)</span></label>
-          <input value={form.masterName} onChange={(e) => setForm({ ...form, masterName: e.target.value })} placeholder="Jane Smith" /></div>
+        <div className="field"><label>Master Name / ID <span style={styles.opt}>(optional)</span></label>
+          <input value={form.masterName} onChange={(e) => setForm({ ...form, masterName: e.target.value })} placeholder="e.g. Mario (used for login)" /></div>
         <div className="field"><label>Master email <span style={styles.opt}>(optional)</span></label>
           <input type="email" value={form.masterEmail} onChange={(e) => setForm({ ...form, masterEmail: e.target.value })} placeholder="jane@acme.com" /></div>
         <div className="field"><label>Master temp password <span style={styles.opt}>(optional)</span></label>
@@ -141,6 +135,18 @@ function CompanyCard({ company, onChanged }) {
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '' });
   const [busy, setBusy] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [resettingId, setResettingId] = useState(null);
+  const [resetPw, setResetPw] = useState('');
+
+  async function doReset(e, userId) {
+    e.preventDefault();
+    setError(''); setOk(''); setBusy(true);
+    const res = await adminResetPassword(userId, resetPw);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOk('Master password reset.');
+    setResettingId(null); setResetPw('');
+  }
 
   async function doAddMaster(e) {
     e.preventDefault();
@@ -181,6 +187,18 @@ function CompanyCard({ company, onChanged }) {
               </div>
               <div style={styles.sub}>{m.operatorId} · {m.email}</div>
             </div>
+            <button className="btn btn-ghost btn-sm"
+              onClick={() => { setResettingId(resettingId === m.id ? null : m.id); setResetPw(''); setError(''); }}>
+              <i className="ti ti-key" aria-hidden="true" /> Reset password
+            </button>
+            {resettingId === m.id && (
+              <form onSubmit={(e) => doReset(e, m.id)} style={styles.resetRow}>
+                <input type="text" value={resetPw} onChange={(e) => setResetPw(e.target.value)}
+                  placeholder={`New password for ${m.operatorId}`} style={{ flex: 1 }} />
+                <button type="submit" className="btn btn-primary btn-sm" disabled={!resetPw || busy}>Set</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setResettingId(null); setResetPw(''); }}>Cancel</button>
+              </form>
+            )}
           </div>
         ))}
       </div>
@@ -188,7 +206,7 @@ function CompanyCard({ company, onChanged }) {
       {adding && (
         <form onSubmit={doAddMaster} style={styles.addBox}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <input placeholder="Name" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
+            <input placeholder="Name / ID (login)" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
             <input type="email" placeholder="Email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} />
             <input type="text" placeholder="Temp password" value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })} style={{ gridColumn: '1 / -1' }} />
           </div>
@@ -269,46 +287,6 @@ function DeleteCompanyModal({ company, onClose, onDeleted }) {
   );
 }
 
-function ChangePasswordCard() {
-  const [cur, setCur] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
-  const [ok, setOk] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e) {
-    e.preventDefault();
-    setError(''); setOk('');
-    if (next !== confirm) return setError('New passwords do not match.');
-    setBusy(true);
-    const res = await changeOwnPassword(cur, next);
-    setBusy(false);
-    if (!res.ok) return setError(res.error);
-    setOk('Password updated.');
-    setCur(''); setNext(''); setConfirm('');
-  }
-
-  return (
-    <section style={styles.card}>
-      <h3 style={styles.cardTitle}><i className="ti ti-key" aria-hidden="true" /> Your password</h3>
-      <form onSubmit={submit}>
-        <div className="field"><label>Current password</label>
-          <input type="password" value={cur} onChange={(e) => setCur(e.target.value)} placeholder="••••••••" /></div>
-        <div className="field"><label>New password</label>
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="At least 6 characters" /></div>
-        <div className="field"><label>Confirm new password</label>
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Re-enter new password" /></div>
-        {error && <div className="error-text">{error}</div>}
-        {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
-        <button type="submit" className="btn btn-primary btn-sm" style={{ marginTop: 6 }} disabled={busy}>
-          <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Updating…' : 'Update password'}
-        </button>
-      </form>
-    </section>
-  );
-}
-
 const styles = {
   page: { minHeight: '100%', display: 'flex', flexDirection: 'column' },
   topbar: {
@@ -345,5 +323,6 @@ const styles = {
   companyCard: { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 11, padding: '12px 14px' },
   companyName: { fontSize: 14.5, fontWeight: 600 },
   masterRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
+  resetRow: { display: 'flex', gap: 8, width: '100%', marginTop: 4 },
   addBox: { marginTop: 10, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
 };

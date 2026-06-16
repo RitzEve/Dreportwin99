@@ -49,6 +49,7 @@ function profileToUser(p, email) {
     id: p.id,
     companyId: p.company_id,
     name: p.name,
+    username: p.username,
     email: email || p.email,
     operatorId: p.operator_id,
     role: p.role,
@@ -60,6 +61,7 @@ function friendly(error, fallback = 'Something went wrong.') {
   if (!error) return fallback;
   const m = error.message || String(error);
   if (/row-level security|violates row-level/i.test(m)) return "You don't have permission to do that.";
+  if (/profiles_username_unique|username/i.test(m)) return 'That Name/ID is already taken — choose another.';
   if (/duplicate key|already registered|already exists/i.test(m)) return 'That email is already in use.';
   return m;
 }
@@ -104,12 +106,23 @@ export async function loadContext() {
 
 // ---- login / logout / own password ----------------------------------------
 
-export async function login({ email, password }) {
-  if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email address.' };
-  const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+/** Login by Name/ID OR email (+ password). */
+export async function login({ identifier, password }) {
+  const id = String(identifier || '').trim();
+  if (!id) return { ok: false, error: 'Enter your Name/ID or email.' };
+
+  let email = id;
+  if (!id.includes('@')) {
+    // Resolve a Name/ID to its login email (DB function, callable before sign-in).
+    const { data, error } = await supabase.rpc('email_for_login', { identifier: id });
+    if (error || !data) return { ok: false, error: 'Incorrect Name/ID or password.' };
+    email = data;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    if (/email not confirmed/i.test(error.message)) return { ok: false, error: 'Email not confirmed — ask your provider to enable instant access.' };
-    return { ok: false, error: 'Incorrect email or password.' };
+    if (/email not confirmed/i.test(error.message)) return { ok: false, error: 'Account not active yet — contact your administrator.' };
+    return { ok: false, error: 'Incorrect Name/ID, email, or password.' };
   }
   const me = await getCurrentUser();
   if (!me) {
@@ -193,7 +206,7 @@ export async function providerAddMaster({ companyId, name, email, password }) {
   if (!a.ok) return a;
   const operatorId = await nextOperatorId(companyId);
   const { data, error } = await supabase.from('profiles')
-    .insert({ id: a.userId, company_id: companyId, role: ROLES.MASTER, name: name.trim(), email: email.trim(), operator_id: operatorId, active: true })
+    .insert({ id: a.userId, company_id: companyId, role: ROLES.MASTER, name: name.trim(), username: name.trim(), email: email.trim(), operator_id: operatorId, active: true })
     .select().single();
   if (error) return { ok: false, error: friendly(error) };
   return { ok: true, user: profileToUser(data) };
@@ -230,7 +243,7 @@ export async function createAccount({ name, email, password, role }) {
   if (!a.ok) return a;
   const operatorId = await nextOperatorId(me.companyId);
   const { data, error } = await supabase.from('profiles')
-    .insert({ id: a.userId, company_id: me.companyId, role, name: name.trim(), email: email.trim(), operator_id: operatorId, active: true })
+    .insert({ id: a.userId, company_id: me.companyId, role, name: name.trim(), username: name.trim(), email: email.trim(), operator_id: operatorId, active: true })
     .select().single();
   if (error) return { ok: false, error: friendly(error) };
   return { ok: true, user: profileToUser(data) };
@@ -251,6 +264,17 @@ export async function setActive(userId, active) {
 
 export async function removeAccount(userId) {
   const { error } = await supabase.from('profiles').delete().eq('id', userId);
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true };
+}
+
+/**
+ * Admin password reset (role hierarchy enforced inside the DB function):
+ * provider -> anyone; master -> manager/staff in own company; manager -> staff.
+ */
+export async function adminResetPassword(userId, newPassword) {
+  if (!validatePassword(newPassword)) return { ok: false, error: 'Password must be at least 6 characters.' };
+  const { error } = await supabase.rpc('admin_set_password', { target_id: userId, new_password: newPassword });
   if (error) return { ok: false, error: friendly(error) };
   return { ok: true };
 }

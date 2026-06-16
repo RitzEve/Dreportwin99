@@ -12,7 +12,7 @@ import { login } from '../lib/auth.js';
  *   staff -> straight into the app.
  */
 export default function Login({ onAuthed }) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -21,7 +21,7 @@ export default function Login({ onAuthed }) {
     e.preventDefault();
     setError('');
     setBusy(true);
-    const res = await login({ email, password });
+    const res = await login({ identifier, password });
     setBusy(false);
     if (!res.ok) return setError(res.error);
     onAuthed();
@@ -40,13 +40,13 @@ export default function Login({ onAuthed }) {
 
         <form onSubmit={submit}>
           <div className="field">
-            <label>Email</label>
+            <label>Name / ID or Email</label>
             <input
-              type="email"
+              type="text"
               autoComplete="username"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="e.g. Mario  or  mario@company.com"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
             />
           </div>
           <div className="field">

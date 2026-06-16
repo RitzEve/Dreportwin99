@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { login, SEED_LOGINS } from '../lib/auth.js';
+import { login } from '../lib/auth.js';
 
 /*
  * Login — email + password only.
@@ -15,7 +15,6 @@ export default function Login({ onAuthed }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [showTest, setShowTest] = useState(false);
 
   function submit(e) {
     e.preventDefault();
@@ -61,28 +60,10 @@ export default function Login({ onAuthed }) {
             <i className="ti ti-login-2" aria-hidden="true" /> Sign in
           </button>
         </form>
-
-        {/* Dev helper — remove this block for production. */}
-        <div style={styles.testWrap}>
-          <button type="button" onClick={() => setShowTest((s) => !s)} style={styles.testToggle}>
-            <i className={`ti ti-chevron-${showTest ? 'up' : 'down'}`} aria-hidden="true" /> Test logins
-          </button>
-          {showTest && (
-            <div style={styles.testList}>
-              {SEED_LOGINS.map((l) => (
-                <button key={l.email} type="button" style={styles.testItem}
-                  onClick={() => { setEmail(l.email); setPassword(l.password); setError(''); }}>
-                  <span style={{ fontWeight: 600 }}>{l.label}</span>
-                  <span style={{ color: 'var(--muted)' }}>{l.email}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       <div style={styles.footnote}>
-        Prototype · data is stored in this browser only. See README for going live.
+        Secure access · authorised accounts only.
       </div>
     </div>
   );
@@ -104,16 +85,5 @@ const styles = {
   },
   brandName: { fontSize: 18, fontWeight: 600 },
   brandSub: { fontSize: 12.5, color: 'var(--muted)', marginTop: 2 },
-  testWrap: { marginTop: 18, borderTop: '1px solid var(--border)', paddingTop: 12 },
-  testToggle: {
-    background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer',
-    fontSize: 12, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 5, padding: 0,
-  },
-  testList: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 },
-  testItem: {
-    display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 10px',
-    fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
-    background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)',
-  },
   footnote: { fontSize: 12, color: 'var(--muted)', textAlign: 'center', maxWidth: 420 },
 };

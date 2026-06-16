@@ -7,14 +7,20 @@ import { useState, useMemo, useRef, useEffect } from "react";
 // sidebar shows the company name + operator ID, and every transaction is
 // auto-stamped with SESSION.operatorId. For multi-tenant use, load the right
 // company's data based on SESSION.companyId.
-// Replace this default with values from your auth system.
+//
+// IMPORTANT: read this FRESH on every mount via readSession() — NOT once at
+// module load. The portal sets window.FINTRACK_SESSION before this component
+// renders. Logging out and back in as a different company re-mounts the app but
+// keeps this module cached in memory, so a value captured once would stay stuck
+// on the first company (wrong name in the sidebar/header AND wrong data key).
 // ============================================================================
-const SESSION = (typeof window!=="undefined" && window.FINTRACK_SESSION) || {
+const SESSION_DEFAULT = {
   companyId: "demo-co",
   companyName: "Demo Company Pty Ltd",
   operatorId: "OP-001",
   operatorName: "Operator",
 };
+const readSession = () => (typeof window!=="undefined" && window.FINTRACK_SESSION) || SESSION_DEFAULT;
 
 
 const ENTRY_TYPES = ["Regular Deposit","Regular Withdrawal","Unclaimed Credit","Transfer","Store","Mistake","Rental","Adjust","Other"];
@@ -303,6 +309,10 @@ function ComparisonChart({data}) {
 }
 
 export default function App() {
+  // Read the live session for THIS mount (see readSession note up top). The
+  // component re-mounts on every login, so company name, operator, and the data
+  // key below all track whichever company just signed in.
+  const SESSION = readSession();
   const [page,setPage] = useState("dashboard");
   const [sidebarOpen,setSidebarOpen] = useState(true);
   const [loaded,setLoaded] = useState(false);

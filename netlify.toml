@@ -1,0 +1,11 @@
+# Tells Netlify how to build the site when connected to GitHub.
+# On every push to the repo, Netlify runs this and publishes the result.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Single-page app: always serve index.html (the app handles its own screens).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

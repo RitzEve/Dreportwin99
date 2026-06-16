@@ -392,14 +392,14 @@ export default function App() {
     return ()=>document.removeEventListener("mousedown",handler);
   },[]);
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if(!pwForm.current||!pwForm.next||!pwForm.confirm){setPwError("Fill all fields.");return;}
     if(pwForm.next.length<6){setPwError("New password must be at least 6 characters.");return;}
     if(pwForm.next!==pwForm.confirm){setPwError("New passwords do not match.");return;}
     // Host (the portal) wires this to the real account system; falls back to a
     // stub if the artifact is run standalone without a host.
     if(typeof window!=="undefined" && window.FINTRACK_CHANGE_PASSWORD){
-      const res = window.FINTRACK_CHANGE_PASSWORD(pwForm.current, pwForm.next);
+      const res = await window.FINTRACK_CHANGE_PASSWORD(pwForm.current, pwForm.next);
       if(res && res.ok===false){ setPwError(res.error||"Could not change password."); return; }
     }
     setPwError(""); setPwSuccess("Password updated.");

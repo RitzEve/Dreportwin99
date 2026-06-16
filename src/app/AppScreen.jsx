@@ -1,38 +1,31 @@
 import { useEffect, useState } from 'react';
-import { getActiveContext, changeOwnPassword } from '../lib/auth.js';
+import { changeOwnPassword } from '../lib/auth.js';
 
 /*
  * AppScreen — hosts the FinTrack artifact for the logged-in company.
  *
- * The artifact reads `window.FINTRACK_SESSION` ONCE at module-evaluation time,
- * so we must set the session BEFORE the module loads. That's why FinTrack is
- * imported dynamically here (inside the effect) rather than statically at the
- * top of the file — by the time import() runs, the session is already injected.
+ * The artifact reads `window.FINTRACK_SESSION` ONCE at module-evaluation time, so
+ * we set the session BEFORE importing it (the import is dynamic, inside the effect).
  */
-export default function AppScreen({ onExit, onLogout, canReturnToConsole = true }) {
+export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = true }) {
   const [Comp, setComp] = useState(null);
-  const [ctx] = useState(() => getActiveContext());
 
   useEffect(() => {
-    if (!ctx) { onLogout(); return; }
+    if (!ctx || !ctx.company) { onLogout(); return; }
 
-    // ---- config / embed glue the artifact expects ----
     window.FINTRACK_SESSION = {
       companyId: ctx.company.id,
       companyName: ctx.company.name,
       operatorId: ctx.user.operatorId,
       operatorName: ctx.user.name,
-      role: ctx.user.role, // available to the artifact if you want role-gating later
+      role: ctx.user.role,
     };
     window.FINTRACK_LOGOUT = () => onLogout();
-    // Lets the artifact's in-app "Change password" hit the real account system.
-    window.FINTRACK_CHANGE_PASSWORD = (current, next) =>
-      changeOwnPassword(ctx.user.id, current, next);
+    // Async now (hits Supabase). The artifact awaits this (see FinTrack handleChangePassword).
+    window.FINTRACK_CHANGE_PASSWORD = (current, next) => changeOwnPassword(current, next);
 
     let alive = true;
-    import('./FinTrack.jsx').then((m) => {
-      if (alive) setComp(() => m.default);
-    });
+    import('./FinTrack.jsx').then((m) => { if (alive) setComp(() => m.default); });
     return () => { alive = false; };
   }, [ctx, onLogout]);
 
@@ -49,7 +42,7 @@ export default function AppScreen({ onExit, onLogout, canReturnToConsole = true 
           </button>
         )}
         <span style={styles.barMeta}>
-          <i className="ti ti-building" aria-hidden="true" /> {ctx?.company.name}
+          <i className="ti ti-building" aria-hidden="true" /> {ctx?.company?.name}
           <span style={styles.dot}>·</span>
           {ctx?.user.operatorId} ({ctx?.user.role})
         </span>

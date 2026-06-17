@@ -67,7 +67,7 @@ export default function Login({ onAuthed }) {
       </div>
 
       <div style={styles.footnote}>
-        Secure access · authorised accounts only · v1.0.5
+        Secure access · authorised accounts only · v1.0.6
       </div>
     </div>
   );

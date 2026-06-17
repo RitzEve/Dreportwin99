@@ -116,6 +116,8 @@ const C = {
 
 const editBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #2563eb",borderRadius:6,background:dark?"#1e3a5f":"#2563eb14",color:dark?"#85b7eb":"#2563eb",display:"inline-flex",alignItems:"center",gap:4};
 const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
+const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",gap:4};
+const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",gap:4};
 const sectionStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:20};
 
 const initBanks = [];
@@ -443,6 +445,10 @@ export default function App() {
   };
 
   const banksLive = useMemo(()=>banks.map(b=>({...b,balance:ftBankBalance(b,transactions)})),[banks,transactions]);
+  // Active banks only — used in the dashboard per-bank list and the entry-form
+  // bank dropdowns. A bank with active===false is hidden there but kept on the
+  // Bank Accounts page (so it can be reactivated) and in its saved history.
+  const activeBanks = useMemo(()=>banks.filter(b=>b.active!==false),[banks]);
 
   const todayTx = transactions.filter(t=>t.date===today);
   const dashTx = useMemo(()=>{
@@ -480,7 +486,7 @@ export default function App() {
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   },[transactions,search]);
 
-  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:banks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setShowEntryModal(false); };
+  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setShowEntryModal(false); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -507,8 +513,8 @@ export default function App() {
   };
 
   useEffect(()=>{
-    if(loaded && form.bankId==null && banks.length>0) setForm(f=>({...f,bankId:banks[0].id}));
-  },[loaded,banks,form.bankId]);
+    if(loaded && form.bankId==null && activeBanks.length>0) setForm(f=>({...f,bankId:activeBanks[0].id}));
+  },[loaded,activeBanks,form.bankId]);
 
   const handleAddTx = () => {
     const isSigned = SIGNED_TYPES.includes(form.type);
@@ -537,7 +543,7 @@ export default function App() {
       const inTx = {id:nextId+1,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:form.memberName||`Transfer from ${srcBank.name}`,bank:destBank.name,counterparty:srcBank.name,pairId,notes:form.notes||`From ${srcBank.name}`,operator:op,isNew:false,deleted:false};
       setTransactions(prev=>[inTx,outTx,...prev]);
       setNextId(n=>n+2);
-      setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:banks[0]?.id??null,notes:"",toBankId:null});
+      setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null});
       setShowEntryModal(false);
       return;
     }
@@ -549,7 +555,7 @@ export default function App() {
     } else if(existingMember){
       setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:today}:m));
     }
-    setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:banks[0]?.id??null,notes:"",toBankId:null});
+    setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null});
     setShowEntryModal(false);
   };
 
@@ -566,6 +572,9 @@ export default function App() {
     setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,openingBalance:Number(editBankForm.balance)}:b)); setEditingBank(null);
   };
   const handleDeleteBank = (id,name) => setConfirm({message:`Delete "${name}"? This cannot be undone.`,onConfirm:()=>{setBanks(prev=>prev.filter(b=>b.id!==id));setConfirm(null);}});
+  // Toggle a bank between active and inactive. Inactive hides it from the
+  // dashboard per-bank list and the entry-form dropdowns (history is kept).
+  const handleToggleBankActive = id => setBanks(prev=>prev.map(b=>b.id===id?{...b,active:b.active===false}:b));
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
   const handleSaveMember = id => {
@@ -790,9 +799,9 @@ export default function App() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
                 <div><label style={labelStyle}>Bank account affected</label>
-                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:Number(e.target.value)}))} style={{width:"100%"}}>{banks.length===0&&<option value="">No banks — add one first</option>}{banks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
+                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:Number(e.target.value)}))} style={{width:"100%"}}>{activeBanks.length===0&&<option value="">No active banks — add or activate one</option>}{activeBanks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
                 {form.type==="Transfer"&&<div><label style={labelStyle}>Destination bank</label>
-                  <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:Number(e.target.value)}))} style={{width:"100%"}}><option value="">— Select —</option>{banks.filter(b=>b.id!==form.bankId).map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>}
+                  <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:Number(e.target.value)}))} style={{width:"100%"}}><option value="">— Select —</option>{activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>}
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
                   <input type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>
@@ -968,7 +977,7 @@ export default function App() {
             <div style={sectionStyle}>
               <SectionTitle icon="ti-building-bank">Per-bank ({dashScopeLabel})</SectionTitle>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
-                {banksLive.map(b=>{
+                {banksLive.filter(b=>b.active!==false).map(b=>{
                   const bTx = stats.active.filter(t=>t.bank===b.name);
                   return <div key={b.id} onClick={()=>openBankDetail(b)} style={{background:C.bg,borderRadius:8,padding:"12px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
@@ -997,7 +1006,7 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
-                  return <button key={t} type="button" onClick={()=>{ setForm({type:t,amount:"",memberId:"",memberName:"",bankId:banks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setShowEntryModal(true); }}
+                  return <button key={t} type="button" onClick={()=>{ setForm({type:t,amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setShowEntryModal(true); }}
                     style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:dark?c+"22":c+"12",color:c,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color="#fff";}}
                     onMouseLeave={e=>{e.currentTarget.style.background=dark?c+"22":c+"12";e.currentTarget.style.color=c;}}>
@@ -1047,7 +1056,7 @@ export default function App() {
                     ):(
                       <>
                         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}><i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/><span style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,overflowWrap:"anywhere"}}>{b.holder||b.name}</span></div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}><i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/><span style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,overflowWrap:"anywhere"}}>{b.holder||b.name}</span>{b.active===false&&<span style={{fontSize:10,fontWeight:600,color:C.muted,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:999,padding:"1px 7px",flexShrink:0,whiteSpace:"nowrap"}}>Inactive</span>}</div>
                           <div style={{display:"flex",gap:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
                             <button onClick={()=>startEditBank(b)} style={editBtnStyle}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
                             <button onClick={()=>handleDeleteBank(b.id,b.name)} style={deleteBtnStyle}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
@@ -1058,7 +1067,14 @@ export default function App() {
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>PayID: {b.payid||"—"}</div>
                         <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(b.balance)}</div>
-                        <div style={{fontSize:11,color:C.muted,marginTop:6}}>Click card to view history</div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:8}}>
+                          <span style={{fontSize:11,color:C.muted}}>Click card to view history</span>
+                          <button onClick={e=>{e.stopPropagation();handleToggleBankActive(b.id);}}
+                            style={b.active===false?bankInactiveBtnStyle:bankActiveBtnStyle}
+                            title={b.active===false?"Inactive — click to show this bank in the dashboard & entry dropdowns":"Active — click to hide this bank from the dashboard & entry dropdowns"}>
+                            <i className={`ti ti-${b.active===false?"circle-off":"circle-check"}`} aria-hidden="true"/> {b.active===false?"Inactive":"Active"}
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>

@@ -790,9 +790,9 @@ export default function App() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
                 <div><label style={labelStyle}>Bank account affected</label>
-                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:Number(e.target.value)}))} style={{width:"100%"}}>{banks.length===0&&<option value="">No banks — add one first</option>}{banks.map(b=><option key={b.id} value={b.id}>{b.holder} — {b.name}</option>)}</select></div>
+                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:Number(e.target.value)}))} style={{width:"100%"}}>{banks.length===0&&<option value="">No banks — add one first</option>}{banks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
                 {form.type==="Transfer"&&<div><label style={labelStyle}>Destination bank</label>
-                  <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:Number(e.target.value)}))} style={{width:"100%"}}><option value="">— Select —</option>{banks.filter(b=>b.id!==form.bankId).map(b=><option key={b.id} value={b.id}>{b.holder} — {b.name}</option>)}</select></div>}
+                  <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:Number(e.target.value)}))} style={{width:"100%"}}><option value="">— Select —</option>{banks.filter(b=>b.id!==form.bankId).map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>}
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
                   <input type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>

@@ -8,9 +8,11 @@ import {
   removeAccount,
   adminResetPassword,
   updateAccountInfo,
+  setOwnCompanyTimezone,
   creatableRoles,
   canActOn,
 } from '../lib/auth.js';
+import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 
 /*
@@ -63,6 +65,8 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
           <button className="btn btn-primary">Open <i className="ti ti-arrow-right" aria-hidden="true" /></button>
         </section>
 
+        {user.role === ROLES.MASTER && <CompanyTimezone company={company} />}
+
         <section style={styles.card}>
           <h3 style={styles.cardTitle}><i className="ti ti-users-group" aria-hidden="true" /> Team &amp; accounts</h3>
           <p style={styles.cardSub}>Create and manage accounts for {company.name}.</p>
@@ -76,6 +80,39 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
         </section>
       </main>
     </div>
+  );
+}
+
+function CompanyTimezone({ company }) {
+  const [tz, setTz] = useState(company.timezone || DEFAULT_TIMEZONE);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [ok, setOk] = useState('');
+  const changed = tz !== (company.timezone || DEFAULT_TIMEZONE);
+
+  async function save() {
+    setError(''); setOk(''); setBusy(true);
+    const res = await setOwnCompanyTimezone(tz);
+    if (!res.ok) { setBusy(false); return setError(res.error); }
+    setOk('Time zone updated — reloading…');
+    setTimeout(() => window.location.reload(), 900);
+  }
+
+  return (
+    <section style={styles.card}>
+      <h3 style={styles.cardTitle}><i className="ti ti-clock-hour-4" aria-hidden="true" /> Company time zone</h3>
+      <p style={styles.cardSub}>Transactions for {company.name} are stamped with this clock. Currently: <strong>{tzLabel(company.timezone)}</strong>.</p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={tz} onChange={(e) => setTz(e.target.value)} style={{ flex: '1 1 260px', maxWidth: 380 }}>
+          {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={!changed || busy}>
+          <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Saving…' : 'Save time zone'}
+        </button>
+      </div>
+      {error && <div className="error-text">{error}</div>}
+      {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
+    </section>
   );
 }
 

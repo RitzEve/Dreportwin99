@@ -205,6 +205,20 @@ export async function updateCompany(companyId, { name, timezone } = {}) {
   return { ok: true };
 }
 
+/** Master changes their OWN company's time zone (via a SECURITY DEFINER function). */
+export async function setOwnCompanyTimezone(timezone) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not signed in.' };
+  const { error } = await supabase.rpc('set_company_timezone', { new_tz: timezone });
+  if (error) {
+    if (/set_company_timezone|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      return { ok: false, error: 'Time zone editing needs a one-time database setup (run migration-005.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
+}
+
 /** Create a company, and (optionally) its first master account in one go. */
 export async function provisionCompany({ companyName, masterName, masterEmail, password, timezone }) {
   const me = await getCurrentUser();

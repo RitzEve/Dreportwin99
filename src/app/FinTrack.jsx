@@ -55,6 +55,8 @@ const weekAgo = dateNDaysAgo(6);
 const dateInTz = tz => { try { return new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); } catch(e){ return new Date().toISOString().split("T")[0]; } };
 const timeInTz = tz => { try { return new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date()); } catch(e){ return new Date().toTimeString().slice(0,5); } };
 const dateNDaysAgoInTz = (n,tz) => { const d=new Date(dateInTz(tz)+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()-n); return d.toISOString().split("T")[0]; };
+// Short, friendly city name from an IANA zone, e.g. "Australia/Sydney" -> "Sydney".
+const tzCity = tz => String(tz||"").split("/").pop().replace(/_/g," ");
 const csvEscape = v => { const s=String(v??""); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
 const downloadBlob = (content,filename,mime) => {
   const blob = new Blob([content],{type:mime});
@@ -77,6 +79,7 @@ function ftBankBalance(bank, txs){
   let bal = bank.openingBalance ?? 0;
   for(const t of txs){
     if(t.deleted) continue;
+    if(t.bucketLeg) continue; // Store/Mistake "bucket" side never belongs to a real bank
     if(t.bank===bank.name) bal += ftTxDelta(t);
   }
   return bal;
@@ -328,6 +331,9 @@ export default function App() {
   const yesterday = dateNDaysAgoInTz(1,tz);
   const weekAgo = dateNDaysAgoInTz(6,tz);
   const thisMonth = today.slice(0,7);
+  // Live clock for the top bar, ticking in the company's time zone.
+  const [clockNow,setClockNow] = useState(()=>timeInTz(tz));
+  useEffect(()=>{ setClockNow(timeInTz(tz)); const id=setInterval(()=>setClockNow(timeInTz(tz)),20000); return ()=>clearInterval(id); },[tz]);
   const [page,setPage] = useState("dashboard");
   const [sidebarOpen,setSidebarOpen] = useState(true);
   const [loaded,setLoaded] = useState(false);
@@ -583,11 +589,11 @@ export default function App() {
       if(srcBank){
         const pairId = `${form.type==="Store"?"ST":"MK"}-${nextId}`;
         const bankLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,counterparty:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,fundLeg:true};
-        const bucketLeg = {id:nextId+1,date:today,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:"",counterparty:srcBank.name,pairId,notes:form.notes,operator:op,isNew:false,deleted:false};
+        const bucketLeg = {id:nextId+1,date:today,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
         setNextId(n=>n+2);
       } else {
-        const bucketLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:"",notes:form.notes,operator:op,isNew:false,deleted:false};
+        const bucketLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:form.type,notes:form.notes,operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,...prev]);
         setNextId(n=>n+1);
       }
@@ -969,7 +975,12 @@ export default function App() {
           </button>
           <h2 style={{margin:0,fontSize:18,fontWeight:500,color:C.text}}>{nav.find(n=>n.id===page)?.label}</h2>
 
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:12}}>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",justifyContent:"flex-end"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:C.muted,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 10px"}} title={`This company's time zone: ${tz}. Entries are stamped with this clock.`}>
+              <i className="ti ti-clock-hour-4" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>
+              <span style={{fontWeight:600,color:C.text}}>{clockNow}</span>
+              <span style={{whiteSpace:"nowrap"}}>{tzCity(tz)} time</span>
+            </div>
             <div style={{display:"flex",alignItems:"center",gap:7,fontSize:13,color:C.text}}>
               <i className="ti ti-building" aria-hidden="true" style={{fontSize:16,color:C.accent}}/>
               <span style={{fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}} title={SESSION.companyName}>{SESSION.companyName}</span>
@@ -1061,7 +1072,7 @@ export default function App() {
               <SectionTitle icon="ti-building-bank">Per-bank ({dashScopeLabel})</SectionTitle>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
                 {banksLive.filter(b=>b.active!==false).map(b=>{
-                  const bTx = stats.active.filter(t=>t.bank===b.name);
+                  const bTx = stats.active.filter(t=>t.bank===b.name && !t.bucketLeg);
                   return <div key={b.id} onClick={()=>openBankDetail(b)} style={{background:C.bg,borderRadius:8,padding:"12px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
                     onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>

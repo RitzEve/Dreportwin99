@@ -552,14 +552,13 @@ export default function App() {
 
   const handleAddTx = () => {
     const isSigned = SIGNED_TYPES.includes(form.type);
-    // Regular Deposit / Withdrawal still require a bank AND a name/reference.
-    // Every other type (Unclaimed Credit, Transfer, Store, Mistake, Rental,
-    // Adjust, Other) may leave the bank(s) and the name/reference blank.
-    const strict = form.type==="Regular Deposit" || form.type==="Regular Withdrawal";
+    // Regular Deposit / Withdrawal still require a name/reference (it tracks the
+    // member). The bank is OPTIONAL for every type now. All other types may also
+    // leave the name/reference blank.
+    const needsName = form.type==="Regular Deposit" || form.type==="Regular Withdrawal";
     if(form.amount===""||isNaN(form.amount)||(!isSigned&&Number(form.amount)<=0)||(isSigned&&Number(form.amount)===0)){setFormError(isSigned?"Enter a non-zero amount (use a minus sign for negative).":"Enter a valid amount.");return;}
-    if(strict && !form.memberName.trim()){setFormError("Enter a name/reference.");return;}
+    if(needsName && !form.memberName.trim()){setFormError("Enter a name/reference.");return;}
     const srcBank = banks.find(b=>b.id===form.bankId);
-    if(strict && !srcBank){setFormError("Select a bank.");return;}
     setFormError("");
     const destBank = banks.find(b=>b.id===form.toBankId);
     const amt = Number(form.amount);
@@ -602,7 +601,7 @@ export default function App() {
     }
 
     // ---- Single-entry types: Regular Deposit/Withdrawal, Unclaimed Credit,
-    // Rental, Adjust, Other. Bank is optional except for the strict types. ----
+    // Rental, Adjust, Other. Bank is optional for all of them. ----
     const isDeposit = form.type==="Regular Deposit";
     const existingMember = members.find(m=>
       (form.memberId && m.id===form.memberId) ||
@@ -859,8 +858,8 @@ export default function App() {
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                <div><label style={labelStyle}>Bank account affected{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")?" (optional)":""}</label>
-                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:e.target.value?Number(e.target.value):null}))} style={{width:"100%"}}>{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")&&<option value="">— None —</option>}{(form.type==="Regular Deposit"||form.type==="Regular Withdrawal")&&activeBanks.length===0&&<option value="">No active banks — add or activate one</option>}{activeBanks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
+                <div><label style={labelStyle}>Bank account affected (optional)</label>
+                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:e.target.value?Number(e.target.value):null}))} style={{width:"100%"}}><option value="">— None —</option>{activeBanks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
                 {form.type==="Transfer"&&<div><label style={labelStyle}>Destination bank (optional)</label>
                   <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:e.target.value?Number(e.target.value):null}))} style={{width:"100%"}}><option value="">— None —</option>{activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>}
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>

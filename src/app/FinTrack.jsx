@@ -32,7 +32,8 @@ const BANK_CHOICES = [
   "Australia and New Zealand Banking Group (ANZ)","Bank of Queensland (BOQ)","Bendigo and Adelaide Bank",
   "Suncorp Bank","Macquarie Bank","Bankwest","Bank of Melbourne","St.George","BankSA","Bank Australia",
   "Great Southern Bank","Beyond Bank","People First Bank","Newcastle Greater Mutual Group (NGM)",
-  "Teachers Mutual Bank","ING Australia","HSBC Bank Australia","Judo Bank","Ubank","Up Bank"
+  "Teachers Mutual Bank","ING Australia","HSBC Bank Australia","Judo Bank","Ubank","Up Bank",
+  "Payment Gateway","Others"
 ];
 const TYPE_COLORS = {
   "Regular Deposit":"#16a34a","Regular Withdrawal":"#dc2626",

@@ -75,12 +75,18 @@ function ftTxDelta(t){
   if(t.type==="Transfer Out") return -t.amount;
   return 0;
 }
+// A transaction belongs to a bank by the bank's UNIQUE id (t.bankId). Two banks
+// can share the same institution name (e.g. two "Ubank" accounts with different
+// holders), so matching by name alone wrongly mixes their balances/history.
+// Older records saved before this only have the name, so fall back to name match.
+function txInBank(t, bank){ return t.bankId!=null ? t.bankId===bank.id : t.bank===bank.name; }
+function bankOfTx(t, banks){ return (banks||[]).find(b => (t.bankId!=null ? b.id===t.bankId : b.name===t.bank)); }
 function ftBankBalance(bank, txs){
   let bal = bank.openingBalance ?? 0;
   for(const t of txs){
     if(t.deleted) continue;
     if(t.bucketLeg) continue; // Store/Mistake "bucket" side never belongs to a real bank
-    if(t.bank===bank.name) bal += ftTxDelta(t);
+    if(txInBank(t,bank)) bal += ftTxDelta(t);
   }
   return bal;
 }
@@ -182,7 +188,7 @@ function TxTable({data, showDelete, onDelete, banks}) {
                 {amtDisplay(t).sign}{amtDisplay(t).val}
               </td>
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
-                const b = (banks||[]).find(x=>x.name===t.bank);
+                const b = bankOfTx(t, banks);
                 return (<span>
                   <span style={{display:"block"}}>{b?b.holder:t.bank}</span>
                   <span style={{fontSize:11,color:C.muted}}>{t.bank}{t.counterparty?(t.type==="Transfer In"?` ← ${t.counterparty}`:` → ${t.counterparty}`):""}</span>
@@ -267,7 +273,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks}) {
                       <td style={{padding:"9px 10px",color:C.muted,textDecoration:t.deleted?"line-through":"none"}}>{t.memberId||"—"}</td>
                       <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none",color:amtDisplay(t).color}}>{amtDisplay(t).sign}{amtDisplay(t).val}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
-                        const b = (banks||[]).find(x=>x.name===t.bank);
+                        const b = bankOfTx(t, banks);
                         return (<span>
                           <span style={{display:"block"}}>{b?b.holder:t.bank}</span>
                           <span style={{fontSize:11,color:C.muted}}>{t.bank}{t.counterparty?(t.type==="Transfer In"?` ← ${t.counterparty}`:` → ${t.counterparty}`):""}</span>
@@ -572,8 +578,8 @@ export default function App() {
       if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");return;}
       const pairId = `TR-${nextId}`;
       const rows = []; let idc = nextId;
-      if(srcBank) rows.push({id:idc++,date:today,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),operator:op,isNew:false,deleted:false});
-      if(destBank) rows.push({id:idc++,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),operator:op,isNew:false,deleted:false});
+      if(srcBank) rows.push({id:idc++,date:today,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),operator:op,isNew:false,deleted:false});
+      if(destBank) rows.push({id:idc++,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
       setForm(blank); setShowEntryModal(false);
@@ -587,7 +593,7 @@ export default function App() {
     if(form.type==="Store" || form.type==="Mistake"){
       if(srcBank){
         const pairId = `${form.type==="Store"?"ST":"MK"}-${nextId}`;
-        const bankLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,counterparty:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,fundLeg:true};
+        const bankLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,bankId:srcBank.id,counterparty:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,fundLeg:true};
         const bucketLeg = {id:nextId+1,date:today,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
         setNextId(n=>n+2);
@@ -609,7 +615,7 @@ export default function App() {
     );
     const isNew = isDeposit && !existingMember && !!ref;
     const assignedId = isDeposit ? (form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`) : form.memberId;
-    const newTx = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",notes:form.notes,operator:op,isNew,deleted:false};
+    const newTx = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,notes:form.notes,operator:op,isNew,deleted:false};
     setTransactions(prev=>[newTx,...prev]); setNextId(n=>n+1);
     if(isNew){
       setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:today,lastActivity:today}]);
@@ -686,7 +692,7 @@ export default function App() {
     setDetailModal({title:m.name,subtitle:`${m.id}${m.phone?" · "+m.phone:""} · Joined ${m.joined} · ${tx.length} transactions · Total deposits: ${fmt(total)}`,transactions:tx});
   };
   const openBankDetail = b => {
-    const tx = transactions.filter(t=>t.bank===b.name).sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time));
+    const tx = transactions.filter(t=>txInBank(t,b)).sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time));
     setDetailModal({title:b.name,subtitle:`Holder: ${b.holder} · BSB: ${b.bsb||"—"} · Acc: ${b.account} · ${tx.length} transactions · Balance: ${fmt(b.balance)}`,transactions:tx});
   };
 
@@ -1071,7 +1077,7 @@ export default function App() {
               <SectionTitle icon="ti-building-bank">Per-bank ({dashScopeLabel})</SectionTitle>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
                 {banksLive.filter(b=>b.active!==false).map(b=>{
-                  const bTx = stats.active.filter(t=>t.bank===b.name && !t.bucketLeg);
+                  const bTx = stats.active.filter(t=>txInBank(t,b) && !t.bucketLeg);
                   return <div key={b.id} onClick={()=>openBankDetail(b)} style={{background:C.bg,borderRadius:8,padding:"12px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
                     onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>

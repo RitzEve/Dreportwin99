@@ -1157,6 +1157,7 @@ export default function App() {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:24}}>
               <StatCard label="Total deposits" count={stats.deposits.length} amount={stats.sum(stats.deposits)} color="#16a34a"/>
               <StatCard label="Total withdrawals" count={stats.withdrawals.length} amount={stats.sum(stats.withdrawals)} color="#dc2626"/>
+              <StatCard label="Win / Loss" amount={stats.sum(stats.deposits)-stats.sum(stats.withdrawals)} color={(stats.sum(stats.deposits)-stats.sum(stats.withdrawals))>=0?"#16a34a":"#dc2626"}/>
               <StatCard label="New members" count={stats.newMembers.length} amount={stats.sum(stats.newMembers)} color="#2563eb"/>
               <StatCard label="Unclaimed credits" count={stats.unclaimed.length} amount={stats.sum(stats.unclaimed)} color="#d97706"/>
               <StatCard label="Mistakes" count={stats.mistakes.length} amount={stats.sum(stats.mistakes)} color="#7c3aed"/>
@@ -1252,22 +1253,23 @@ export default function App() {
                       </div>
                     ):(
                       <>
-                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}><i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/><span title={b.holder||b.name} style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.holder||b.name}</span>{b.active===false&&<span style={{fontSize:10,fontWeight:600,color:C.muted,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:999,padding:"1px 7px",flexShrink:0,whiteSpace:"nowrap"}}>Inactive</span>}</div>
-                          <div style={{display:"flex",gap:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-                            <button onClick={()=>startEditBank(b)} style={editBtnStyle}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
-                            <button onClick={()=>handleDeleteBank(b.id,b.name)} style={deleteBtnStyle}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
-                          </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,marginBottom:8}}>
+                          <i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/>
+                          <span title={b.holder||b.name} style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.holder||b.name}</span>
                         </div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Bank: {b.name}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>PayID: {b.payid||"—"}</div>
                         <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(b.balance)}</div>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:8}}>
-                          <span style={{fontSize:11,color:C.muted}}>Click card to view history</span>
-                          <button onClick={e=>{e.stopPropagation();handleToggleBankActive(b.id);}}
-                            style={b.active===false?bankInactiveBtnStyle:bankActiveBtnStyle}
+                        <div style={{fontSize:11,color:C.muted,marginTop:6}}>Click card to view history</div>
+                        <div onClick={e=>e.stopPropagation()} style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
+                          <div style={{display:"flex",gap:6}}>
+                            <button onClick={()=>startEditBank(b)} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
+                            <button onClick={()=>handleDeleteBank(b.id,b.name)} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
+                          </div>
+                          <button onClick={()=>handleToggleBankActive(b.id)}
+                            style={{...(b.active===false?bankInactiveBtnStyle:bankActiveBtnStyle),justifyContent:"center"}}
                             title={b.active===false?"Inactive — click to show this bank in the dashboard & entry dropdowns":"Active — click to hide this bank from the dashboard & entry dropdowns"}>
                             <i className={`ti ti-${b.active===false?"circle-off":"circle-check"}`} aria-hidden="true"/> {b.active===false?"Inactive":"Active"}
                           </button>

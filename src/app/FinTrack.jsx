@@ -41,7 +41,7 @@ const TYPE_COLORS = {
 };
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
-const fmt = n => "$"+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmt = n => { const v = Number(n)||0; return (v<0?"-$":"$")+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); };
 const monthLabel = ym => {
   const [y,m] = ym.split("-");
   return new Date(Number(y),Number(m)-1,1).toLocaleString("en-US",{month:"long",year:"numeric"});
@@ -329,10 +329,14 @@ export default function App() {
   const [rangeFrom,setRangeFrom] = useState(weekAgo);
   const [rangeTo,setRangeTo] = useState(today);
 
-  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:null,notes:"",toBankId:null});
+  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null});
   const [formError,setFormError] = useState("");
   const [nameSuggestions,setNameSuggestions] = useState([]);
+  const [idSuggestions,setIdSuggestions] = useState([]);
+  const [phoneSuggestions,setPhoneSuggestions] = useState([]);
   const suggestRef = useRef(null);
+  const idSuggestRef = useRef(null);
+  const phoneSuggestRef = useRef(null);
 
   const [newBank,setNewBank] = useState({name:"",holder:"",bsb:"",account:"",payid:"",balance:""});
   const [bankError,setBankError] = useState("");
@@ -394,7 +398,11 @@ export default function App() {
   },[transactions,banks,members,nextId,loaded]);
 
   useEffect(()=>{
-    const handler = e => { if(suggestRef.current&&!suggestRef.current.contains(e.target)) setNameSuggestions([]); };
+    const handler = e => {
+      if(suggestRef.current&&!suggestRef.current.contains(e.target)) setNameSuggestions([]);
+      if(idSuggestRef.current&&!idSuggestRef.current.contains(e.target)) setIdSuggestions([]);
+      if(phoneSuggestRef.current&&!phoneSuggestRef.current.contains(e.target)) setPhoneSuggestions([]);
+    };
     document.addEventListener("mousedown",handler);
     return ()=>document.removeEventListener("mousedown",handler);
   },[]);
@@ -434,7 +442,9 @@ export default function App() {
 
   const computeStats = (list) => {
     const active = list.filter(t=>!t.deleted);
-    const f = type => active.filter(t=>t.type===type);
+    // The funding (bank-side) leg of a Store/Mistake entry is tagged fundLeg so it
+    // moves the bank balance but is NOT double-counted in the type's total here.
+    const f = type => active.filter(t=>t.type===type && !t.fundLeg);
     const sum = arr => arr.reduce((a,b)=>a+b.amount,0);
     return {
       deposits:f("Regular Deposit"),withdrawals:f("Regular Withdrawal"),
@@ -486,15 +496,24 @@ export default function App() {
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   },[transactions,search]);
 
-  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setShowEntryModal(false); };
+  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
   const handleNameInput = val => {
-    setForm(f=>({...f,memberName:val,memberId:""}));
+    setForm(f=>({...f,memberName:val}));
     setNameSuggestions(val.length>0 ? members.filter(m=>m.name.toLowerCase().includes(val.toLowerCase())) : []);
   };
-  const selectSuggestion = m => { setForm(f=>({...f,memberName:m.name,memberId:m.id})); setNameSuggestions([]); };
+  const handleIdInput = val => {
+    setForm(f=>({...f,memberId:val}));
+    setIdSuggestions(val.length>0 ? members.filter(m=>(m.id||"").toLowerCase().includes(val.toLowerCase())) : []);
+  };
+  const handlePhoneInput = val => {
+    setForm(f=>({...f,memberPhone:val}));
+    setPhoneSuggestions(val.length>0 ? members.filter(m=>(m.phone||"").toLowerCase().includes(val.toLowerCase())) : []);
+  };
+  // Picking any suggestion fills the member's name + ID + phone, and closes all lists.
+  const selectMember = m => { setForm(f=>({...f,memberName:m.name,memberId:m.id,memberPhone:m.phone||""})); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); };
 
   const handleDeleteTx = id => {
     const target = transactions.find(t=>t.id===id);
@@ -512,51 +531,74 @@ export default function App() {
       }});
   };
 
-  useEffect(()=>{
-    if(loaded && form.bankId==null && activeBanks.length>0) setForm(f=>({...f,bankId:activeBanks[0].id}));
-  },[loaded,activeBanks,form.bankId]);
-
   const handleAddTx = () => {
     const isSigned = SIGNED_TYPES.includes(form.type);
+    // Regular Deposit / Withdrawal still require a bank AND a name/reference.
+    // Every other type (Unclaimed Credit, Transfer, Store, Mistake, Rental,
+    // Adjust, Other) may leave the bank(s) and the name/reference blank.
+    const strict = form.type==="Regular Deposit" || form.type==="Regular Withdrawal";
     if(form.amount===""||isNaN(form.amount)||(!isSigned&&Number(form.amount)<=0)||(isSigned&&Number(form.amount)===0)){setFormError(isSigned?"Enter a non-zero amount (use a minus sign for negative).":"Enter a valid amount.");return;}
-    if(!form.memberName.trim()){setFormError("Enter a name/reference.");return;}
+    if(strict && !form.memberName.trim()){setFormError("Enter a name/reference.");return;}
     const srcBank = banks.find(b=>b.id===form.bankId);
-    if(!srcBank){setFormError("Select a bank.");return;}
-    if(form.type==="Transfer"&&!form.toBankId){setFormError("Select destination bank.");return;}
+    if(strict && !srcBank){setFormError("Select a bank.");return;}
     setFormError("");
     const destBank = banks.find(b=>b.id===form.toBankId);
-    const isDeposit = form.type==="Regular Deposit";
-    const existingMember = members.find(m=>
-      (form.memberId && m.id===form.memberId) ||
-      (m.name.toLowerCase()===form.memberName.trim().toLowerCase())
-    );
-    const isNew = isDeposit && !existingMember;
     const amt = Number(form.amount);
     const op = SESSION.operatorId;
-    const assignedId = form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`;
     const time = new Date().toTimeString().slice(0,5);
+    const ref = form.memberName.trim();
+    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null};
 
+    // ---- Transfer: make a leg for whichever bank(s) are chosen ----
     if(form.type==="Transfer"){
-      // create TWO linked entries: an OUT from source and an IN to destination
+      if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");return;}
       const pairId = `TR-${nextId}`;
-      const outTx = {id:nextId,date:today,time,type:"Transfer Out",amount:amt,memberId:"",memberName:form.memberName||`Transfer to ${destBank.name}`,bank:srcBank.name,counterparty:destBank.name,pairId,notes:form.notes||`To ${destBank.name}`,operator:op,isNew:false,deleted:false};
-      const inTx = {id:nextId+1,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:form.memberName||`Transfer from ${srcBank.name}`,bank:destBank.name,counterparty:srcBank.name,pairId,notes:form.notes||`From ${srcBank.name}`,operator:op,isNew:false,deleted:false};
-      setTransactions(prev=>[inTx,outTx,...prev]);
-      setNextId(n=>n+2);
-      setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null});
-      setShowEntryModal(false);
+      const rows = []; let idc = nextId;
+      if(srcBank) rows.push({id:idc++,date:today,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),operator:op,isNew:false,deleted:false});
+      if(destBank) rows.push({id:idc++,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),operator:op,isNew:false,deleted:false});
+      setTransactions(prev=>[...rows.reverse(),...prev]);
+      setNextId(idc);
+      setForm(blank); setShowEntryModal(false);
       return;
     }
 
-    const newTx = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:isDeposit?assignedId:form.memberId,memberName:form.memberName,bank:srcBank.name,notes:form.notes,operator:op,isNew,deleted:false};
+    // ---- Store / Mistake: money moves OUT of the chosen bank and INTO the
+    // Store/Mistake "bucket". With a bank => two linked legs (bank leg, tagged
+    // fundLeg, + bucket leg). With no bank => one bucket leg that just adds the
+    // amount to the Store/Mistake total. ----
+    if(form.type==="Store" || form.type==="Mistake"){
+      if(srcBank){
+        const pairId = `${form.type==="Store"?"ST":"MK"}-${nextId}`;
+        const bankLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,counterparty:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,fundLeg:true};
+        const bucketLeg = {id:nextId+1,date:today,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:"",counterparty:srcBank.name,pairId,notes:form.notes,operator:op,isNew:false,deleted:false};
+        setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
+        setNextId(n=>n+2);
+      } else {
+        const bucketLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:"",notes:form.notes,operator:op,isNew:false,deleted:false};
+        setTransactions(prev=>[bucketLeg,...prev]);
+        setNextId(n=>n+1);
+      }
+      setForm(blank); setShowEntryModal(false);
+      return;
+    }
+
+    // ---- Single-entry types: Regular Deposit/Withdrawal, Unclaimed Credit,
+    // Rental, Adjust, Other. Bank is optional except for the strict types. ----
+    const isDeposit = form.type==="Regular Deposit";
+    const existingMember = members.find(m=>
+      (form.memberId && m.id===form.memberId) ||
+      (ref && m.name.toLowerCase()===ref.toLowerCase())
+    );
+    const isNew = isDeposit && !existingMember && !!ref;
+    const assignedId = isDeposit ? (form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`) : form.memberId;
+    const newTx = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",notes:form.notes,operator:op,isNew,deleted:false};
     setTransactions(prev=>[newTx,...prev]); setNextId(n=>n+1);
     if(isNew){
-      setMembers(prev=>[...prev,{id:assignedId,name:form.memberName,phone:"",joined:today,lastActivity:today}]);
+      setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:today,lastActivity:today}]);
     } else if(existingMember){
       setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:today}:m));
     }
-    setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null});
-    setShowEntryModal(false);
+    setForm(blank); setShowEntryModal(false);
   };
 
   const handleAddBank = () => {
@@ -798,21 +840,49 @@ export default function App() {
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                <div><label style={labelStyle}>Bank account affected</label>
-                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:Number(e.target.value)}))} style={{width:"100%"}}>{activeBanks.length===0&&<option value="">No active banks — add or activate one</option>}{activeBanks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
-                {form.type==="Transfer"&&<div><label style={labelStyle}>Destination bank</label>
-                  <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:Number(e.target.value)}))} style={{width:"100%"}}><option value="">— Select —</option>{activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>}
+                <div><label style={labelStyle}>Bank account affected{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")?" (optional)":""}</label>
+                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:e.target.value?Number(e.target.value):null}))} style={{width:"100%"}}>{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")&&<option value="">— None —</option>}{(form.type==="Regular Deposit"||form.type==="Regular Withdrawal")&&activeBanks.length===0&&<option value="">No active banks — add or activate one</option>}{activeBanks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
+                {form.type==="Transfer"&&<div><label style={labelStyle}>Destination bank (optional)</label>
+                  <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:e.target.value?Number(e.target.value):null}))} style={{width:"100%"}}><option value="">— None —</option>{activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>}
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
                   <input type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                <div><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>
-                  <input type="text" placeholder="Leave blank to auto-generate" value={form.memberId} onChange={e=>setForm(f=>({...f,memberId:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                <div style={{position:"relative"}} ref={suggestRef}>
-                  <label style={labelStyle}>Member name / reference</label>
+                <div style={{position:"relative"}} ref={idSuggestRef}><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>
+                  <input type="text" placeholder="Type to search by ID…" value={form.memberId} onChange={e=>handleIdInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
+                  {idSuggestions.length>0&&(
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden",maxHeight:220,overflowY:"auto"}}>
+                      {idSuggestions.map(m=>(
+                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
+                          onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+                          <span style={{fontWeight:500}}><i className="ti ti-id" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.id}</span>
+                          <span style={{color:C.muted,fontSize:11}}>{m.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{position:"relative"}} ref={phoneSuggestRef}><label style={labelStyle}>Phone number <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                  <input type="text" placeholder="Type to search by phone…" value={form.memberPhone} onChange={e=>handlePhoneInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
+                  {phoneSuggestions.length>0&&(
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden",maxHeight:220,overflowY:"auto"}}>
+                      {phoneSuggestions.map(m=>(
+                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
+                          onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+                          <span style={{fontWeight:500}}><i className="ti ti-phone" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.phone||"—"}</span>
+                          <span style={{color:C.muted,fontSize:11}}>{m.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{position:"relative",gridColumn:"1/-1"}} ref={suggestRef}>
+                  <label style={labelStyle}>Member name / reference{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")?" (optional)":""}</label>
                   <input type="text" placeholder="Type to search members..." value={form.memberName} onChange={e=>handleNameInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
                   {nameSuggestions.length>0&&(
                     <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden"}}>
                       {nameSuggestions.map(m=>(
-                        <div key={m.id} onMouseDown={()=>selectSuggestion(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
+                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
                           onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                           onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
                           <span style={{fontWeight:500}}><i className="ti ti-user" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.name}</span>
@@ -1006,7 +1076,7 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
-                  return <button key={t} type="button" onClick={()=>{ setForm({type:t,amount:"",memberId:"",memberName:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setShowEntryModal(true); }}
+                  return <button key={t} type="button" onClick={()=>{ setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(true); }}
                     style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:dark?c+"22":c+"12",color:c,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color="#fff";}}
                     onMouseLeave={e=>{e.currentTarget.style.background=dark?c+"22":c+"12";e.currentTarget.style.color=c;}}>
@@ -1056,7 +1126,7 @@ export default function App() {
                     ):(
                       <>
                         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}><i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/><span style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,overflowWrap:"anywhere"}}>{b.holder||b.name}</span>{b.active===false&&<span style={{fontSize:10,fontWeight:600,color:C.muted,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:999,padding:"1px 7px",flexShrink:0,whiteSpace:"nowrap"}}>Inactive</span>}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}><i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/><span title={b.holder||b.name} style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.holder||b.name}</span>{b.active===false&&<span style={{fontSize:10,fontWeight:600,color:C.muted,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:999,padding:"1px 7px",flexShrink:0,whiteSpace:"nowrap"}}>Inactive</span>}</div>
                           <div style={{display:"flex",gap:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
                             <button onClick={()=>startEditBank(b)} style={editBtnStyle}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
                             <button onClick={()=>handleDeleteBank(b.id,b.name)} style={deleteBtnStyle}><i className="ti ti-trash" aria-hidden="true"/> Del</button>

@@ -973,7 +973,8 @@ export default function App() {
                   return <div key={b.id} onClick={()=>openBankDetail(b)} style={{background:C.bg,borderRadius:8,padding:"12px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
                     onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                    <div style={{fontWeight:500,fontSize:13,marginBottom:4,color:C.text}}>{b.name}</div>
+                    <div style={{fontWeight:500,fontSize:13,marginBottom:2,color:C.text}}>{b.holder||b.name}</div>
+                    <div style={{fontSize:12,color:C.muted}}>{b.name}</div>
                     <div style={{fontSize:12,color:C.muted}}>{bTx.length} entries</div>
                     <div style={{fontSize:15,fontWeight:500,marginTop:4,color:C.text}}>{fmt(b.balance)}</div>
                   </div>;
@@ -1023,7 +1024,7 @@ export default function App() {
               }>Bank accounts</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a card to view its full transaction history.</div>
               {banks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank accounts yet. Click "Add bank" to create one.</div>}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(220px, calc((100% - 48px) / 5)), 1fr))",gap:12}}>
                 {banksLive.map(b=>(
                   <div key={b.id} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:editingBank===b.id?"default":"pointer"}}
                     onMouseEnter={e=>{if(editingBank!==b.id)e.currentTarget.style.borderColor=C.accent;}}
@@ -1045,14 +1046,14 @@ export default function App() {
                       </div>
                     ):(
                       <>
-                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}><i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent}}/><span style={{fontWeight:500,fontSize:14,color:C.text}}>{b.name}</span></div>
-                          <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}><i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/><span style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,overflowWrap:"anywhere"}}>{b.holder||b.name}</span></div>
+                          <div style={{display:"flex",gap:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
                             <button onClick={()=>startEditBank(b)} style={editBtnStyle}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
                             <button onClick={()=>handleDeleteBank(b.id,b.name)} style={deleteBtnStyle}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
                           </div>
                         </div>
-                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Holder: {b.holder}</div>
+                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Bank: {b.name}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>PayID: {b.payid||"—"}</div>

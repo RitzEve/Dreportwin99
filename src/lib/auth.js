@@ -165,15 +165,48 @@ export async function listCompaniesWithMasters() {
   });
 }
 
-export async function createCompany(name) {
+export async function createCompany(name, timezone) {
   if (!name || !name.trim()) return { ok: false, error: 'Enter a company name.' };
-  const { data, error } = await supabase.from('companies').insert({ name: name.trim() }).select().single();
+  const base = { name: name.trim() };
+  const row = timezone ? { ...base, timezone } : base;
+  let { data, error } = await supabase.from('companies').insert(row).select().single();
+  // If the timezone column hasn't been added yet (migration-004 not run), retry
+  // without it so creating a company still works.
+  if (error && timezone && /timezone|column/i.test(error.message || '')) {
+    ({ data, error } = await supabase.from('companies').insert(base).select().single());
+  }
   if (error) return { ok: false, error: friendly(error) };
   return { ok: true, company: data };
 }
 
+/** Provider edits a company's name and/or time zone. Pass only what changed. */
+export async function updateCompany(companyId, { name, timezone } = {}) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  const fields = {};
+  if (name != null) {
+    if (!name.trim()) return { ok: false, error: 'Enter a company name.' };
+    fields.name = name.trim();
+  }
+  if (timezone != null) fields.timezone = timezone;
+  if (Object.keys(fields).length === 0) return { ok: true };
+
+  let { error } = await supabase.from('companies').update(fields).eq('id', companyId);
+  // Graceful path if the timezone column isn't there yet (migration-004 not run).
+  if (error && timezone != null && /timezone|column/i.test(error.message || '')) {
+    if (fields.name != null) {
+      ({ error } = await supabase.from('companies').update({ name: fields.name }).eq('id', companyId));
+      if (!error) return { ok: false, error: 'Saved the name, but time zone needs a one-time database setup (run migration-004.sql in Supabase).' };
+    } else {
+      return { ok: false, error: 'Time zone needs a one-time database setup (run migration-004.sql in Supabase).' };
+    }
+  }
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true };
+}
+
 /** Create a company, and (optionally) its first master account in one go. */
-export async function provisionCompany({ companyName, masterName, masterEmail, password }) {
+export async function provisionCompany({ companyName, masterName, masterEmail, password, timezone }) {
   const me = await getCurrentUser();
   if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
   if (!companyName || !companyName.trim()) return { ok: false, error: 'Enter a company name.' };
@@ -185,7 +218,7 @@ export async function provisionCompany({ companyName, masterName, masterEmail, p
     if (!validatePassword(password)) return { ok: false, error: 'Master password must be at least 6 characters.' };
   }
 
-  const created = await createCompany(companyName);
+  const created = await createCompany(companyName, timezone || 'Australia/Sydney');
   if (!created.ok) return created;
 
   if (!wantsMaster) return { ok: true, company: created.company };

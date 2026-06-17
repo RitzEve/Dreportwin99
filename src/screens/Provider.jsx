@@ -5,9 +5,10 @@ import {
   providerAddMaster,
   deleteCompany,
   adminResetPassword,
-  renameCompany,
+  updateCompany,
   updateAccountInfo,
 } from '../lib/auth.js';
+import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 
 /*
@@ -90,7 +91,7 @@ export default function Provider({ ctx, onLogout }) {
 }
 
 function CreateCompany({ onCreated }) {
-  const blank = { companyName: '', masterName: '', masterEmail: '', password: '' };
+  const blank = { companyName: '', masterName: '', masterEmail: '', password: '', timezone: DEFAULT_TIMEZONE };
   const [form, setForm] = useState(blank);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
@@ -114,6 +115,10 @@ function CreateCompany({ onCreated }) {
       <form onSubmit={submit}>
         <div className="field"><label>Company name</label>
           <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Acme Pty Ltd" /></div>
+        <div className="field"><label>Time zone <span style={styles.opt}>(its log follows this)</span></label>
+          <select value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })}>
+            {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select></div>
         <div className="field"><label>Master Name / ID <span style={styles.opt}>(optional)</span></label>
           <input value={form.masterName} onChange={(e) => setForm({ ...form, masterName: e.target.value })} placeholder="e.g. Mario (used for login)" /></div>
         <div className="field"><label>Master email <span style={styles.opt}>(optional)</span></label>
@@ -141,16 +146,21 @@ function CompanyCard({ company, onChanged }) {
   const [resetPw, setResetPw] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(company.name);
+  const [tzDraft, setTzDraft] = useState(company.timezone || DEFAULT_TIMEZONE);
   const [editingMasterId, setEditingMasterId] = useState(null);
   const [masterDraft, setMasterDraft] = useState({ name: '', email: '' });
 
-  async function doRenameCompany(e) {
+  async function doEditCompany(e) {
     e.preventDefault();
     setError(''); setOk(''); setBusy(true);
-    const res = await renameCompany(company.id, nameDraft);
+    const payload = {};
+    if (nameDraft.trim() !== (company.name || '')) payload.name = nameDraft;
+    if (tzDraft !== (company.timezone || DEFAULT_TIMEZONE)) payload.timezone = tzDraft;
+    if (!Object.keys(payload).length) { setBusy(false); setEditingName(false); return; }
+    const res = await updateCompany(company.id, payload);
     setBusy(false);
     if (!res.ok) return setError(res.error);
-    setOk('Company name updated.');
+    setOk('Company updated.');
     setEditingName(false);
     onChanged?.();
   }
@@ -205,26 +215,32 @@ function CompanyCard({ company, onChanged }) {
       <div style={styles.companyHead}>
         <div style={{ minWidth: 0, flex: 1 }}>
           {editingName ? (
-            <form onSubmit={doRenameCompany} style={styles.nameEditRow}>
+            <form onSubmit={doEditCompany} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
-                placeholder="Company name" style={{ flex: 1, minWidth: 0 }} />
-              <button type="submit" className="btn btn-primary btn-sm" disabled={!nameDraft.trim() || busy}>
-                <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> Save
-              </button>
-              <button type="button" className="btn btn-ghost btn-sm"
-                onClick={() => { setEditingName(false); setNameDraft(company.name); }}>Cancel</button>
+                placeholder="Company name" style={{ width: '100%' }} />
+              <select value={tzDraft} onChange={(e) => setTzDraft(e.target.value)} style={{ width: '100%' }}>
+                {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={!nameDraft.trim() || busy}>
+                  <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> Save
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm"
+                  onClick={() => { setEditingName(false); setNameDraft(company.name); setTzDraft(company.timezone || DEFAULT_TIMEZONE); }}>Cancel</button>
+              </div>
             </form>
           ) : (
             <>
               <div style={styles.companyName}>{company.name}</div>
               <div style={styles.sub}>{company.masters.length} master · {company.managerCount} manager · {company.staffCount} staff</div>
+              <div style={styles.sub}><i className="ti ti-clock-hour-4" aria-hidden="true" /> {tzLabel(company.timezone)}</div>
             </>
           )}
         </div>
         {!editingName && (
           <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingName(true); setNameDraft(company.name); setError(''); setOk(''); }}>
-              <i className="ti ti-pencil" aria-hidden="true" /> Edit name
+            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingName(true); setNameDraft(company.name); setTzDraft(company.timezone || DEFAULT_TIMEZONE); setError(''); setOk(''); }}>
+              <i className="ti ti-pencil" aria-hidden="true" /> Edit
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => { setAdding((a) => !a); setError(''); setOk(''); }}>
               <i className="ti ti-user-plus" aria-hidden="true" /> Add master

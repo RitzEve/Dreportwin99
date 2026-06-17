@@ -17,6 +17,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 const SESSION_DEFAULT = {
   companyId: "demo-co",
   companyName: "Demo Company Pty Ltd",
+  timezone: "Australia/Sydney",
   operatorId: "OP-001",
   operatorName: "Operator",
 };
@@ -49,6 +50,11 @@ const monthLabel = ym => {
 const dateNDaysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split("T")[0]; };
 const yesterday = dateNDaysAgo(1);
 const weekAgo = dateNDaysAgo(6);
+// --- Time-zone aware "now" helpers. Each company stamps its transaction
+// date/time in its own zone (SESSION.timezone), not the browser's. ---
+const dateInTz = tz => { try { return new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); } catch(e){ return new Date().toISOString().split("T")[0]; } };
+const timeInTz = tz => { try { return new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date()); } catch(e){ return new Date().toTimeString().slice(0,5); } };
+const dateNDaysAgoInTz = (n,tz) => { const d=new Date(dateInTz(tz)+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()-n); return d.toISOString().split("T")[0]; };
 const csvEscape = v => { const s=String(v??""); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
 const downloadBlob = (content,filename,mime) => {
   const blob = new Blob([content],{type:mime});
@@ -315,6 +321,13 @@ export default function App() {
   // component re-mounts on every login, so company name, operator, and the data
   // key below all track whichever company just signed in.
   const SESSION = readSession();
+  // This company's time zone (set per company by the provider). All "now" dates
+  // and times below are computed in this zone so the log follows it.
+  const tz = SESSION.timezone || "Australia/Sydney";
+  const today = dateInTz(tz);
+  const yesterday = dateNDaysAgoInTz(1,tz);
+  const weekAgo = dateNDaysAgoInTz(6,tz);
+  const thisMonth = today.slice(0,7);
   const [page,setPage] = useState("dashboard");
   const [sidebarOpen,setSidebarOpen] = useState(true);
   const [loaded,setLoaded] = useState(false);
@@ -545,7 +558,7 @@ export default function App() {
     const destBank = banks.find(b=>b.id===form.toBankId);
     const amt = Number(form.amount);
     const op = SESSION.operatorId;
-    const time = new Date().toTimeString().slice(0,5);
+    const time = timeInTz(tz);
     const ref = form.memberName.trim();
     const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null};
 

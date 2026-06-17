@@ -17,6 +17,7 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     window.FINTRACK_SESSION = {
       companyId: ctx.company.id,
       companyName: ctx.company.name,
+      timezone: ctx.company.timezone || 'Australia/Sydney',
       operatorId: ctx.user.operatorId,
       operatorName: ctx.user.name,
       role: ctx.user.role,

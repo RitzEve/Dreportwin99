@@ -189,8 +189,9 @@ function TxTable({data, showDelete, onDelete, banks}) {
               </td>
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                 const b = bankOfTx(t, banks);
+                const holder = (b&&b.holder) || t.bankHolder || "";
                 return (<span>
-                  <span style={{display:"block"}}>{b?b.holder:t.bank}</span>
+                  <span style={{display:"block"}}>{holder || t.bank}</span>
                   <span style={{fontSize:11,color:C.muted}}>{t.bank}{t.counterparty?(t.type==="Transfer In"?` ← ${t.counterparty}`:` → ${t.counterparty}`):""}</span>
                 </span>);
               })()}</td>
@@ -213,6 +214,61 @@ function StatCard({label,count,amount,color}) {
       <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{label}</div>
       <div style={{fontSize:20,fontWeight:500,color:color||C.text}}>{fmt(amount)}</div>
       {count!==undefined&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"entry":"entries"}</div>}
+    </div>
+  );
+}
+
+// Totals across all bank accounts: all / active-only / inactive-only.
+function BankTotals({banksLive}) {
+  const sum = arr => arr.reduce((s,b)=>s+(b.balance||0),0);
+  const active = banksLive.filter(b=>b.active!==false);
+  const inactive = banksLive.filter(b=>b.active===false);
+  const Card = ({label,amount,count,color,icon}) => (
+    <div style={{background:C.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color}`}}>
+      <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${icon}`} aria-hidden="true" style={{color}}/>{label}</div>
+      <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(amount)}</div>
+      <div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"bank":"banks"}</div>
+    </div>
+  );
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10}}>
+      <Card label="All banks total" amount={sum(banksLive)} count={banksLive.length} color={C.accent} icon="ti-building-bank"/>
+      <Card label="Active banks total" amount={sum(active)} count={active.length} color="#16a34a" icon="ti-circle-check"/>
+      <Card label="Inactive banks total" amount={sum(inactive)} count={inactive.length} color="#64748b" icon="ti-circle-off"/>
+    </div>
+  );
+}
+
+// Transaction log with a page-size dropdown (default 50) + simple pager.
+const PAGE_SIZES = [50,100,200,500,1000];
+const pagerBtn = disabled => ({cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.4:1,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 9px",color:C.text,display:"inline-flex",alignItems:"center"});
+function TxLog({data, showDelete, onDelete, banks}) {
+  const [pageSize,setPageSize] = useState(50);
+  const [page,setPage] = useState(1);
+  useEffect(()=>{ setPage(1); },[pageSize]);
+  const total = data.length;
+  const pages = Math.max(1, Math.ceil(total/pageSize));
+  const curPage = Math.min(page, pages);
+  const start = (curPage-1)*pageSize;
+  const slice = data.slice(start, start+pageSize);
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+          <span>Show</span>
+          <select value={pageSize} onChange={e=>setPageSize(Number(e.target.value))} style={{padding:"4px 8px",width:"auto"}}>
+            {PAGE_SIZES.map(n=><option key={n} value={n}>{n}</option>)}
+          </select>
+          <span>per page</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:C.muted}}>
+          <span>{total===0?0:start+1}–{Math.min(start+pageSize,total)} of {total}</span>
+          <button onClick={()=>setPage(Math.max(1,curPage-1))} disabled={curPage<=1} style={pagerBtn(curPage<=1)} aria-label="Previous page"><i className="ti ti-chevron-left" aria-hidden="true"/></button>
+          <span>{curPage}/{pages}</span>
+          <button onClick={()=>setPage(Math.min(pages,curPage+1))} disabled={curPage>=pages} style={pagerBtn(curPage>=pages)} aria-label="Next page"><i className="ti ti-chevron-right" aria-hidden="true"/></button>
+        </div>
+      </div>
+      <TxTable data={slice} showDelete={showDelete} onDelete={onDelete} banks={banks}/>
     </div>
   );
 }
@@ -274,8 +330,9 @@ function DetailModal({title,subtitle,transactions,onClose,banks}) {
                       <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none",color:amtDisplay(t).color}}>{amtDisplay(t).sign}{amtDisplay(t).val}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                         const b = bankOfTx(t, banks);
+                        const holder = (b&&b.holder) || t.bankHolder || "";
                         return (<span>
-                          <span style={{display:"block"}}>{b?b.holder:t.bank}</span>
+                          <span style={{display:"block"}}>{holder || t.bank}</span>
                           <span style={{fontSize:11,color:C.muted}}>{t.bank}{t.counterparty?(t.type==="Transfer In"?` ← ${t.counterparty}`:` → ${t.counterparty}`):""}</span>
                         </span>);
                       })()}</td>
@@ -383,31 +440,34 @@ export default function App() {
   const [pwError,setPwError] = useState("");
   const [pwSuccess,setPwSuccess] = useState("");
   const opMenuRef = useRef(null);
+  const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
 
   const [search,setSearch] = useState({term:"",dateFrom:"",dateTo:"",type:"",bank:"",member:""});
+
+  // Apply a stored data blob to state (with the one-time opening-balance migration).
+  const applyData = (d) => {
+    if(d.transactions) setTransactions(d.transactions);
+    if(d.banks) setBanks(d.banks.map(b=>{
+      if(b.openingBalance!=null) return b;
+      // migrate older records: derive opening from stored balance minus its tx effects
+      const eff = (d.transactions||[]).reduce((acc,t)=>{
+        if(t.deleted) return acc;
+        if(t.type==="Transfer"){ if(t.bank===b.name) return acc-t.amount; if(t.toBank===b.name) return acc+t.amount; return acc; }
+        if(t.bank===b.name) return acc+ftTxDelta(t);
+        return acc;
+      },0);
+      return {...b,openingBalance:(b.balance??0)-eff};
+    }));
+    if(d.members) setMembers(d.members);
+    if(d.nextId) setNextId(d.nextId);
+  };
 
   useEffect(()=>{
     (async()=>{
       const key = `fintrack-${SESSION.companyId}-v2`;
       try{
         const r = await window.storage.get(key);
-        if(r&&r.value){
-          const d = JSON.parse(r.value);
-          if(d.transactions) setTransactions(d.transactions);
-          if(d.banks) setBanks(d.banks.map(b=>{
-            if(b.openingBalance!=null) return b;
-            // migrate older records: derive opening from stored balance minus its tx effects
-            const eff = (d.transactions||[]).reduce((acc,t)=>{
-              if(t.deleted) return acc;
-              if(t.type==="Transfer"){ if(t.bank===b.name) return acc-t.amount; if(t.toBank===b.name) return acc+t.amount; return acc; }
-              if(t.bank===b.name) return acc+ftTxDelta(t);
-              return acc;
-            },0);
-            return {...b,openingBalance:(b.balance??0)-eff};
-          }));
-          if(d.members) setMembers(d.members);
-          if(d.nextId) setNextId(d.nextId);
-        }
+        if(r&&r.value){ applyData(JSON.parse(r.value)); lastSyncRef.current = r.value; }
         try{ await window.storage.delete("fintrack-data"); }catch(e){}
       }catch(e){ /* first run, no saved data */ }
       setLoaded(true);
@@ -416,11 +476,28 @@ export default function App() {
 
   useEffect(()=>{
     if(!loaded) return;
+    const serialized = JSON.stringify({transactions,banks,members,nextId});
+    if(serialized === lastSyncRef.current) return; // nothing new to persist (incl. data we just pulled in)
     (async()=>{
-      try{ await window.storage.set(`fintrack-${SESSION.companyId}-v2`,JSON.stringify({transactions,banks,members,nextId})); }
+      try{ await window.storage.set(`fintrack-${SESSION.companyId}-v2`,serialized); lastSyncRef.current = serialized; }
       catch(e){ /* save failed */ }
     })();
   },[transactions,banks,members,nextId,loaded]);
+
+  // Auto-refresh: every 10s pull the latest saved data so changes made on other
+  // devices/operators appear here. We only adopt it when it differs from what we
+  // last loaded/saved, so it never clobbers our own just-saved changes.
+  useEffect(()=>{
+    if(!loaded) return;
+    const key = `fintrack-${SESSION.companyId}-v2`;
+    const id = setInterval(async()=>{
+      try{
+        const r = await window.storage.get(key);
+        if(r&&r.value && r.value !== lastSyncRef.current){ applyData(JSON.parse(r.value)); lastSyncRef.current = r.value; }
+      }catch(e){ /* offline / transient */ }
+    },10000);
+    return ()=>clearInterval(id);
+  },[loaded]);
 
   useEffect(()=>{
     const handler = e => {
@@ -509,17 +586,18 @@ export default function App() {
   },[transactions,availableMonths]);
 
   const filteredTx = useMemo(()=>{
+    const selBank = banks.find(bk=>String(bk.id)===String(search.bank)); // search.bank holds a bank id
     return transactions.filter(t=>{
       const term = (search.term||"").toLowerCase();
       const matchTerm = !term||t.memberId.toLowerCase().includes(term)||t.memberName.toLowerCase().includes(term)||t.bank.toLowerCase().includes(term);
       const matchFrom = !search.dateFrom||t.date>=search.dateFrom;
       const matchTo = !search.dateTo||t.date<=search.dateTo;
       const matchType = !search.type||t.type===search.type;
-      const matchBank = !search.bank||t.bank===search.bank;
+      const matchBank = !search.bank||(selBank?txInBank(t,selBank):false);
       const matchMember = !search.member||(t.memberId===search.member||t.memberName===search.member);
       return matchTerm&&matchFrom&&matchTo&&matchType&&matchBank&&matchMember;
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  },[transactions,search]);
+  },[transactions,search,banks]);
 
   const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
@@ -578,8 +656,8 @@ export default function App() {
       if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");return;}
       const pairId = `TR-${nextId}`;
       const rows = []; let idc = nextId;
-      if(srcBank) rows.push({id:idc++,date:today,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),operator:op,isNew:false,deleted:false});
-      if(destBank) rows.push({id:idc++,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),operator:op,isNew:false,deleted:false});
+      if(srcBank) rows.push({id:idc++,date:today,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),operator:op,isNew:false,deleted:false});
+      if(destBank) rows.push({id:idc++,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
       setForm(blank); setShowEntryModal(false);
@@ -593,7 +671,7 @@ export default function App() {
     if(form.type==="Store" || form.type==="Mistake"){
       if(srcBank){
         const pairId = `${form.type==="Store"?"ST":"MK"}-${nextId}`;
-        const bankLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,bankId:srcBank.id,counterparty:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,fundLeg:true};
+        const bankLeg = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,fundLeg:true};
         const bucketLeg = {id:nextId+1,date:today,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
         setNextId(n=>n+2);
@@ -615,7 +693,7 @@ export default function App() {
     );
     const isNew = isDeposit && !existingMember && !!ref;
     const assignedId = isDeposit ? (form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`) : form.memberId;
-    const newTx = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,notes:form.notes,operator:op,isNew,deleted:false};
+    const newTx = {id:nextId,date:today,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,bankHolder:srcBank?srcBank.holder||"":"",notes:form.notes,operator:op,isNew,deleted:false};
     setTransactions(prev=>[newTx,...prev]); setNextId(n=>n+1);
     if(isNew){
       setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:today,lastActivity:today}]);
@@ -1074,6 +1152,10 @@ export default function App() {
             </div>
 
             <div style={sectionStyle}>
+              <SectionTitle icon="ti-wallet">Bank balances</SectionTitle>
+              <BankTotals banksLive={banksLive}/>
+            </div>
+            <div style={sectionStyle}>
               <SectionTitle icon="ti-building-bank">Per-bank ({dashScopeLabel})</SectionTitle>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
                 {banksLive.filter(b=>b.active!==false).map(b=>{
@@ -1091,7 +1173,7 @@ export default function App() {
             </div>
             <div style={sectionStyle}>
               <SectionTitle icon="ti-list">Entries ({dashScopeLabel})</SectionTitle>
-              <TxTable data={dashTx.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time))} showDelete={false} onDelete={handleDeleteTx} banks={banks}/>
+              <TxLog data={dashTx.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time))} showDelete={false} onDelete={handleDeleteTx} banks={banks}/>
             </div>
           </div>
         )}
@@ -1117,7 +1199,7 @@ export default function App() {
             <div style={sectionStyle}>
               <SectionTitle icon="ti-list">Today's transactions</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Deleted entries remain visible with a red background for audit purposes. All history is saved — use Search to view past months.</div>
-              <TxTable data={todayTx} showDelete={true} onDelete={handleDeleteTx} banks={banks}/>
+              <TxLog data={todayTx} showDelete={true} onDelete={handleDeleteTx} banks={banks}/>
             </div>
           </div>
         )}
@@ -1131,6 +1213,7 @@ export default function App() {
                 </button>
               }>Bank accounts</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a card to view its full transaction history.</div>
+              {banks.length>0&&<div style={{marginBottom:16}}><BankTotals banksLive={banksLive}/></div>}
               {banks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank accounts yet. Click "Add bank" to create one.</div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(220px, calc((100% - 48px) / 5)), 1fr))",gap:12}}>
                 {banksLive.map(b=>(
@@ -1257,7 +1340,7 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
                 <div><label style={labelStyle}>Keyword</label><input type="text" placeholder="Name, ID, bank..." value={search.term} onChange={e=>setSearch(s=>({...s,term:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>Member</label><select value={search.member} onChange={e=>setSearch(s=>({...s,member:e.target.value}))} style={{width:"100%"}}><option value="">All members</option>{members.map(m=><option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}</select></div>
-                <div><label style={labelStyle}>Bank</label><select value={search.bank} onChange={e=>setSearch(s=>({...s,bank:e.target.value}))} style={{width:"100%"}}><option value="">All banks</option>{banks.map(b=><option key={b.id}>{b.name}</option>)}</select></div>
+                <div><label style={labelStyle}>Bank</label><select value={search.bank} onChange={e=>setSearch(s=>({...s,bank:e.target.value}))} style={{width:"100%"}}><option value="">All banks</option>{banks.map(b=><option key={b.id} value={b.id}>{b.holder?`${b.holder} — ${b.name}`:b.name}</option>)}</select></div>
                 <div><label style={labelStyle}>From date</label><input type="date" value={search.dateFrom} onChange={e=>setSearch(s=>({...s,dateFrom:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>To date</label><input type="date" value={search.dateTo} onChange={e=>setSearch(s=>({...s,dateTo:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>Entry type</label><select value={search.type} onChange={e=>setSearch(s=>({...s,type:e.target.value}))} style={{width:"100%"}}><option value="">All types</option>{ENTRY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
@@ -1283,7 +1366,7 @@ export default function App() {
                   {search.bank&&<strong style={{marginLeft:search.member?0:6}}>{search.bank}</strong>}
                 </div>
               )}
-              <TxTable data={filteredTx} showDelete={true} onDelete={handleDeleteTx} banks={banks}/>
+              <TxLog data={filteredTx} showDelete={true} onDelete={handleDeleteTx} banks={banks}/>
             </div>
           </div>
         )}

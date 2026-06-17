@@ -82,6 +82,15 @@ function ftTxDelta(t){
 // Older records saved before this only have the name, so fall back to name match.
 function txInBank(t, bank){ return t.bankId!=null ? t.bankId===bank.id : t.bank===bank.name; }
 function bankOfTx(t, banks){ return (banks||[]).find(b => (t.bankId!=null ? b.id===t.bankId : b.name===t.bank)); }
+// Display priority: ACTIVE banks first, most-recently-activated on top, then the
+// inactive ones. Falls back to the bank id (its creation timestamp) when a bank
+// has no activatedAt yet (older records or never toggled).
+const bankSortKey = b => (b.activatedAt ?? b.id ?? 0);
+const orderBanks = arr => [...arr].sort((a,b)=>{
+  const aA = a.active!==false, bA = b.active!==false;
+  if(aA !== bA) return aA ? -1 : 1;
+  return bankSortKey(b) - bankSortKey(a);
+});
 function ftBankBalance(bank, txs){
   let bal = bank.openingBalance ?? 0;
   for(const t of txs){
@@ -557,11 +566,12 @@ export default function App() {
     };
   };
 
-  const banksLive = useMemo(()=>banks.map(b=>({...b,balance:ftBankBalance(b,transactions)})),[banks,transactions]);
-  // Active banks only — used in the dashboard per-bank list and the entry-form
-  // bank dropdowns. A bank with active===false is hidden there but kept on the
-  // Bank Accounts page (so it can be reactivated) and in its saved history.
-  const activeBanks = useMemo(()=>banks.filter(b=>b.active!==false),[banks]);
+  // Ordered by priority (active first, latest-activated on top). This single order
+  // drives the Bank Accounts cards, the dashboard per-bank list, and the totals.
+  const banksLive = useMemo(()=>orderBanks(banks.map(b=>({...b,balance:ftBankBalance(b,transactions)}))),[banks,transactions]);
+  // Active banks only, in the same priority order — used in the dashboard per-bank
+  // list and the entry-form bank dropdowns (so the top bank is the default choice).
+  const activeBanks = useMemo(()=>banksLive.filter(b=>b.active!==false),[banksLive]);
 
   const todayTx = transactions.filter(t=>t.date===today);
   const dashTx = useMemo(()=>{
@@ -707,7 +717,7 @@ export default function App() {
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
     setBankError("");
-    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,openingBalance:Number(newBank.balance)}]);
+    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,openingBalance:Number(newBank.balance),activatedAt:Date.now()}]);
     setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""});
     setShowBankModal(false);
   };
@@ -719,7 +729,11 @@ export default function App() {
   const handleDeleteBank = (id,name) => setConfirm({message:`Delete "${name}"? This cannot be undone.`,onConfirm:()=>{setBanks(prev=>prev.filter(b=>b.id!==id));setConfirm(null);}});
   // Toggle a bank between active and inactive. Inactive hides it from the
   // dashboard per-bank list and the entry-form dropdowns (history is kept).
-  const handleToggleBankActive = id => setBanks(prev=>prev.map(b=>b.id===id?{...b,active:b.active===false}:b));
+  const handleToggleBankActive = id => setBanks(prev=>prev.map(b=>{
+    if(b.id!==id) return b;
+    const nowActive = b.active===false; // was inactive -> we're activating it now
+    return nowActive ? {...b,active:true,activatedAt:Date.now()} : {...b,active:false};
+  }));
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
   const handleSaveMember = id => {

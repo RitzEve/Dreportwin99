@@ -1,39 +1,40 @@
-/* Design tokens shared by the portal shell. The colours mirror the FinTrack
-   artifact's palette (blue #2563eb accent over warm neutrals) so the login /
-   console pages and the app feel like one product. Dark mode follows the OS. */
+/* Design tokens shared by the portal shell (login / provider / console pages).
+   These mirror the FinTrack app's palette — a clean gray / white / blue light
+   theme and a true gray-950 dark theme — so the whole product feels like one
+   thing. Dark mode follows the saved theme via the data-theme attribute. */
 
 :root {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  --bg: #faf9f5;
+  --bg: #f9fafb;
   --surface: #ffffff;
-  --surface-2: #f1efe8;
-  --header: #f4f2ec;
-  --text: #1a1a18;
-  --muted: #5f5e5a;
-  --border: #d8d6cd;
-  --border-strong: #b4b2a9;
+  --surface-2: #f3f4f6;
+  --header: #f3f4f6;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
   --accent: #2563eb;
   --accent-press: #1d4ed8;
-  --accent-bg: #e6f1fb;
+  --accent-bg: #eff6ff;
   --danger: #dc2626;
   --success: #16a34a;
   --shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
 }
 
 :root[data-theme='dark'] {
-  --bg: #1a1917;
-  --surface: #23221f;
-  --surface-2: #2a2926;
-  --header: #2a2926;
-  --text: #f5f4f0;
-  --muted: #b4b2aa;
-  --border: #3d3b36;
-  --border-strong: #54524c;
-  --accent: #4f8cf7;
-  --accent-press: #6ea2f9;
-  --accent-bg: #1e3a5f;
-  --shadow: 0 12px 50px rgba(0, 0, 0, 0.5);
+  --bg: #030712;
+  --surface: #111827;
+  --surface-2: #1f2937;
+  --header: #1f2937;
+  --text: #f3f4f6;
+  --muted: #9ca3af;
+  --border: #1f2937;
+  --border-strong: #374151;
+  --accent: #3b82f6;
+  --accent-press: #60a5fa;
+  --accent-bg: rgba(59, 130, 246, 0.16);
+  --shadow: 0 12px 50px rgba(0, 0, 0, 0.55);
 }
 
 * { box-sizing: border-box; }

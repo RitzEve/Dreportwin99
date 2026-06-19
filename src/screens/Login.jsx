@@ -58,7 +58,6 @@ export default function Login({ onAuthed }) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -270,20 +269,7 @@ export default function Login({ onAuthed }) {
               </div>
             </div>
 
-            <div style={{ marginBottom: 18 }}>
-              <button type="button" onClick={() => setRemember((r) => !r)} style={styles.remember}>
-                <span style={{
-                  width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: `1.5px solid ${remember ? 'var(--accent)' : 'var(--border-strong)'}`,
-                  background: remember ? 'var(--accent)' : 'transparent', color: '#fff',
-                }}>
-                  {remember && <i className="ti ti-check" style={{ fontSize: 13 }} aria-hidden="true" />}
-                </span>
-                Remember for 30 days
-              </button>
-            </div>
-
-            {error && <div className="error-text" style={{ marginBottom: 12 }}>{error}</div>}
+            {error && <div className="error-text" style={{ marginBottom: 12, marginTop: 4 }}>{error}</div>}
 
             <button type="submit" className="btn btn-primary" style={{ width: '100%', height: 48, fontSize: 15 }} disabled={busy}>
               <i className={`ti ti-${busy ? 'loader-2' : 'login-2'}`} aria-hidden="true" /> {busy ? 'Signing in…' : 'Log in'}
@@ -291,7 +277,7 @@ export default function Login({ onAuthed }) {
           </form>
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · v1.1.8
+            Secure access · authorised accounts only · v1.1.9
           </div>
         </div>
       </div>
@@ -326,9 +312,5 @@ const styles = {
     position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
     background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)',
     fontSize: 19, padding: 6, display: 'flex', alignItems: 'center',
-  },
-  remember: {
-    display: 'flex', alignItems: 'center', gap: 9, background: 'transparent', border: 'none',
-    cursor: 'pointer', padding: 0, color: 'var(--muted)', fontSize: 13.5, fontFamily: 'inherit',
   },
 };

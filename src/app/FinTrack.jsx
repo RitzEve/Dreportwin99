@@ -1056,12 +1056,12 @@ export default function App() {
         </div>
       )}
 
-      <aside style={{width:sidebarMode==="expanded"?240:64,minWidth:sidebarMode==="expanded"?240:64,position:"relative",flexShrink:0,overflow:sidebarHoverExpanding?"visible":"hidden",zIndex:sidebarHoverExpanding?40:"auto",transition:"width 0.3s ease, min-width 0.3s ease"}}
+      <aside style={{width:sidebarMode==="expanded"?240:64,minWidth:sidebarMode==="expanded"?240:64,position:"relative",flexShrink:0,overflow:(sidebarHoverExpanding||showSidebarMenu)?"visible":"hidden",zIndex:(sidebarHoverExpanding||showSidebarMenu)?40:"auto",transition:"width 0.3s ease, min-width 0.3s ease"}}
         onMouseEnter={()=>setSidebarHovered(true)} onMouseLeave={()=>{setSidebarHovered(false); setShowSidebarMenu(false);}}>
         <div style={{position:sidebarHoverExpanding?"absolute":"relative",top:0,left:0,width:sidebarExpanded?240:64,height:"100%",display:"flex",flexDirection:"column",background:C.surface,borderRight:`1px solid ${C.border}`,boxShadow:sidebarHoverExpanding?(dark?"0 14px 44px rgba(0,0,0,0.6)":"0 14px 44px rgba(0,0,0,0.18)"):"none",transition:"width 0.25s ease"}}>
           {/* Title section — logo / name + the Sidebar-control button */}
           <div style={{borderBottom:`1px solid ${C.border}`,padding:"10px 8px"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:6,borderRadius:8}}>
+            <div style={{display:"flex",flexDirection:sidebarExpanded?"row":"column",alignItems:"center",justifyContent:sidebarExpanded?"space-between":"center",gap:8,padding:6,borderRadius:8}}>
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
                 {SESSION.companyLogo ? (
                   <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{width:40,height:40,objectFit:"contain",borderRadius:8,flexShrink:0}}/>
@@ -1077,7 +1077,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-              {sidebarExpanded&&(
+              {(sidebarExpanded||sidebarMode==="collapsed")&&(
                 <div style={{position:"relative",flexShrink:0}} ref={sidebarMenuRef}>
                   <button onClick={()=>setShowSidebarMenu(s=>!s)} title="Sidebar control" aria-label="Sidebar control"
                     style={{cursor:"pointer",background:showSidebarMenu?C.surface2:"transparent",border:"none",color:showSidebarMenu?C.text:C.muted,fontSize:18,padding:4,display:"flex",borderRadius:6}}
@@ -1086,7 +1086,7 @@ export default function App() {
                     <i className="ti ti-layout-sidebar-left" aria-hidden="true"/>
                   </button>
                   {showSidebarMenu&&(
-                    <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,minWidth:192,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:dark?"0 10px 30px rgba(0,0,0,0.5)":"0 10px 30px rgba(0,0,0,0.15)",zIndex:80,overflow:"hidden",padding:6}}>
+                    <div style={{position:"absolute",...(sidebarExpanded?{top:"calc(100% + 8px)",right:0}:{top:0,left:"calc(100% + 10px)"}),minWidth:192,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:dark?"0 10px 30px rgba(0,0,0,0.5)":"0 10px 30px rgba(0,0,0,0.15)",zIndex:80,overflow:"hidden",padding:6}}>
                       <div style={{fontSize:11,color:C.muted,fontWeight:600,letterSpacing:"0.03em",padding:"6px 10px 8px"}}>Sidebar control</div>
                       {[["expanded","Expanded"],["collapsed","Collapsed"],["hover","Expand on hover"]].map(([val,label])=>{
                         const sel = sidebarMode===val;
@@ -1142,9 +1142,6 @@ export default function App() {
 
       <main style={{flex:1,padding:"16px 24px 24px",overflowY:"auto",minWidth:0,background:C.bg}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={()=>setSidebarMode(m=>m==="expanded"?"collapsed":"expanded")} aria-label="Toggle sidebar" title="Expand / collapse sidebar" style={{cursor:"pointer",background:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:"8px 10px",color:"#fff",fontSize:18,display:"flex",alignItems:"center"}}>
-            <i className="ti ti-menu-2" aria-hidden="true"/>
-          </button>
           <h2 style={{margin:0,fontSize:18,fontWeight:500,color:C.text}}>{nav.find(n=>n.id===page)?.label}</h2>
 
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",justifyContent:"flex-end"}}>

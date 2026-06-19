@@ -127,42 +127,28 @@ const exportPDF = (rows,title) => {
 
 const _themeAttr = typeof document!=="undefined" && document.documentElement && document.documentElement.dataset ? document.documentElement.dataset.theme : "";
 const dark = _themeAttr ? _themeAttr==="dark" : (typeof window!=="undefined" && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+// Palette mirrors the "collapsible dashboard" template: clean gray / white / blue,
+// with a true gray-950 dark mode. Every FinTrack page reads from C, so changing
+// it here re-themes the whole app (and it follows the light/dark toggle).
 const C = {
-  bg: dark ? "#1a1917" : "#ffffff",
-  surface: dark ? "#23221f" : "#faf9f5",
-  surface2: dark ? "#2a2926" : "#f1efe8",
-  header: dark ? "#2a2926" : "#f4f2ec",
-  text: dark ? "#f5f4f0" : "#1a1a18",
-  muted: dark ? "#a8a69e" : "#5f5e5a",
-  border: dark ? "#3d3b36" : "#d8d6cd",
-  borderStrong: dark ? "#54524c" : "#b4b2a9",
-  accent: "#2563eb",
-  accentBg: dark ? "#1e3a5f" : "#e6f1fb",
-};
-
-// Sidebar palette — keeps the gradient look + blue→purple active highlight, but
-// follows the app theme (dark = slate-900 gradient, light = slate-100 gradient).
-// The accent bits (active gradient, logo/avatar gradients, white active text)
-// stay the same in both themes.
-const SB = dark ? {
-  bg: "linear-gradient(180deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)",
-  border: "#334155", brandText: "#f8fafc", brandSub: "#94a3b8",
-  navText: "#cbd5e1", navHoverBg: "#1e293b", navHoverText: "#ffffff",
-  closeBtn: "#94a3b8", footerCardBg: "rgba(255,255,255,0.04)",
-  footerName: "#f8fafc", footerSub: "#94a3b8", savedText: "#64748b",
-} : {
-  bg: "linear-gradient(180deg,#f1f5f9 0%,#e2e8f0 50%,#f1f5f9 100%)",
-  border: "#cbd5e1", brandText: "#0f172a", brandSub: "#64748b",
-  navText: "#475569", navHoverBg: "#dbe3ec", navHoverText: "#0f172a",
-  closeBtn: "#64748b", footerCardBg: "rgba(15,23,42,0.05)",
-  footerName: "#0f172a", footerSub: "#64748b", savedText: "#94a3b8",
+  bg: dark ? "#030712" : "#f9fafb",
+  surface: dark ? "#111827" : "#ffffff",
+  surface2: dark ? "#1f2937" : "#f3f4f6",
+  header: dark ? "#1f2937" : "#f3f4f6",
+  text: dark ? "#f3f4f6" : "#111827",
+  muted: dark ? "#9ca3af" : "#6b7280",
+  border: dark ? "#1f2937" : "#e5e7eb",
+  borderStrong: dark ? "#374151" : "#d1d5db",
+  accent: dark ? "#3b82f6" : "#2563eb",
+  accentBg: dark ? "rgba(59,130,246,0.16)" : "#eff6ff",
 };
 
 const editBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #2563eb",borderRadius:6,background:dark?"#1e3a5f":"#2563eb14",color:dark?"#85b7eb":"#2563eb",display:"inline-flex",alignItems:"center",gap:4};
 const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
 const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",gap:4};
 const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",gap:4};
-const sectionStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:20};
+const sectionStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:20,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
+const cardStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 
 const initBanks = [];
 const initMembers = [];
@@ -239,10 +225,10 @@ function TxTable({data, showDelete, onDelete, banks}) {
 
 function StatCard({label,count,amount,color}) {
   return (
-    <div style={{background:C.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`}}>
-      <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{label}</div>
-      <div style={{fontSize:20,fontWeight:500,color:color||C.text}}>{fmt(amount)}</div>
-      {count!==undefined&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"entry":"entries"}</div>}
+    <div style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"}}>
+      <div style={{fontSize:11.5,color:C.muted,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={label}>{label}</div>
+      <div style={{fontSize:17,fontWeight:600,color:color||C.text}}>{fmt(amount)}</div>
+      {count!==undefined&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{count} {count===1?"entry":"entries"}</div>}
     </div>
   );
 }
@@ -431,6 +417,9 @@ export default function App() {
   const [memberPageSize,setMemberPageSize] = useState(50);
   useEffect(()=>{ setMemberPage(1); },[memberPageSize]);
   const [sidebarOpen,setSidebarOpen] = useState(true);
+  // Wide enough for the 2:1 dashboard split + 5 stat cards per row.
+  const [isWideView,setIsWideView] = useState(()=>typeof window!=="undefined" && window.matchMedia("(min-width: 1000px)").matches);
+  useEffect(()=>{ const mq=window.matchMedia("(min-width: 1000px)"); const h=e=>setIsWideView(e.matches); mq.addEventListener("change",h); return ()=>mq.removeEventListener("change",h); },[]);
   const [loaded,setLoaded] = useState(false);
   const [transactions,setTransactions] = useState(initTx);
   const [banks,setBanks] = useState(initBanks);
@@ -1057,61 +1046,69 @@ export default function App() {
         </div>
       )}
 
-      <aside style={{width:sidebarOpen?230:0,minWidth:sidebarOpen?230:0,overflow:"hidden",transition:"width 0.28s ease, min-width 0.28s ease",flexShrink:0}}>
-        <div style={{width:230,height:"100%",display:"flex",flexDirection:"column",background:SB.bg,borderRight:`1px solid ${SB.border}`}}>
-          {/* Brand / logo header — shows the uploaded company logo, or the name */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"18px 16px",borderBottom:`1px solid ${SB.border}`}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-              {SESSION.companyLogo ? (
-                <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{maxHeight:38,maxWidth:150,objectFit:"contain"}}/>
-              ) : (
-                <>
-                  <div style={{width:36,height:36,borderRadius:9,background:"linear-gradient(135deg,#3b82f6,#7c3aed)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:16,flexShrink:0}}>
+      <aside style={{width:sidebarOpen?240:64,minWidth:sidebarOpen?240:64,overflow:"hidden",transition:"width 0.3s ease, min-width 0.3s ease",flexShrink:0}}>
+        <div style={{width:sidebarOpen?240:64,height:"100%",display:"flex",flexDirection:"column",background:C.surface,borderRight:`1px solid ${C.border}`,transition:"width 0.3s ease"}}>
+          {/* Title section — uploaded company logo, or the name + initial badge */}
+          <div style={{borderBottom:`1px solid ${C.border}`,padding:"10px 8px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:6,borderRadius:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                {SESSION.companyLogo ? (
+                  <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{width:40,height:40,objectFit:"contain",borderRadius:8,flexShrink:0}}/>
+                ) : (
+                  <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#3b82f6,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:17,flexShrink:0,boxShadow:"0 1px 2px rgba(0,0,0,0.1)"}}>
                     {(SESSION.companyName||"?").trim().charAt(0).toUpperCase()}
                   </div>
+                )}
+                {sidebarOpen&&(
                   <div style={{minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:14,color:SB.brandText,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.companyName}>{SESSION.companyName}</div>
-                    <div style={{fontSize:10.5,color:SB.brandSub}}>Financial System</div>
+                    <div style={{fontWeight:600,fontSize:13.5,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.companyName}>{SESSION.companyName}</div>
+                    <div style={{fontSize:11,color:C.muted}}>Financial System</div>
                   </div>
-                </>
-              )}
+                )}
+              </div>
+              {sidebarOpen&&<i className="ti ti-chevron-down" aria-hidden="true" style={{fontSize:15,color:C.muted,flexShrink:0}}/>}
             </div>
-            <button onClick={()=>setSidebarOpen(false)} aria-label="Close menu" style={{cursor:"pointer",background:"transparent",border:"none",color:SB.closeBtn,fontSize:18,padding:4,flexShrink:0,display:"flex"}}>
-              <i className="ti ti-chevron-left" aria-hidden="true"/>
-            </button>
           </div>
 
           {/* Navigation */}
-          <nav style={{flex:1,overflowY:"auto",padding:"12px 10px",display:"flex",flexDirection:"column",gap:4}}>
+          <nav style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"10px 8px",display:"flex",flexDirection:"column",gap:4}}>
             {nav.map(n=>{
               const active = page===n.id;
               return (
-                <button key={n.id} onClick={()=>setPage(n.id)}
-                  style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"11px 14px",borderRadius:9,border:"none",cursor:"pointer",fontSize:13.5,fontWeight:active?600:500,textAlign:"left",background:active?"linear-gradient(90deg,#2563eb,#7c3aed)":"transparent",color:active?"#fff":SB.navText,boxShadow:active?"0 4px 14px rgba(37,99,235,0.35)":"none",transition:"background 0.15s, color 0.15s"}}
-                  onMouseEnter={e=>{if(!active){e.currentTarget.style.background=SB.navHoverBg;e.currentTarget.style.color=SB.navHoverText;}}}
-                  onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=SB.navText;}}}>
-                  <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:18}}/>{n.label}
-                  {active&&<span style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#fff",opacity:0.85}}/>}
+                <button key={n.id} onClick={()=>setPage(n.id)} title={n.label}
+                  style={{position:"relative",display:"flex",alignItems:"center",height:44,width:"100%",borderRadius:8,border:"none",borderLeft:`2px solid ${active?C.accent:"transparent"}`,cursor:"pointer",background:active?C.accentBg:"transparent",color:active?C.accent:C.muted,fontWeight:active?600:500,transition:"background 0.15s, color 0.15s",padding:0}}
+                  onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}}
+                  onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}}>
+                  <span style={{width:sidebarOpen?44:"100%",minWidth:sidebarOpen?44:0,display:"grid",placeContent:"center"}}><i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:18}}/></span>
+                  {sidebarOpen&&<span style={{fontSize:13.5}}>{n.label}</span>}
                 </button>
               );
             })}
           </nav>
 
-          {/* Footer — logged-in operator (moved to the bottom) */}
-          <div style={{padding:"12px",borderTop:`1px solid ${SB.border}`}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,background:SB.footerCardBg}}>
-              <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#34d399,#3b82f6)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>
+          {/* Logged-in operator */}
+          <div style={{padding:"10px 8px",borderTop:`1px solid ${C.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:sidebarOpen?"8px 10px":0,justifyContent:sidebarOpen?"flex-start":"center",borderRadius:10,background:sidebarOpen?C.surface2:"transparent"}}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>
                 {(SESSION.operatorId||"?").replace(/[^A-Za-z0-9]/g,"").slice(-2).toUpperCase()}
               </div>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:12.5,fontWeight:600,color:SB.footerName,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.operatorName||SESSION.operatorId}>{SESSION.operatorName||SESSION.operatorId}</div>
-                <div style={{fontSize:10.5,color:SB.footerSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{SESSION.operatorId}{SESSION.role?` · ${String(SESSION.role).toUpperCase()}`:""}</div>
-              </div>
-            </div>
-            <div style={{padding:"10px 6px 2px",fontSize:10.5,color:SB.savedText,display:"flex",alignItems:"center",gap:6}}>
-              <i className="ti ti-device-floppy" aria-hidden="true"/> History auto-saved
+              {sidebarOpen&&(
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.operatorName||SESSION.operatorId}>{SESSION.operatorName||SESSION.operatorId}</div>
+                  <div style={{fontSize:10.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{SESSION.operatorId}{SESSION.role?` · ${String(SESSION.role).toUpperCase()}`:""}</div>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Collapse / expand toggle */}
+          <button onClick={()=>setSidebarOpen(o=>!o)} title={sidebarOpen?"Hide":"Expand"}
+            style={{display:"flex",alignItems:"center",width:"100%",border:"none",borderTop:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",padding:0,color:C.muted}}
+            onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <span style={{width:sidebarOpen?44:"100%",minWidth:sidebarOpen?44:0,height:48,display:"grid",placeContent:"center"}}><i className="ti ti-chevrons-right" aria-hidden="true" style={{fontSize:18,transition:"transform 0.3s",transform:sidebarOpen?"rotate(180deg)":"none"}}/></span>
+            {sidebarOpen&&<span style={{fontSize:13,fontWeight:500}}>Hide</span>}
+          </button>
         </div>
       </aside>
 
@@ -1209,7 +1206,7 @@ export default function App() {
               <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:24}}>
+            <div style={{display:"grid",gridTemplateColumns:isWideView?"repeat(5, minmax(0,1fr))":"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
               <StatCard label="Total deposits" count={stats.deposits.length} amount={stats.sum(stats.deposits)} color="#16a34a"/>
               <StatCard label="Total withdrawals" count={stats.withdrawals.length} amount={stats.sum(stats.withdrawals)} color="#dc2626"/>
               <StatCard label="Win / Loss" amount={stats.sum(stats.deposits)-stats.sum(stats.withdrawals)} color={(stats.sum(stats.deposits)-stats.sum(stats.withdrawals))>=0?"#16a34a":"#dc2626"}/>
@@ -1222,29 +1219,53 @@ export default function App() {
               <StatCard label="Adjustments" count={stats.adjustments.length} amount={stats.sum(stats.adjustments)} color="#0d9488"/>
             </div>
 
-            <div style={sectionStyle}>
-              <SectionTitle icon="ti-wallet">Bank balances</SectionTitle>
-              <BankTotals banksLive={banksLive}/>
-            </div>
-            <div style={sectionStyle}>
-              <SectionTitle icon="ti-building-bank">Per-bank ({dashScopeLabel})</SectionTitle>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
-                {banksLive.filter(b=>b.active!==false).map(b=>{
-                  const bTx = stats.active.filter(t=>txInBank(t,b) && !t.bucketLeg);
-                  return <div key={b.id} onClick={()=>openBankDetail(b)} style={{background:C.bg,borderRadius:8,padding:"12px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                    onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                    <div style={{fontWeight:500,fontSize:13,marginBottom:2,color:C.text}}>{b.holder||b.name}</div>
-                    <div style={{fontSize:12,color:C.muted}}>{b.name}</div>
-                    <div style={{fontSize:12,color:C.muted}}>{bTx.length} entries</div>
-                    <div style={{fontSize:15,fontWeight:500,marginTop:4,color:C.text}}>{fmt(b.balance)}</div>
-                  </div>;
-                })}
+            <div style={{display:"grid",gridTemplateColumns:isWideView?"2fr 1fr":"1fr",gap:20,alignItems:"start"}}>
+              {/* Recent transactions — newest 10, "Show all" jumps to Transactions */}
+              <div style={cardStyle}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                  <h3 style={{fontSize:16,fontWeight:600,margin:0,color:C.text,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-list" aria-hidden="true" style={{color:C.accent}}/> Recent transactions</h3>
+                  <button onClick={()=>setPage("transactions")} style={{cursor:"pointer",fontSize:13,fontWeight:500,color:C.accent,background:"transparent",border:"none",display:"inline-flex",alignItems:"center",gap:4}}>Show all <i className="ti ti-arrow-right" aria-hidden="true"/></button>
+                </div>
+                <TxTable data={transactions.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)).slice(0,10)} showDelete={false} onDelete={handleDeleteTx} banks={banks}/>
               </div>
-            </div>
-            <div style={sectionStyle}>
-              <SectionTitle icon="ti-list">Entries ({dashScopeLabel})</SectionTitle>
-              <TxLog data={dashTx.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time))} showDelete={false} onDelete={handleDeleteTx} banks={banks}/>
+
+              {/* Right column — bank totals + current active banks */}
+              <div style={{display:"flex",flexDirection:"column",gap:20}}>
+                <div style={cardStyle}>
+                  <h3 style={{fontSize:16,fontWeight:600,margin:"0 0 14px",color:C.text,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-wallet" aria-hidden="true" style={{color:C.accent}}/> Bank balances</h3>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {[
+                      {label:"All banks total",arr:banksLive,color:C.accent,icon:"ti-building-bank"},
+                      {label:"Active banks total",arr:banksLive.filter(b=>b.active!==false),color:"#16a34a",icon:"ti-circle-check"},
+                      {label:"Inactive banks total",arr:banksLive.filter(b=>b.active===false),color:"#64748b",icon:"ti-circle-off"},
+                    ].map(row=>(
+                      <div key={row.label} style={{background:C.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${row.color}`}}>
+                        <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${row.icon}`} aria-hidden="true" style={{color:row.color}}/>{row.label}</div>
+                        <div style={{fontSize:19,fontWeight:600,color:C.text}}>{fmt(row.arr.reduce((s,b)=>s+(b.balance||0),0))}</div>
+                        <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{row.arr.length} {row.arr.length===1?"bank":"banks"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={cardStyle}>
+                  <h3 style={{fontSize:16,fontWeight:600,margin:"0 0 14px",color:C.text,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-building-bank" aria-hidden="true" style={{color:C.accent}}/> Current active bank</h3>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {activeBanks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"14px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No active banks.</div>}
+                    {activeBanks.map(b=>(
+                      <div key={b.id} onClick={()=>openBankDetail(b)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:C.bg,borderRadius:10,padding:"11px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={b.holder||b.name}>{b.holder||b.name}</div>
+                          <div style={{fontSize:11.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.name}</div>
+                        </div>
+                        <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:"nowrap",flexShrink:0}}>{fmt(b.balance)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

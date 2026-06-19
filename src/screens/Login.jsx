@@ -277,7 +277,7 @@ export default function Login({ onAuthed }) {
           </form>
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · v1.1.9
+            Secure access · authorised accounts only · v1.2.0
           </div>
         </div>
       </div>

@@ -137,8 +137,8 @@ const C = {
   header: dark ? "#1f2937" : "#f3f4f6",
   text: dark ? "#f3f4f6" : "#111827",
   muted: dark ? "#9ca3af" : "#6b7280",
-  border: dark ? "#1f2937" : "#e5e7eb",
-  borderStrong: dark ? "#374151" : "#d1d5db",
+  border: dark ? "#1f2937" : "#d6dae0",
+  borderStrong: dark ? "#374151" : "#c3c8d0",
   accent: dark ? "#3b82f6" : "#2563eb",
   accentBg: dark ? "rgba(59,130,246,0.16)" : "#eff6ff",
 };

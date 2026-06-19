@@ -417,8 +417,8 @@ export default function App() {
   const [memberPageSize,setMemberPageSize] = useState(50);
   useEffect(()=>{ setMemberPage(1); },[memberPageSize]);
   // Sidebar behaviour: "expanded" | "collapsed" | "hover" (expand-on-hover) — default hover.
-  const [sidebarMode,setSidebarMode] = useState(()=>{ try{ return localStorage.getItem("fintrack-sidebar-mode")||"hover"; }catch(e){ return "hover"; } });
-  useEffect(()=>{ try{ localStorage.setItem("fintrack-sidebar-mode",sidebarMode); }catch(e){} },[sidebarMode]);
+  const [sidebarMode,setSidebarMode] = useState(()=>{ try{ return localStorage.getItem("fintrack-sidebar-mode-v2")||"hover"; }catch(e){ return "hover"; } });
+  useEffect(()=>{ try{ localStorage.setItem("fintrack-sidebar-mode-v2",sidebarMode); }catch(e){} },[sidebarMode]);
   const [sidebarHovered,setSidebarHovered] = useState(false);
   const [showSidebarMenu,setShowSidebarMenu] = useState(false);
   const sidebarHoverExpanding = sidebarMode==="hover" && sidebarHovered;
@@ -1083,7 +1083,7 @@ export default function App() {
                     style={{cursor:"pointer",background:showSidebarMenu?C.surface2:"transparent",border:"none",color:showSidebarMenu?C.text:C.muted,fontSize:18,padding:4,display:"flex",borderRadius:6}}
                     onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}
                     onMouseLeave={e=>{if(!showSidebarMenu){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}}>
-                    <i className="ti ti-layout-sidebar-left" aria-hidden="true"/>
+                    <i className="ti ti-layout-sidebar" aria-hidden="true"/>
                   </button>
                   {showSidebarMenu&&(
                     <div style={{position:"absolute",...(sidebarExpanded?{top:"calc(100% + 8px)",right:0}:{top:0,left:"calc(100% + 10px)"}),minWidth:192,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:dark?"0 10px 30px rgba(0,0,0,0.5)":"0 10px 30px rgba(0,0,0,0.15)",zIndex:80,overflow:"hidden",padding:6}}>

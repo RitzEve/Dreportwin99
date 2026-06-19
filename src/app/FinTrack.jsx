@@ -140,6 +140,24 @@ const C = {
   accentBg: dark ? "#1e3a5f" : "#e6f1fb",
 };
 
+// Sidebar palette — keeps the gradient look + blue→purple active highlight, but
+// follows the app theme (dark = slate-900 gradient, light = slate-100 gradient).
+// The accent bits (active gradient, logo/avatar gradients, white active text)
+// stay the same in both themes.
+const SB = dark ? {
+  bg: "linear-gradient(180deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)",
+  border: "#334155", brandText: "#f8fafc", brandSub: "#94a3b8",
+  navText: "#cbd5e1", navHoverBg: "#1e293b", navHoverText: "#ffffff",
+  closeBtn: "#94a3b8", footerCardBg: "rgba(255,255,255,0.04)",
+  footerName: "#f8fafc", footerSub: "#94a3b8", savedText: "#64748b",
+} : {
+  bg: "linear-gradient(180deg,#f1f5f9 0%,#e2e8f0 50%,#f1f5f9 100%)",
+  border: "#cbd5e1", brandText: "#0f172a", brandSub: "#64748b",
+  navText: "#475569", navHoverBg: "#dbe3ec", navHoverText: "#0f172a",
+  closeBtn: "#64748b", footerCardBg: "rgba(15,23,42,0.05)",
+  footerName: "#0f172a", footerSub: "#64748b", savedText: "#94a3b8",
+};
+
 const editBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #2563eb",borderRadius:6,background:dark?"#1e3a5f":"#2563eb14",color:dark?"#85b7eb":"#2563eb",display:"inline-flex",alignItems:"center",gap:4};
 const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
 const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",gap:4};
@@ -409,6 +427,9 @@ export default function App() {
   const [clockNow,setClockNow] = useState(()=>timeInTz(tz));
   useEffect(()=>{ setClockNow(timeInTz(tz)); const id=setInterval(()=>setClockNow(timeInTz(tz)),20000); return ()=>clearInterval(id); },[tz]);
   const [page,setPage] = useState("dashboard");
+  const [memberPage,setMemberPage] = useState(1);
+  const [memberPageSize,setMemberPageSize] = useState(50);
+  useEffect(()=>{ setMemberPage(1); },[memberPageSize]);
   const [sidebarOpen,setSidebarOpen] = useState(true);
   const [loaded,setLoaded] = useState(false);
   const [transactions,setTransactions] = useState(initTx);
@@ -798,6 +819,13 @@ export default function App() {
     {id:"search",icon:"ti-search",label:"Search"},
   ];
 
+  // Members list pagination (same controls as the transaction log).
+  const memberTotal = members.length;
+  const memberPages = Math.max(1, Math.ceil(memberTotal/memberPageSize));
+  const memberCurPage = Math.min(memberPage, memberPages);
+  const memberStart = (memberCurPage-1)*memberPageSize;
+  const memberSlice = members.slice(memberStart, memberStart+memberPageSize);
+
   const labelStyle = {fontSize:12,color:C.muted,display:"block",marginBottom:4};  const SectionTitle = ({icon,children,right}) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"0 0 12px"}}>
       <h3 style={{fontSize:15,fontWeight:500,margin:0,display:"flex",alignItems:"center",gap:8,color:C.text}}>
@@ -1030,9 +1058,9 @@ export default function App() {
       )}
 
       <aside style={{width:sidebarOpen?230:0,minWidth:sidebarOpen?230:0,overflow:"hidden",transition:"width 0.28s ease, min-width 0.28s ease",flexShrink:0}}>
-        <div style={{width:230,height:"100%",display:"flex",flexDirection:"column",background:"linear-gradient(180deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)",borderRight:"1px solid #334155"}}>
+        <div style={{width:230,height:"100%",display:"flex",flexDirection:"column",background:SB.bg,borderRight:`1px solid ${SB.border}`}}>
           {/* Brand / logo header — shows the uploaded company logo, or the name */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"18px 16px",borderBottom:"1px solid #334155"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"18px 16px",borderBottom:`1px solid ${SB.border}`}}>
             <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
               {SESSION.companyLogo ? (
                 <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{maxHeight:38,maxWidth:150,objectFit:"contain"}}/>
@@ -1042,13 +1070,13 @@ export default function App() {
                     {(SESSION.companyName||"?").trim().charAt(0).toUpperCase()}
                   </div>
                   <div style={{minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:14,color:"#f8fafc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.companyName}>{SESSION.companyName}</div>
-                    <div style={{fontSize:10.5,color:"#94a3b8"}}>Financial System</div>
+                    <div style={{fontWeight:600,fontSize:14,color:SB.brandText,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.companyName}>{SESSION.companyName}</div>
+                    <div style={{fontSize:10.5,color:SB.brandSub}}>Financial System</div>
                   </div>
                 </>
               )}
             </div>
-            <button onClick={()=>setSidebarOpen(false)} aria-label="Close menu" style={{cursor:"pointer",background:"transparent",border:"none",color:"#94a3b8",fontSize:18,padding:4,flexShrink:0,display:"flex"}}>
+            <button onClick={()=>setSidebarOpen(false)} aria-label="Close menu" style={{cursor:"pointer",background:"transparent",border:"none",color:SB.closeBtn,fontSize:18,padding:4,flexShrink:0,display:"flex"}}>
               <i className="ti ti-chevron-left" aria-hidden="true"/>
             </button>
           </div>
@@ -1059,9 +1087,9 @@ export default function App() {
               const active = page===n.id;
               return (
                 <button key={n.id} onClick={()=>setPage(n.id)}
-                  style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"11px 14px",borderRadius:9,border:"none",cursor:"pointer",fontSize:13.5,fontWeight:active?600:500,textAlign:"left",background:active?"linear-gradient(90deg,#2563eb,#7c3aed)":"transparent",color:active?"#fff":"#cbd5e1",boxShadow:active?"0 4px 14px rgba(37,99,235,0.35)":"none",transition:"background 0.15s, color 0.15s"}}
-                  onMouseEnter={e=>{if(!active){e.currentTarget.style.background="#1e293b";e.currentTarget.style.color="#ffffff";}}}
-                  onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#cbd5e1";}}}>
+                  style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"11px 14px",borderRadius:9,border:"none",cursor:"pointer",fontSize:13.5,fontWeight:active?600:500,textAlign:"left",background:active?"linear-gradient(90deg,#2563eb,#7c3aed)":"transparent",color:active?"#fff":SB.navText,boxShadow:active?"0 4px 14px rgba(37,99,235,0.35)":"none",transition:"background 0.15s, color 0.15s"}}
+                  onMouseEnter={e=>{if(!active){e.currentTarget.style.background=SB.navHoverBg;e.currentTarget.style.color=SB.navHoverText;}}}
+                  onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=SB.navText;}}}>
                   <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:18}}/>{n.label}
                   {active&&<span style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#fff",opacity:0.85}}/>}
                 </button>
@@ -1070,17 +1098,17 @@ export default function App() {
           </nav>
 
           {/* Footer — logged-in operator (moved to the bottom) */}
-          <div style={{padding:"12px",borderTop:"1px solid #334155"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,background:"rgba(255,255,255,0.04)"}}>
+          <div style={{padding:"12px",borderTop:`1px solid ${SB.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,background:SB.footerCardBg}}>
               <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#34d399,#3b82f6)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>
                 {(SESSION.operatorId||"?").replace(/[^A-Za-z0-9]/g,"").slice(-2).toUpperCase()}
               </div>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:12.5,fontWeight:600,color:"#f8fafc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.operatorName||SESSION.operatorId}>{SESSION.operatorName||SESSION.operatorId}</div>
-                <div style={{fontSize:10.5,color:"#94a3b8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{SESSION.operatorId}{SESSION.role?` · ${String(SESSION.role).toUpperCase()}`:""}</div>
+                <div style={{fontSize:12.5,fontWeight:600,color:SB.footerName,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.operatorName||SESSION.operatorId}>{SESSION.operatorName||SESSION.operatorId}</div>
+                <div style={{fontSize:10.5,color:SB.footerSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{SESSION.operatorId}{SESSION.role?` · ${String(SESSION.role).toUpperCase()}`:""}</div>
               </div>
             </div>
-            <div style={{padding:"10px 6px 2px",fontSize:10.5,color:"#64748b",display:"flex",alignItems:"center",gap:6}}>
+            <div style={{padding:"10px 6px 2px",fontSize:10.5,color:SB.savedText,display:"flex",alignItems:"center",gap:6}}>
               <i className="ti ti-device-floppy" aria-hidden="true"/> History auto-saved
             </div>
           </div>
@@ -1321,6 +1349,21 @@ export default function App() {
               </div>
             }>Members directory</SectionTitle>
             <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a row to view a member's full transaction history.</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+                <span>Show</span>
+                <select value={memberPageSize} onChange={e=>setMemberPageSize(Number(e.target.value))} style={{padding:"4px 8px",width:"auto"}}>
+                  {PAGE_SIZES.map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+                <span>per page</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:C.muted}}>
+                <span>{memberTotal===0?0:memberStart+1}–{Math.min(memberStart+memberPageSize,memberTotal)} of {memberTotal}</span>
+                <button onClick={()=>setMemberPage(Math.max(1,memberCurPage-1))} disabled={memberCurPage<=1} style={pagerBtn(memberCurPage<=1)} aria-label="Previous page"><i className="ti ti-chevron-left" aria-hidden="true"/></button>
+                <span>{memberCurPage}/{memberPages}</span>
+                <button onClick={()=>setMemberPage(Math.min(memberPages,memberCurPage+1))} disabled={memberCurPage>=memberPages} style={pagerBtn(memberCurPage>=memberPages)} aria-label="Next page"><i className="ti ti-chevron-right" aria-hidden="true"/></button>
+              </div>
+            </div>
             <div style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                 <thead>
@@ -1331,7 +1374,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {members.map((m,idx)=>{
+                  {memberSlice.map((m,idx)=>{
                     const mTx = transactions.filter(t=>(t.memberId===m.id||t.memberName===m.name)&&!t.deleted);
                     if(editingMember===m.id) return (
                       <tr key={m.id} style={{borderBottom:`1px solid ${C.border}`,background:C.surface2}}>

@@ -17,6 +17,7 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     window.FINTRACK_SESSION = {
       companyId: ctx.company.id,
       companyName: ctx.company.name,
+      companyLogo: ctx.company.logo || '',
       timezone: ctx.company.timezone || 'Australia/Sydney',
       operatorId: ctx.user.operatorId,
       operatorName: ctx.user.name,
@@ -47,7 +48,9 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
           </button>
         )}
         <span style={styles.barMeta}>
-          <i className="ti ti-building" aria-hidden="true" /> {ctx?.company?.name}
+          {ctx?.company?.logo
+            ? <img src={ctx.company.logo} alt={ctx?.company?.name} title={ctx?.company?.name} style={styles.barLogo} />
+            : <><i className="ti ti-building" aria-hidden="true" /> {ctx?.company?.name}</>}
           <span style={styles.dot}>·</span>
           {ctx?.user.operatorId} ({ctx?.user.role})
         </span>
@@ -66,6 +69,7 @@ const styles = {
     background: 'var(--header)', borderBottom: '1px solid var(--border)', flexShrink: 0,
   },
   barMeta: { fontSize: 12.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 7 },
+  barLogo: { height: 20, maxWidth: 130, objectFit: 'contain', display: 'block' },
   dot: { opacity: 0.5 },
   appArea: { flex: 1, padding: '16px', minWidth: 0 },
   loading: { padding: 40, color: 'var(--muted)', fontSize: 14 },

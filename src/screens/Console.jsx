@@ -9,11 +9,13 @@ import {
   adminResetPassword,
   updateAccountInfo,
   setOwnCompanyTimezone,
+  setOwnCompanyLogo,
   creatableRoles,
   canActOn,
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
+import LogoManager from '../components/LogoManager.jsx';
 
 /*
  * Console — landing page for master & manager accounts.
@@ -39,9 +41,13 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
     <div style={styles.page}>
       <header style={styles.topbar}>
         <div style={styles.brand}>
-          <div style={styles.logo}><i className="ti ti-building-bank" aria-hidden="true" /></div>
+          {company.logo ? (
+            <img src={company.logo} alt={company.name} title={company.name} style={styles.brandLogo} />
+          ) : (
+            <div style={styles.logo}><i className="ti ti-building-bank" aria-hidden="true" /></div>
+          )}
           <div>
-            <div style={styles.company}>{company.name}</div>
+            {!company.logo && <div style={styles.company}>{company.name}</div>}
             <div style={styles.sub}>Company console</div>
           </div>
         </div>
@@ -65,6 +71,7 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
           <button className="btn btn-primary">Open <i className="ti ti-arrow-right" aria-hidden="true" /></button>
         </section>
 
+        {user.role === ROLES.MASTER && <CompanyLogo company={company} />}
         {user.role === ROLES.MASTER && <CompanyTimezone company={company} />}
 
         <section style={styles.card}>
@@ -80,6 +87,27 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
         </section>
       </main>
     </div>
+  );
+}
+
+function CompanyLogo({ company }) {
+  // After saving, reload so the new logo flows into the console header and the
+  // app session (which is read when the app is opened).
+  async function save(res) {
+    if (res.ok) setTimeout(() => window.location.reload(), 900);
+    return res;
+  }
+  return (
+    <section style={styles.card}>
+      <h3 style={styles.cardTitle}><i className="ti ti-photo" aria-hidden="true" /> Company logo</h3>
+      <p style={styles.cardSub}>Upload a logo to show instead of “{company.name}” in the app sidebar, top bar and this console. Leave it empty to keep showing the name.</p>
+      <LogoManager
+        currentLogo={company.logo || ''}
+        note="PNG with a transparent background works best. The page reloads after saving so the new logo appears everywhere."
+        onSave={async (dataUrl) => save(await setOwnCompanyLogo(dataUrl))}
+        onRemove={async () => save(await setOwnCompanyLogo(null))}
+      />
+    </section>
   );
 }
 
@@ -308,6 +336,7 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0,
   },
   company: { fontSize: 16, fontWeight: 600 },
+  brandLogo: { height: 40, maxWidth: 200, objectFit: 'contain', borderRadius: 8 },
   sub: { fontSize: 12, color: 'var(--muted)' },
   userBox: { display: 'flex', alignItems: 'center', gap: 12 },
   userMeta: { textAlign: 'right' },

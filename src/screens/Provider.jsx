@@ -7,9 +7,11 @@ import {
   adminResetPassword,
   updateCompany,
   updateAccountInfo,
+  setCompanyLogo,
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
+import LogoManager from '../components/LogoManager.jsx';
 
 /*
  * Provider — the distributor's backend (super-admin).
@@ -142,6 +144,7 @@ function CompanyCard({ company, onChanged }) {
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '' });
   const [busy, setBusy] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showLogo, setShowLogo] = useState(false);
   const [resettingId, setResettingId] = useState(null);
   const [resetPw, setResetPw] = useState('');
   const [editingName, setEditingName] = useState(false);
@@ -231,7 +234,10 @@ function CompanyCard({ company, onChanged }) {
             </form>
           ) : (
             <>
-              <div style={styles.companyName}>{company.name}</div>
+              <div style={styles.companyName}>
+                {company.logo && <img src={company.logo} alt="" style={styles.companyLogoThumb} />}
+                {company.name}
+              </div>
               <div style={styles.sub}>{company.masters.length} master · {company.managerCount} manager · {company.staffCount} staff</div>
               <div style={styles.sub}><i className="ti ti-clock-hour-4" aria-hidden="true" /> {tzLabel(company.timezone)}</div>
             </>
@@ -242,6 +248,9 @@ function CompanyCard({ company, onChanged }) {
             <button className="btn btn-ghost btn-sm" onClick={() => { setEditingName(true); setNameDraft(company.name); setTzDraft(company.timezone || DEFAULT_TIMEZONE); setError(''); setOk(''); }}>
               <i className="ti ti-pencil" aria-hidden="true" /> Edit
             </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setShowLogo((s) => !s); setError(''); setOk(''); }}>
+              <i className="ti ti-photo" aria-hidden="true" /> Logo
+            </button>
             <button className="btn btn-ghost btn-sm" onClick={() => { setAdding((a) => !a); setError(''); setOk(''); }}>
               <i className="ti ti-user-plus" aria-hidden="true" /> Add master
             </button>
@@ -251,6 +260,17 @@ function CompanyCard({ company, onChanged }) {
           </div>
         )}
       </div>
+
+      {showLogo && (
+        <div style={styles.logoBox}>
+          <LogoManager
+            currentLogo={company.logo || ''}
+            note="Shown instead of the company name in the app sidebar, top bar and console. PNG with a transparent background works best."
+            onSave={async (dataUrl) => { const r = await setCompanyLogo(company.id, dataUrl); if (r.ok) onChanged?.(); return r; }}
+            onRemove={async () => { const r = await setCompanyLogo(company.id, null); if (r.ok) onChanged?.(); return r; }}
+          />
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
         {company.masters.length === 0 && <div style={styles.sub}>No master yet — use “Add master”.</div>}
@@ -423,7 +443,9 @@ const styles = {
   warnList: { fontSize: 13, color: 'var(--muted)', margin: 0, paddingLeft: 18, lineHeight: 1.6 },
   modalActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
   companyCard: { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 11, padding: '12px 14px' },
-  companyName: { fontSize: 14.5, fontWeight: 600 },
+  companyName: { fontSize: 14.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  companyLogoThumb: { height: 22, maxWidth: 90, objectFit: 'contain', borderRadius: 4, verticalAlign: 'middle' },
+  logoBox: { marginTop: 10, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
   masterRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
   resetRow: { display: 'flex', gap: 8, width: '100%', marginTop: 4 },
   editBox: { display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border)' },

@@ -219,6 +219,36 @@ export async function setOwnCompanyTimezone(timezone) {
   return { ok: true };
 }
 
+/** Provider sets (or clears, with null/'') a company's logo. */
+export async function setCompanyLogo(companyId, logo) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  const value = logo ? String(logo) : null;
+  const { error } = await supabase.from('companies').update({ logo: value }).eq('id', companyId);
+  if (error) {
+    if (/logo|column/i.test(error.message || '')) {
+      return { ok: false, error: 'Logo upload needs a one-time database setup (run migration-006.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
+}
+
+/** Master sets (or clears) their OWN company's logo (via a SECURITY DEFINER function). */
+export async function setOwnCompanyLogo(logo) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not signed in.' };
+  const value = logo ? String(logo) : null;
+  const { error } = await supabase.rpc('set_company_logo', { new_logo: value });
+  if (error) {
+    if (/set_company_logo|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      return { ok: false, error: 'Logo upload needs a one-time database setup (run migration-006.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
+}
+
 /** Create a company, and (optionally) its first master account in one go. */
 export async function provisionCompany({ companyName, masterName, masterEmail, password, timezone }) {
   const me = await getCurrentUser();

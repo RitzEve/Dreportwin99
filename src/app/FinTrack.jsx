@@ -17,6 +17,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 const SESSION_DEFAULT = {
   companyId: "demo-co",
   companyName: "Demo Company Pty Ltd",
+  companyLogo: "",
   timezone: "Australia/Sydney",
   operatorId: "OP-001",
   operatorName: "Operator",
@@ -1028,40 +1029,60 @@ export default function App() {
         </div>
       )}
 
-      <aside style={{width:sidebarOpen?210:0,minWidth:sidebarOpen?210:0,background:C.surface2,borderRight:sidebarOpen?`1px solid ${C.border}`:"none",overflow:"hidden",transition:"width 0.28s ease, min-width 0.28s ease",flexShrink:0}}>
-        <div style={{width:210,padding:"16px 0"}}>
-          <div style={{padding:"0 16px 14px",borderBottom:`1px solid ${C.border}`,marginBottom:10}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
-              <div style={{minWidth:0}}>
-                <div style={{fontWeight:500,fontSize:15,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.companyName}>{SESSION.companyName}</div>
-                <div style={{fontSize:11,color:C.muted}}>Financial System</div>
-              </div>
-              <button onClick={()=>setSidebarOpen(false)} aria-label="Close menu" style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:18,padding:4,flexShrink:0}}>
-                <i className="ti ti-chevron-left" aria-hidden="true"/>
-              </button>
+      <aside style={{width:sidebarOpen?230:0,minWidth:sidebarOpen?230:0,overflow:"hidden",transition:"width 0.28s ease, min-width 0.28s ease",flexShrink:0}}>
+        <div style={{width:230,height:"100%",display:"flex",flexDirection:"column",background:"linear-gradient(180deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)",borderRight:"1px solid #334155"}}>
+          {/* Brand / logo header — shows the uploaded company logo, or the name */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"18px 16px",borderBottom:"1px solid #334155"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              {SESSION.companyLogo ? (
+                <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{maxHeight:38,maxWidth:150,objectFit:"contain"}}/>
+              ) : (
+                <>
+                  <div style={{width:36,height:36,borderRadius:9,background:"linear-gradient(135deg,#3b82f6,#7c3aed)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:16,flexShrink:0}}>
+                    {(SESSION.companyName||"?").trim().charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:14,color:"#f8fafc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.companyName}>{SESSION.companyName}</div>
+                    <div style={{fontSize:10.5,color:"#94a3b8"}}>Financial System</div>
+                  </div>
+                </>
+              )}
             </div>
-            <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`}}>
-              <div style={{width:26,height:26,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0}}>
+            <button onClick={()=>setSidebarOpen(false)} aria-label="Close menu" style={{cursor:"pointer",background:"transparent",border:"none",color:"#94a3b8",fontSize:18,padding:4,flexShrink:0,display:"flex"}}>
+              <i className="ti ti-chevron-left" aria-hidden="true"/>
+            </button>
+          </div>
+
+          {/* Navigation */}
+          <nav style={{flex:1,overflowY:"auto",padding:"12px 10px",display:"flex",flexDirection:"column",gap:4}}>
+            {nav.map(n=>{
+              const active = page===n.id;
+              return (
+                <button key={n.id} onClick={()=>setPage(n.id)}
+                  style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"11px 14px",borderRadius:9,border:"none",cursor:"pointer",fontSize:13.5,fontWeight:active?600:500,textAlign:"left",background:active?"linear-gradient(90deg,#2563eb,#7c3aed)":"transparent",color:active?"#fff":"#cbd5e1",boxShadow:active?"0 4px 14px rgba(37,99,235,0.35)":"none",transition:"background 0.15s, color 0.15s"}}
+                  onMouseEnter={e=>{if(!active){e.currentTarget.style.background="#1e293b";e.currentTarget.style.color="#ffffff";}}}
+                  onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#cbd5e1";}}}>
+                  <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:18}}/>{n.label}
+                  {active&&<span style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#fff",opacity:0.85}}/>}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Footer — logged-in operator (moved to the bottom) */}
+          <div style={{padding:"12px",borderTop:"1px solid #334155"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,background:"rgba(255,255,255,0.04)"}}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#34d399,#3b82f6)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>
                 {(SESSION.operatorId||"?").replace(/[^A-Za-z0-9]/g,"").slice(-2).toUpperCase()}
               </div>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:500,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{SESSION.operatorId}</div>
-                <div style={{fontSize:10,color:C.muted}}>Logged in operator</div>
+                <div style={{fontSize:12.5,fontWeight:600,color:"#f8fafc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.operatorName||SESSION.operatorId}>{SESSION.operatorName||SESSION.operatorId}</div>
+                <div style={{fontSize:10.5,color:"#94a3b8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{SESSION.operatorId}{SESSION.role?` · ${String(SESSION.role).toUpperCase()}`:""}</div>
               </div>
             </div>
-          </div>
-          {nav.map(n=>{
-            const active = page===n.id;
-            return (
-              <button key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,width:"calc(100% - 16px)",margin:"2px 8px",padding:"10px 14px",borderRadius:8,background:active?C.accent:"transparent",border:"none",cursor:"pointer",fontSize:13,fontWeight:active?500:400,color:active?"#fff":C.muted,textAlign:"left"}}
-                onMouseEnter={e=>{if(!active)e.currentTarget.style.background=C.surface;}}
-                onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
-                <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:17}}/>{n.label}
-              </button>
-            );
-          })}
-          <div style={{padding:"12px 16px",marginTop:10,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted,display:"flex",alignItems:"center",gap:6}}>
-            <i className="ti ti-device-floppy" aria-hidden="true"/> History auto-saved
+            <div style={{padding:"10px 6px 2px",fontSize:10.5,color:"#64748b",display:"flex",alignItems:"center",gap:6}}>
+              <i className="ti ti-device-floppy" aria-hidden="true"/> History auto-saved
+            </div>
           </div>
         </div>
       </aside>
@@ -1080,8 +1101,14 @@ export default function App() {
               <span style={{whiteSpace:"nowrap"}}>{tzCity(tz)} time</span>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:7,fontSize:13,color:C.text}}>
-              <i className="ti ti-building" aria-hidden="true" style={{fontSize:16,color:C.accent}}/>
-              <span style={{fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}} title={SESSION.companyName}>{SESSION.companyName}</span>
+              {SESSION.companyLogo ? (
+                <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{height:26,maxWidth:170,objectFit:"contain",display:"block"}}/>
+              ) : (
+                <>
+                  <i className="ti ti-building" aria-hidden="true" style={{fontSize:16,color:C.accent}}/>
+                  <span style={{fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}} title={SESSION.companyName}>{SESSION.companyName}</span>
+                </>
+              )}
             </div>
             <div style={{position:"relative"}} ref={opMenuRef}>
               <button onClick={()=>setShowOperatorMenu(o=>!o)} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 10px 6px 6px",color:C.text}}>

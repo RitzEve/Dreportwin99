@@ -416,7 +416,13 @@ export default function App() {
   const [memberPage,setMemberPage] = useState(1);
   const [memberPageSize,setMemberPageSize] = useState(50);
   useEffect(()=>{ setMemberPage(1); },[memberPageSize]);
-  const [sidebarOpen,setSidebarOpen] = useState(true);
+  // Sidebar behaviour: "expanded" | "collapsed" | "hover" (expand-on-hover) — default hover.
+  const [sidebarMode,setSidebarMode] = useState(()=>{ try{ return localStorage.getItem("fintrack-sidebar-mode")||"hover"; }catch(e){ return "hover"; } });
+  useEffect(()=>{ try{ localStorage.setItem("fintrack-sidebar-mode",sidebarMode); }catch(e){} },[sidebarMode]);
+  const [sidebarHovered,setSidebarHovered] = useState(false);
+  const [showSidebarMenu,setShowSidebarMenu] = useState(false);
+  const sidebarHoverExpanding = sidebarMode==="hover" && sidebarHovered;
+  const sidebarExpanded = sidebarMode==="expanded" || sidebarHoverExpanding;
   // Wide enough for the 2:1 dashboard split + 5 stat cards per row.
   const [isWideView,setIsWideView] = useState(()=>typeof window!=="undefined" && window.matchMedia("(min-width: 1000px)").matches);
   useEffect(()=>{ const mq=window.matchMedia("(min-width: 1000px)"); const h=e=>setIsWideView(e.matches); mq.addEventListener("change",h); return ()=>mq.removeEventListener("change",h); },[]);
@@ -461,6 +467,7 @@ export default function App() {
   const [pwError,setPwError] = useState("");
   const [pwSuccess,setPwSuccess] = useState("");
   const opMenuRef = useRef(null);
+  const sidebarMenuRef = useRef(null);
   const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
 
   const [search,setSearch] = useState({term:"",dateFrom:"",dateTo:"",type:"",bank:"",member:""});
@@ -531,7 +538,10 @@ export default function App() {
   },[]);
 
   useEffect(()=>{
-    const handler = e => { if(opMenuRef.current&&!opMenuRef.current.contains(e.target)) setShowOperatorMenu(false); };
+    const handler = e => {
+      if(opMenuRef.current&&!opMenuRef.current.contains(e.target)) setShowOperatorMenu(false);
+      if(sidebarMenuRef.current&&!sidebarMenuRef.current.contains(e.target)) setShowSidebarMenu(false);
+    };
     document.addEventListener("mousedown",handler);
     return ()=>document.removeEventListener("mousedown",handler);
   },[]);
@@ -1046,9 +1056,10 @@ export default function App() {
         </div>
       )}
 
-      <aside style={{width:sidebarOpen?240:64,minWidth:sidebarOpen?240:64,overflow:"hidden",transition:"width 0.3s ease, min-width 0.3s ease",flexShrink:0}}>
-        <div style={{width:sidebarOpen?240:64,height:"100%",display:"flex",flexDirection:"column",background:C.surface,borderRight:`1px solid ${C.border}`,transition:"width 0.3s ease"}}>
-          {/* Title section — uploaded company logo, or the name + initial badge */}
+      <aside style={{width:sidebarMode==="expanded"?240:64,minWidth:sidebarMode==="expanded"?240:64,position:"relative",flexShrink:0,overflow:sidebarHoverExpanding?"visible":"hidden",zIndex:sidebarHoverExpanding?40:"auto",transition:"width 0.3s ease, min-width 0.3s ease"}}
+        onMouseEnter={()=>setSidebarHovered(true)} onMouseLeave={()=>{setSidebarHovered(false); setShowSidebarMenu(false);}}>
+        <div style={{position:sidebarHoverExpanding?"absolute":"relative",top:0,left:0,width:sidebarExpanded?240:64,height:"100%",display:"flex",flexDirection:"column",background:C.surface,borderRight:`1px solid ${C.border}`,boxShadow:sidebarHoverExpanding?(dark?"0 14px 44px rgba(0,0,0,0.6)":"0 14px 44px rgba(0,0,0,0.18)"):"none",transition:"width 0.25s ease"}}>
+          {/* Title section — logo / name + the Sidebar-control button */}
           <div style={{borderBottom:`1px solid ${C.border}`,padding:"10px 8px"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:6,borderRadius:8}}>
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
@@ -1059,20 +1070,39 @@ export default function App() {
                     {(SESSION.companyName||"?").trim().charAt(0).toUpperCase()}
                   </div>
                 )}
-                {sidebarOpen&&(
+                {sidebarExpanded&&(
                   <div style={{minWidth:0}}>
                     <div style={{fontWeight:600,fontSize:13.5,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.companyName}>{SESSION.companyName}</div>
                     <div style={{fontSize:11,color:C.muted}}>Financial System</div>
                   </div>
                 )}
               </div>
-              {sidebarOpen&&(
-                <button onClick={()=>setSidebarOpen(false)} title="Hide sidebar" aria-label="Hide sidebar"
-                  style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:18,padding:4,flexShrink:0,display:"flex",borderRadius:6}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}>
-                  <i className="ti ti-layout-sidebar-left-collapse" aria-hidden="true"/>
-                </button>
+              {sidebarExpanded&&(
+                <div style={{position:"relative",flexShrink:0}} ref={sidebarMenuRef}>
+                  <button onClick={()=>setShowSidebarMenu(s=>!s)} title="Sidebar control" aria-label="Sidebar control"
+                    style={{cursor:"pointer",background:showSidebarMenu?C.surface2:"transparent",border:"none",color:showSidebarMenu?C.text:C.muted,fontSize:18,padding:4,display:"flex",borderRadius:6}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}
+                    onMouseLeave={e=>{if(!showSidebarMenu){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}}>
+                    <i className="ti ti-layout-sidebar-left" aria-hidden="true"/>
+                  </button>
+                  {showSidebarMenu&&(
+                    <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,minWidth:192,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:dark?"0 10px 30px rgba(0,0,0,0.5)":"0 10px 30px rgba(0,0,0,0.15)",zIndex:80,overflow:"hidden",padding:6}}>
+                      <div style={{fontSize:11,color:C.muted,fontWeight:600,letterSpacing:"0.03em",padding:"6px 10px 8px"}}>Sidebar control</div>
+                      {[["expanded","Expanded"],["collapsed","Collapsed"],["hover","Expand on hover"]].map(([val,label])=>{
+                        const sel = sidebarMode===val;
+                        return (
+                          <button key={val} onClick={()=>{ setSidebarMode(val); setShowSidebarMenu(false); }}
+                            style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 10px",borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:C.text,fontSize:13,fontWeight:sel?600:400,textAlign:"left"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:sel?C.accent:"transparent"}}/>
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -1086,8 +1116,8 @@ export default function App() {
                   style={{position:"relative",display:"flex",alignItems:"center",height:44,width:"100%",borderRadius:8,border:"none",borderLeft:`2px solid ${active?C.accent:"transparent"}`,cursor:"pointer",background:active?C.accentBg:"transparent",color:active?C.accent:C.muted,fontWeight:active?600:500,transition:"background 0.15s, color 0.15s",padding:0}}
                   onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}}
                   onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}}>
-                  <span style={{width:sidebarOpen?44:"100%",minWidth:sidebarOpen?44:0,display:"grid",placeContent:"center"}}><i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:18}}/></span>
-                  {sidebarOpen&&<span style={{fontSize:13.5}}>{n.label}</span>}
+                  <span style={{width:sidebarExpanded?44:"100%",minWidth:sidebarExpanded?44:0,display:"grid",placeContent:"center"}}><i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:18}}/></span>
+                  {sidebarExpanded&&<span style={{fontSize:13.5}}>{n.label}</span>}
                 </button>
               );
             })}
@@ -1095,11 +1125,11 @@ export default function App() {
 
           {/* Logged-in operator */}
           <div style={{padding:"10px 8px",borderTop:`1px solid ${C.border}`}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:sidebarOpen?"8px 10px":0,justifyContent:sidebarOpen?"flex-start":"center",borderRadius:10,background:sidebarOpen?C.surface2:"transparent"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:sidebarExpanded?"8px 10px":0,justifyContent:sidebarExpanded?"flex-start":"center",borderRadius:10,background:sidebarExpanded?C.surface2:"transparent"}}>
               <div style={{width:32,height:32,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>
                 {(SESSION.operatorId||"?").replace(/[^A-Za-z0-9]/g,"").slice(-2).toUpperCase()}
               </div>
-              {sidebarOpen&&(
+              {sidebarExpanded&&(
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={SESSION.operatorName||SESSION.operatorId}>{SESSION.operatorName||SESSION.operatorId}</div>
                   <div style={{fontSize:10.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{SESSION.operatorId}{SESSION.role?` · ${String(SESSION.role).toUpperCase()}`:""}</div>
@@ -1107,21 +1137,12 @@ export default function App() {
               )}
             </div>
           </div>
-
-          {/* Collapse / expand toggle */}
-          <button onClick={()=>setSidebarOpen(o=>!o)} title={sidebarOpen?"Hide":"Expand"}
-            style={{display:"flex",alignItems:"center",width:"100%",border:"none",borderTop:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",padding:0,color:C.muted}}
-            onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-            <span style={{width:sidebarOpen?44:"100%",minWidth:sidebarOpen?44:0,height:48,display:"grid",placeContent:"center"}}><i className="ti ti-chevrons-right" aria-hidden="true" style={{fontSize:18,transition:"transform 0.3s",transform:sidebarOpen?"rotate(180deg)":"none"}}/></span>
-            {sidebarOpen&&<span style={{fontSize:13,fontWeight:500}}>Hide</span>}
-          </button>
         </div>
       </aside>
 
       <main style={{flex:1,padding:"16px 24px 24px",overflowY:"auto",minWidth:0,background:C.bg}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={()=>setSidebarOpen(o=>!o)} aria-label="Toggle menu" style={{cursor:"pointer",background:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:"8px 10px",color:"#fff",fontSize:18,display:"flex",alignItems:"center"}}>
+          <button onClick={()=>setSidebarMode(m=>m==="expanded"?"collapsed":"expanded")} aria-label="Toggle sidebar" title="Expand / collapse sidebar" style={{cursor:"pointer",background:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:"8px 10px",color:"#fff",fontSize:18,display:"flex",alignItems:"center"}}>
             <i className="ti ti-menu-2" aria-hidden="true"/>
           </button>
           <h2 style={{margin:0,fontSize:18,fontWeight:500,color:C.text}}>{nav.find(n=>n.id===page)?.label}</h2>

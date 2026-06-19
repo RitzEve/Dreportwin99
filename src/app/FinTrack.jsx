@@ -1066,7 +1066,14 @@ export default function App() {
                   </div>
                 )}
               </div>
-              {sidebarOpen&&<i className="ti ti-chevron-down" aria-hidden="true" style={{fontSize:15,color:C.muted,flexShrink:0}}/>}
+              {sidebarOpen&&(
+                <button onClick={()=>setSidebarOpen(false)} title="Hide sidebar" aria-label="Hide sidebar"
+                  style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:18,padding:4,flexShrink:0,display:"flex",borderRadius:6}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}>
+                  <i className="ti ti-layout-sidebar-left-collapse" aria-hidden="true"/>
+                </button>
+              )}
             </div>
           </div>
 

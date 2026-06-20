@@ -12,6 +12,7 @@ import {
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 /*
  * Provider — the distributor's backend (super-admin).
@@ -48,6 +49,7 @@ export default function Provider({ ctx, onLogout }) {
           </div>
         </div>
         <div style={styles.userBox}>
+          <ThemeToggle />
           <span className="badge badge-provider"><i className="ti ti-shield-lock" aria-hidden="true" /> Provider</span>
           <AccountMenu user={user} roleLabel="Provider" onLogout={onLogout} />
         </div>

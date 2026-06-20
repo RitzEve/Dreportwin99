@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { changeOwnPassword } from '../lib/auth.js';
-import { getTheme, setTheme } from '../lib/theme.js';
 
 /*
  * AccountMenu — the top-right member button used on the Provider & Console pages.
- * Popup contains: Light/Dark theme toggle, Change password, Log out.
- * (The in-app FinTrack screen has its own matching menu.)
+ * Popup contains: Change password, Log out. (Theme is switched via the slider in
+ * the page header; the in-app FinTrack screen has its own matching toggle.)
  */
 export default function AccountMenu({ user, roleLabel, onLogout }) {
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
-  const [theme, setThemeState] = useState(getTheme());
   const ref = useRef(null);
   const initials = (user.operatorId || user.name || '?').replace(/[^A-Za-z0-9]/g, '').slice(-2).toUpperCase();
 
@@ -19,8 +17,6 @@ export default function AccountMenu({ user, roleLabel, onLogout }) {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
-
-  function pick(t) { setTheme(t); setThemeState(t); }
 
   return (
     <div style={{ position: 'relative' }} ref={ref}>
@@ -36,18 +32,6 @@ export default function AccountMenu({ user, roleLabel, onLogout }) {
             <div style={{ fontSize: 13, fontWeight: 600 }}>{user.name}</div>
             <div style={S.sub}>{user.operatorId} · {roleLabel}</div>
             <div style={S.sub}>{user.email}</div>
-          </div>
-
-          <div style={S.section}>
-            <div style={S.sectionLabel}>Theme</div>
-            <div style={S.segmented}>
-              <button onClick={() => pick('light')} style={{ ...S.seg, ...(theme === 'light' ? S.segActive : {}) }}>
-                <i className="ti ti-sun" aria-hidden="true" /> Light
-              </button>
-              <button onClick={() => pick('dark')} style={{ ...S.seg, ...(theme === 'dark' ? S.segActive : {}) }}>
-                <i className="ti ti-moon" aria-hidden="true" /> Dark
-              </button>
-            </div>
           </div>
 
           <button style={S.item} onClick={() => { setOpen(false); setPwOpen(true); }}>

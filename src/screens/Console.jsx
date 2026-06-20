@@ -16,6 +16,7 @@ import {
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 /*
  * Console — landing page for master & manager accounts.
@@ -52,6 +53,7 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
           </div>
         </div>
         <div style={styles.userBox}>
+          <ThemeToggle />
           <span className={`badge ${roleClass}`}>
             <i className={`ti ti-${user.role === ROLES.MASTER ? 'shield-check' : 'user-star'}`} aria-hidden="true" />
             {ROLE_LABEL[user.role]}

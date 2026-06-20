@@ -267,11 +267,11 @@ function BankTotals({banksLive}) {
   const active = banksLive.filter(b=>b.active!==false);
   const inactive = banksLive.filter(b=>b.active===false);
   const Card = ({label,amount,count,color,icon}) => (
-    <div style={{background:C.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color}`}}>
+    <GlowCard color={color} style={{background:C.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color}`}}>
       <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${icon}`} aria-hidden="true" style={{color}}/>{label}</div>
       <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(amount)}</div>
       <div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"bank":"banks"}</div>
-    </div>
+    </GlowCard>
   );
   return (
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10}}>
@@ -1357,7 +1357,7 @@ export default function App() {
               {banks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank accounts yet. Click "Add bank" to create one.</div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(220px, calc((100% - 48px) / 5)), 1fr))",gap:12}}>
                 {banksLive.map(b=>(
-                  <div key={b.id} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:editingBank===b.id?"default":"pointer"}}
+                  <GlowCard key={b.id} color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:editingBank===b.id?"default":"pointer"}}
                     onMouseEnter={e=>{if(editingBank!==b.id)e.currentTarget.style.borderColor=C.accent;}}
                     onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
                     onClick={()=>{if(editingBank!==b.id) openBankDetail(b);}}>
@@ -1400,7 +1400,7 @@ export default function App() {
                         </div>
                       </>
                     )}
-                  </div>
+                  </GlowCard>
                 ))}
               </div>
             </div>

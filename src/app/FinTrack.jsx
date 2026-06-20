@@ -706,8 +706,8 @@ export default function App() {
     // member). The bank is OPTIONAL for every type now. All other types may also
     // leave the name/reference blank.
     const needsName = form.type==="Regular Deposit" || form.type==="Regular Withdrawal";
-    if(form.amount===""||isNaN(form.amount)||(!isSigned&&Number(form.amount)<=0)||(isSigned&&Number(form.amount)===0)){setFormError(isSigned?"Enter a non-zero amount (use a minus sign for negative).":"Enter a valid amount.");return;}
-    if(needsName && !form.memberName.trim()){setFormError("Enter a name/reference.");return;}
+    if(form.amount===""||isNaN(form.amount)||(!isSigned&&Number(form.amount)<=0)||(isSigned&&Number(form.amount)===0)){setFormError(isSigned?"Enter a non-zero amount (use a minus sign for negative).":"Enter a valid amount.");window.showToast?.("Error , Please Try Again","error");return;}
+    if(needsName && !form.memberName.trim()){setFormError("Enter a name/reference.");window.showToast?.("Error , Please Try Again","error");return;}
     const srcBank = banks.find(b=>b.id===form.bankId);
     setFormError("");
     const destBank = banks.find(b=>b.id===form.toBankId);
@@ -716,17 +716,19 @@ export default function App() {
     const time = timeInTz(tz);
     const ref = form.memberName.trim();
     const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null};
+    // Entry saved OK — close the form, reset it, and pop the success toast.
+    const done = ()=>{ setShowEntryModal(false); setForm(blank); window.showToast?.("Action Done !","success"); };
 
     // ---- Transfer: make a leg for whichever bank(s) are chosen ----
     if(form.type==="Transfer"){
-      if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");return;}
+      if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");window.showToast?.("Error , Please Try Again","error");return;}
       const pairId = `TR-${nextId}`;
       const rows = []; let idc = nextId;
       if(srcBank) rows.push({id:idc++,date:today,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),operator:op,isNew:false,deleted:false});
       if(destBank) rows.push({id:idc++,date:today,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
-      setForm(blank); setShowEntryModal(false);
+      done();
       return;
     }
 
@@ -746,7 +748,7 @@ export default function App() {
         setTransactions(prev=>[bucketLeg,...prev]);
         setNextId(n=>n+1);
       }
-      setForm(blank); setShowEntryModal(false);
+      done();
       return;
     }
 
@@ -766,7 +768,7 @@ export default function App() {
     } else if(existingMember){
       setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:today}:m));
     }
-    setForm(blank); setShowEntryModal(false);
+    done();
   };
 
   const handleAddBank = () => {

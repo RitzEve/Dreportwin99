@@ -6,6 +6,7 @@ import Provider from './screens/Provider.jsx';
 import Console from './screens/Console.jsx';
 import AppScreen from './app/AppScreen.jsx';
 import FluxLoader from './components/FluxLoader.jsx';
+import ToastHost from './components/Toast.jsx';
 
 /*
  * Root — loads the Supabase session, then routes by role:
@@ -40,19 +41,17 @@ export default function Root() {
     setScreen('console');
   }
 
-  if (loading) return <Splash />;
-  if (!ctx) return <Login onAuthed={handleAuthed} />;
+  // Pick the screen, then render it alongside the always-on ToastHost so toasts
+  // (entry success/error + new-version notice) work on every screen.
+  let content;
+  if (loading) content = <Splash />;
+  else if (!ctx) content = <Login onAuthed={handleAuthed} />;
+  else if (ctx.user.role === ROLES.PROVIDER) content = <Provider ctx={ctx} onLogout={handleLogout} />;
+  else if (!canAccessConsole(ctx.user.role)) content = <AppScreen ctx={ctx} canReturnToConsole={false} onLogout={handleLogout} />;
+  else if (screen === 'app') content = <AppScreen ctx={ctx} onExit={() => setScreen('console')} onLogout={handleLogout} />;
+  else content = <Console ctx={ctx} onOpenApp={() => setScreen('app')} onLogout={handleLogout} />;
 
-  if (ctx.user.role === ROLES.PROVIDER) return <Provider ctx={ctx} onLogout={handleLogout} />;
-
-  if (!canAccessConsole(ctx.user.role)) {
-    return <AppScreen ctx={ctx} canReturnToConsole={false} onLogout={handleLogout} />;
-  }
-
-  if (screen === 'app') {
-    return <AppScreen ctx={ctx} onExit={() => setScreen('console')} onLogout={handleLogout} />;
-  }
-  return <Console ctx={ctx} onOpenApp={() => setScreen('app')} onLogout={handleLogout} />;
+  return (<>{content}<ToastHost /></>);
 }
 
 function Splash() {

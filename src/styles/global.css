@@ -182,3 +182,9 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 @media (prefers-reduced-motion: reduce) {
   [data-glow]::before, [data-glow]::after { display: none; }
 }
+
+/* ---- Toast animations (src/components/Toast.jsx) ---- */
+@keyframes toast-in-right  { from { opacity: 0; transform: translateX(115%); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toast-out-right { from { opacity: 1; transform: translateX(0); }    to { opacity: 0; transform: translateX(115%); } }
+@keyframes toast-in-top    { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toast-out-top   { from { opacity: 1; transform: translateY(0); }     to { opacity: 0; transform: translateY(-24px); } }

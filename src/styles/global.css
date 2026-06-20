@@ -133,3 +133,52 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
   from { opacity: 0; transform: translateY(10px) scale(0.96); filter: blur(6px); }
   to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
 }
+
+/* ---- Spotlight glow-border for dashboard cards (FinTrack GlowCard) ----
+   A radial "spotlight" follows the mouse across the whole window (--glow-x /
+   --glow-y are set on :root by a global pointermove listener). Each card paints
+   the part of that spotlight that overlaps it as a glowing ring on its border,
+   tinted to the card's own --glow-color. background-attachment:fixed anchors the
+   gradient to the viewport so the light tracks the real cursor position. */
+
+[data-glow] {
+  position: relative;
+  isolation: isolate;
+}
+/* the glowing border ring — gradient masked to just the 1.5px edge */
+[data-glow]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--glow-border, 1.5px);
+  background: radial-gradient(
+    var(--glow-size, 260px) var(--glow-size, 260px) at
+    calc(var(--glow-x, -1000) * 1px) calc(var(--glow-y, -1000) * 1px),
+    var(--glow-color, #3b82f6), transparent 55%);
+  background-attachment: fixed;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+/* a very faint face bloom behind the card content, same colour */
+[data-glow]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    calc(var(--glow-size, 260px) * 0.85) calc(var(--glow-size, 260px) * 0.85) at
+    calc(var(--glow-x, -1000) * 1px) calc(var(--glow-y, -1000) * 1px),
+    var(--glow-color, #3b82f6), transparent 50%);
+  background-attachment: fixed;
+  opacity: var(--glow-bloom, 0.08);
+  pointer-events: none;
+  z-index: -1;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-glow]::before, [data-glow]::after { display: none; }
+}

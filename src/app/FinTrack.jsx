@@ -150,6 +150,34 @@ const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fo
 const sectionStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:20,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 const cardStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 
+// ---- Spotlight glow-border (see [data-glow] rules in global.css) ----
+// One global pointermove listener writes the cursor position onto :root so every
+// GlowCard can light up the part of the spotlight that overlaps it. Bound once.
+let _glowPointerBound = false;
+function bindGlowPointer(){
+  if(_glowPointerBound || typeof window==="undefined") return;
+  _glowPointerBound = true;
+  const root = document.documentElement;
+  window.addEventListener("pointermove", e=>{
+    root.style.setProperty("--glow-x", e.clientX.toFixed(1));
+    root.style.setProperty("--glow-y", e.clientY.toFixed(1));
+  }, {passive:true});
+}
+// A card that glows on its border in `color` as the mouse passes near it.
+// Drop-in for a plain <div>: pass color + the same style/onClick/etc. you'd use.
+function GlowCard({color, glowSize, style, children, ...rest}){
+  useEffect(bindGlowPointer, []);
+  return (
+    <div
+      data-glow
+      style={{position:"relative", "--glow-color":color||C.accent, ...(glowSize?{"--glow-size":typeof glowSize==="number"?`${glowSize}px`:glowSize}:null), ...style}}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}
+
 const initBanks = [];
 const initMembers = [];
 
@@ -225,11 +253,11 @@ function TxTable({data, showDelete, onDelete, banks}) {
 
 function StatCard({label,count,amount,color}) {
   return (
-    <div style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"}}>
+    <GlowCard color={color||C.borderStrong} style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"}}>
       <div style={{fontSize:11.5,color:C.muted,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={label}>{label}</div>
       <div style={{fontSize:17,fontWeight:600,color:color||C.text}}>{fmt(amount)}</div>
       {count!==undefined&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{count} {count===1?"entry":"entries"}</div>}
-    </div>
+    </GlowCard>
   );
 }
 
@@ -1259,11 +1287,11 @@ export default function App() {
                       {label:"Active banks total",arr:banksLive.filter(b=>b.active!==false),color:"#16a34a",icon:"ti-circle-check"},
                       {label:"Inactive banks total",arr:banksLive.filter(b=>b.active===false),color:"#64748b",icon:"ti-circle-off"},
                     ].map(row=>(
-                      <div key={row.label} style={{background:C.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${row.color}`}}>
+                      <GlowCard key={row.label} color={row.color} style={{background:C.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${row.color}`}}>
                         <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${row.icon}`} aria-hidden="true" style={{color:row.color}}/>{row.label}</div>
                         <div style={{fontSize:19,fontWeight:600,color:C.text}}>{fmt(row.arr.reduce((s,b)=>s+(b.balance||0),0))}</div>
                         <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{row.arr.length} {row.arr.length===1?"bank":"banks"}</div>
-                      </div>
+                      </GlowCard>
                     ))}
                   </div>
                 </div>
@@ -1273,7 +1301,7 @@ export default function App() {
                   <div style={{display:"flex",flexDirection:"column",gap:10}}>
                     {activeBanks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"14px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No active banks.</div>}
                     {activeBanks.map(b=>(
-                      <div key={b.id} onClick={()=>openBankDetail(b)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:C.bg,borderRadius:10,padding:"11px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
+                      <GlowCard key={b.id} color={C.accent} onClick={()=>openBankDetail(b)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:C.bg,borderRadius:10,padding:"11px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
                         onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
                         onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
                         <div style={{minWidth:0}}>
@@ -1281,7 +1309,7 @@ export default function App() {
                           <div style={{fontSize:11.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.name}</div>
                         </div>
                         <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:"nowrap",flexShrink:0}}>{fmt(b.balance)}</div>
-                      </div>
+                      </GlowCard>
                     ))}
                   </div>
                 </div>

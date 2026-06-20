@@ -5,6 +5,7 @@ import Login from './screens/Login.jsx';
 import Provider from './screens/Provider.jsx';
 import Console from './screens/Console.jsx';
 import AppScreen from './app/AppScreen.jsx';
+import FluxLoader from './components/FluxLoader.jsx';
 
 /*
  * Root — loads the Supabase session, then routes by role:
@@ -56,8 +57,13 @@ export default function Root() {
 
 function Splash() {
   return (
-    <div style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 14 }}>
-      <i className="ti ti-loader-2" aria-hidden="true" style={{ marginRight: 8 }} /> Loading…
+    <div style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
+      <FluxLoader phases={[
+        { at: 0, label: 'starting up' },
+        { at: 35, label: 'securing session' },
+        { at: 70, label: 'loading workspace' },
+        { at: 100, label: 'ready' },
+      ]} />
     </div>
   );
 }

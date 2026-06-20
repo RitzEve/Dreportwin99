@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { changeOwnPassword } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
+import FluxLoader from '../components/FluxLoader.jsx';
 
 /*
  * AppScreen — hosts the FinTrack artifact for the logged-in company.
@@ -56,7 +57,16 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
         </span>
       </div>
       <div style={styles.appArea}>
-        {Comp ? <Comp /> : <div style={styles.loading}>Loading app…</div>}
+        {Comp ? <Comp /> : (
+          <div style={styles.loadingWrap}>
+            <FluxLoader phases={[
+              { at: 0, label: 'opening app' },
+              { at: 40, label: 'loading your data' },
+              { at: 75, label: 'almost there' },
+              { at: 100, label: 'ready' },
+            ]} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -72,5 +82,5 @@ const styles = {
   barLogo: { height: 20, maxWidth: 130, objectFit: 'contain', display: 'block' },
   dot: { opacity: 0.5 },
   appArea: { flex: 1, padding: '16px', minWidth: 0 },
-  loading: { padding: 40, color: 'var(--muted)', fontSize: 14 },
+  loadingWrap: { minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' },
 };

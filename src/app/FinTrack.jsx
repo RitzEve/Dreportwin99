@@ -39,7 +39,7 @@ const BANK_CHOICES = [
 const TYPE_COLORS = {
   "Regular Deposit":"#16a34a","Regular Withdrawal":"#dc2626",
   "Unclaimed Credit":"#d97706","Mistake":"#7c3aed",
-  "Rental":"#0891b2","Store":"#db2777","Transfer":"#6366f1","Adjust":"#0d9488",
+  "Rental":"#0891b2","Store":"#9333ea","Transfer":"#6366f1","Adjust":"#0d9488",
   "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b"
 };
 const today = new Date().toISOString().split("T")[0];
@@ -1280,7 +1280,7 @@ export default function App() {
               <StatCard label="Unclaimed credits" count={stats.unclaimed.length} amount={stats.sum(stats.unclaimed)} color="#d97706" onClick={()=>openStatDetail("Unclaimed credits", stats.unclaimed)}/>
               <StatCard label="Mistakes" count={stats.mistakes.length} amount={stats.sum(stats.mistakes)} color="#7c3aed" onClick={()=>openStatDetail("Mistakes", stats.mistakes)}/>
               <StatCard label="Rentals" count={stats.rentals.length} amount={stats.sum(stats.rentals)} color="#0891b2" onClick={()=>openStatDetail("Rentals", stats.rentals)}/>
-              <StatCard label="Store entries" count={stats.store.length} amount={stats.sum(stats.store)} color="#db2777" onClick={()=>openStatDetail("Store entries", stats.store)}/>
+              <StatCard label="Store entries" count={stats.store.length} amount={stats.sum(stats.store)} color="#9333ea" onClick={()=>openStatDetail("Store entries", stats.store)}/>
               <StatCard label="Transfers" count={stats.transfers.length} amount={stats.sum(stats.transfers)} color="#6366f1" onClick={()=>openStatDetail("Transfers", stats.transfers)}/>
               <StatCard label="Adjustments" count={stats.adjustments.length} amount={stats.sum(stats.adjustments)} color="#0d9488" onClick={()=>openStatDetail("Adjustments", stats.adjustments)}/>
             </div>

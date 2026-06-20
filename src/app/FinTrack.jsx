@@ -251,12 +251,18 @@ function TxTable({data, showDelete, onDelete, banks}) {
   );
 }
 
-function StatCard({label,count,amount,color}) {
+function StatCard({label,count,amount,color,onClick}) {
+  const accent = color||C.accent;
+  const viewHint = <span style={{color:accent,display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap"}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
   return (
-    <GlowCard color={color||C.borderStrong} style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"}}>
+    <GlowCard color={color||C.borderStrong} onClick={onClick}
+      style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)",cursor:onClick?"pointer":"default"}}
+      title={onClick?"Click to view these entries for the selected date":undefined}>
       <div style={{fontSize:11.5,color:C.muted,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={label}>{label}</div>
       <div style={{fontSize:17,fontWeight:600,color:color||C.text}}>{fmt(amount)}</div>
-      {count!==undefined&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{count} {count===1?"entry":"entries"}</div>}
+      {count!==undefined
+        ? <div style={{fontSize:11,color:C.muted,marginTop:2,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}><span>{count} {count===1?"entry":"entries"}</span>{onClick&&viewHint}</div>
+        : (onClick&&<div style={{fontSize:11,marginTop:2}}>{viewHint}</div>)}
     </GlowCard>
   );
 }
@@ -877,6 +883,18 @@ export default function App() {
     : dashView==="range" ? `range_${rangeFrom}_${rangeTo}`
     : `month_${selMonth}`;
 
+  // Click a dashboard stat card → open the detail popup listing that stat's
+  // transactions for the currently selected date scope (today / yesterday / etc.).
+  const openStatDetail = (label, rows, totalOverride) => {
+    const list = rows.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+    const total = totalOverride!==undefined ? totalOverride : rows.reduce((s,t)=>s+(t.amount||0),0);
+    setDetailModal({
+      title: label,
+      subtitle: `${dashScopeLabel} · ${rows.length} ${rows.length===1?"entry":"entries"} · Total: ${fmt(total)}`,
+      transactions: list,
+    });
+  };
+
   return (
     <div style={{display:"flex",minHeight:620,fontFamily:"var(--font-sans)",position:"relative",overflow:"hidden",borderRadius:12,border:`1px solid ${C.border}`}}>
       <style>{`
@@ -1255,16 +1273,16 @@ export default function App() {
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:isWideView?"repeat(5, minmax(0,1fr))":"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
-              <StatCard label="Total deposits" count={stats.deposits.length} amount={stats.sum(stats.deposits)} color="#16a34a"/>
-              <StatCard label="Total withdrawals" count={stats.withdrawals.length} amount={stats.sum(stats.withdrawals)} color="#dc2626"/>
-              <StatCard label="Win / Loss" amount={stats.sum(stats.deposits)-stats.sum(stats.withdrawals)} color={(stats.sum(stats.deposits)-stats.sum(stats.withdrawals))>=0?"#16a34a":"#dc2626"}/>
-              <StatCard label="New members" count={stats.newMembers.length} amount={stats.sum(stats.newMembers)} color="#2563eb"/>
-              <StatCard label="Unclaimed credits" count={stats.unclaimed.length} amount={stats.sum(stats.unclaimed)} color="#d97706"/>
-              <StatCard label="Mistakes" count={stats.mistakes.length} amount={stats.sum(stats.mistakes)} color="#7c3aed"/>
-              <StatCard label="Rentals" count={stats.rentals.length} amount={stats.sum(stats.rentals)} color="#0891b2"/>
-              <StatCard label="Store entries" count={stats.store.length} amount={stats.sum(stats.store)} color="#db2777"/>
-              <StatCard label="Transfers" count={stats.transfers.length} amount={stats.sum(stats.transfers)} color="#6366f1"/>
-              <StatCard label="Adjustments" count={stats.adjustments.length} amount={stats.sum(stats.adjustments)} color="#0d9488"/>
+              <StatCard label="Total deposits" count={stats.deposits.length} amount={stats.sum(stats.deposits)} color="#16a34a" onClick={()=>openStatDetail("Total deposits", stats.deposits)}/>
+              <StatCard label="Total withdrawals" count={stats.withdrawals.length} amount={stats.sum(stats.withdrawals)} color="#dc2626" onClick={()=>openStatDetail("Total withdrawals", stats.withdrawals)}/>
+              <StatCard label="Win / Loss" amount={stats.sum(stats.deposits)-stats.sum(stats.withdrawals)} color={(stats.sum(stats.deposits)-stats.sum(stats.withdrawals))>=0?"#16a34a":"#dc2626"} onClick={()=>openStatDetail("Win / Loss (deposits & withdrawals)", [...stats.deposits, ...stats.withdrawals], stats.sum(stats.deposits)-stats.sum(stats.withdrawals))}/>
+              <StatCard label="New members" count={stats.newMembers.length} amount={stats.sum(stats.newMembers)} color="#2563eb" onClick={()=>openStatDetail("New members", stats.newMembers)}/>
+              <StatCard label="Unclaimed credits" count={stats.unclaimed.length} amount={stats.sum(stats.unclaimed)} color="#d97706" onClick={()=>openStatDetail("Unclaimed credits", stats.unclaimed)}/>
+              <StatCard label="Mistakes" count={stats.mistakes.length} amount={stats.sum(stats.mistakes)} color="#7c3aed" onClick={()=>openStatDetail("Mistakes", stats.mistakes)}/>
+              <StatCard label="Rentals" count={stats.rentals.length} amount={stats.sum(stats.rentals)} color="#0891b2" onClick={()=>openStatDetail("Rentals", stats.rentals)}/>
+              <StatCard label="Store entries" count={stats.store.length} amount={stats.sum(stats.store)} color="#db2777" onClick={()=>openStatDetail("Store entries", stats.store)}/>
+              <StatCard label="Transfers" count={stats.transfers.length} amount={stats.sum(stats.transfers)} color="#6366f1" onClick={()=>openStatDetail("Transfers", stats.transfers)}/>
+              <StatCard label="Adjustments" count={stats.adjustments.length} amount={stats.sum(stats.adjustments)} color="#0d9488" onClick={()=>openStatDetail("Adjustments", stats.adjustments)}/>
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:isWideView?"2fr 1fr":"1fr",gap:20,alignItems:"start"}}>

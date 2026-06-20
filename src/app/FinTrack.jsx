@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import FluidDropdown from "../components/FluidDropdown.jsx";
 
 // ============================================================================
 // SESSION — when this goes online, your login frontend/backend injects the
@@ -305,9 +306,9 @@ function TxLog({data, showDelete, onDelete, banks}) {
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
           <span>Show</span>
-          <select value={pageSize} onChange={e=>setPageSize(Number(e.target.value))} style={{padding:"4px 8px",width:"auto"}}>
-            {PAGE_SIZES.map(n=><option key={n} value={n}>{n}</option>)}
-          </select>
+          <FluidDropdown width={100} value={pageSize} ariaLabel="Rows per page"
+            options={PAGE_SIZES.map(n=>({value:n,label:String(n)}))}
+            onChange={v=>setPageSize(Number(v))}/>
           <span>per page</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:C.muted}}>
@@ -455,6 +456,7 @@ export default function App() {
   useEffect(()=>{ try{ localStorage.setItem("fintrack-sidebar-mode-v2",sidebarMode); }catch(e){} },[sidebarMode]);
   const [sidebarHovered,setSidebarHovered] = useState(false);
   const [showSidebarMenu,setShowSidebarMenu] = useState(false);
+  const [sbHover,setSbHover] = useState(null); // sidebar-control fluid highlight
   const sidebarHoverExpanding = sidebarMode==="hover" && sidebarHovered;
   const sidebarExpanded = sidebarMode==="expanded" || sidebarHoverExpanding;
   // Wide enough for the 2:1 dashboard split + 5 stat cards per row.
@@ -997,10 +999,9 @@ export default function App() {
             <div style={{padding:"18px 20px",overflowY:"auto"}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
                 <div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Bank name</label>
-                  <select value={newBank.name} onChange={e=>setNewBank(b=>({...b,name:e.target.value}))} style={{width:"100%"}}>
-                    <option value="">— Select bank —</option>
-                    {BANK_CHOICES.map(b=><option key={b} value={b}>{b}</option>)}
-                  </select></div>
+                  <FluidDropdown value={newBank.name} placeholder="— Select bank —" ariaLabel="Bank name"
+                    options={[{value:"",label:"— Select bank —"},...BANK_CHOICES.map(b=>({value:b,label:b}))]}
+                    onChange={v=>setNewBank(b=>({...b,name:v}))}/></div>
                 {[["holder","Holder's name","e.g. Company Ltd"],["bsb","BSB number (optional)","e.g. 062-000"],["account","Account number (optional)","e.g. 1234567890"],["payid","PayID (optional)","e.g. name@company.com"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
                   <div key={k}><label style={labelStyle}>{label}</label>
                     <input type={k==="balance"?"number":"text"} placeholder={ph} value={newBank[k]} onChange={e=>setNewBank(b=>({...b,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
@@ -1034,9 +1035,13 @@ export default function App() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
                 <div><label style={labelStyle}>Bank account affected (optional)</label>
-                  <select value={form.bankId??""} onChange={e=>setForm(f=>({...f,bankId:e.target.value?Number(e.target.value):null}))} style={{width:"100%"}}><option value="">— None —</option>{activeBanks.map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>
+                  <FluidDropdown value={form.bankId??""} placeholder="— None —" ariaLabel="Bank account affected"
+                    options={[{value:"",label:"— None —"},...activeBanks.map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
+                    onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/></div>
                 {form.type==="Transfer"&&<div><label style={labelStyle}>Destination bank (optional)</label>
-                  <select value={form.toBankId??""} onChange={e=>setForm(f=>({...f,toBankId:e.target.value?Number(e.target.value):null}))} style={{width:"100%"}}><option value="">— None —</option>{activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=><option key={b.id} value={b.id}>{i+1}. {b.holder} — {b.name}</option>)}</select></div>}
+                  <FluidDropdown value={form.toBankId??""} placeholder="— None —" ariaLabel="Destination bank"
+                    options={[{value:"",label:"— None —"},...activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
+                    onChange={v=>setForm(f=>({...f,toBankId:v===""?null:Number(v)}))}/></div>}
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
                   <input type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div style={{position:"relative"}} ref={idSuggestRef}><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>
@@ -1133,23 +1138,30 @@ export default function App() {
                     onMouseLeave={e=>{if(!showSidebarMenu){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}}>
                     <i className="ti ti-layout-sidebar" aria-hidden="true"/>
                   </button>
-                  {showSidebarMenu&&(
-                    <div style={{position:"absolute",...(sidebarExpanded?{top:"calc(100% + 8px)",right:0}:{top:0,left:"calc(100% + 10px)"}),minWidth:192,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:dark?"0 10px 30px rgba(0,0,0,0.5)":"0 10px 30px rgba(0,0,0,0.15)",zIndex:80,overflow:"hidden",padding:6}}>
-                      <div style={{fontSize:11,color:C.muted,fontWeight:600,letterSpacing:"0.03em",padding:"6px 10px 8px"}}>Sidebar control</div>
-                      {[["expanded","Expanded"],["collapsed","Collapsed"],["hover","Expand on hover"]].map(([val,label])=>{
-                        const sel = sidebarMode===val;
-                        return (
-                          <button key={val} onClick={()=>{ setSidebarMode(val); setShowSidebarMenu(false); }}
-                            style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 10px",borderRadius:7,border:"none",cursor:"pointer",background:"transparent",color:C.text,fontSize:13,fontWeight:sel?600:400,textAlign:"left"}}
-                            onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                            <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:sel?C.accent:"transparent"}}/>
-                            {label}
-                          </button>
-                        );
-                      })}
+                  {showSidebarMenu&&(()=>{
+                    const modes=[["expanded","Expanded","ti-layout-sidebar"],["collapsed","Collapsed","ti-layout-sidebar-left-collapse"],["hover","Expand on hover","ti-pointer"]];
+                    const activeIdx=modes.findIndex(([v])=>(sbHover||sidebarMode)===v);
+                    return (
+                    <div style={{position:"absolute",...(sidebarExpanded?{top:"calc(100% + 8px)",right:0}:{top:0,left:"calc(100% + 10px)"}),minWidth:210,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:dark?"0 12px 32px rgba(0,0,0,0.5)":"0 12px 32px rgba(0,0,0,0.15)",zIndex:80,overflow:"hidden",padding:6,transformOrigin:"top",animation:"fluid-dd-in 0.18s ease"}}>
+                      <div style={{fontSize:11,color:C.muted,fontWeight:600,letterSpacing:"0.03em",padding:"4px 10px 8px"}}>Sidebar control</div>
+                      <div style={{position:"relative"}}>
+                        {activeIdx>=0&&<div aria-hidden="true" style={{position:"absolute",left:0,right:0,top:0,height:38,borderRadius:8,background:C.surface2,transform:`translateY(${activeIdx*38}px)`,transition:"transform 0.25s cubic-bezier(0.25,0.1,0.25,1)",pointerEvents:"none"}}/>}
+                        {modes.map(([val,label,icon])=>{
+                          const sel = sidebarMode===val; const act=(sbHover||sidebarMode)===val;
+                          return (
+                            <button key={val} onClick={()=>{ setSidebarMode(val); setShowSidebarMenu(false); setSbHover(null); }}
+                              onMouseEnter={()=>setSbHover(val)} onMouseLeave={()=>setSbHover(null)}
+                              style={{position:"relative",zIndex:1,height:38,display:"flex",alignItems:"center",gap:10,width:"100%",padding:"0 10px",borderRadius:8,border:"none",cursor:"pointer",background:"transparent",color:act?C.text:C.muted,fontSize:13,fontWeight:sel?600:500,textAlign:"left",transition:"color 0.15s"}}>
+                              <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>
+                              {label}
+                              {sel&&<i className="ti ti-check" aria-hidden="true" style={{marginLeft:"auto",fontSize:15,color:C.accent}}/>}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -1252,9 +1264,9 @@ export default function App() {
               {toggleBtn(dashView==="month",()=>setDashView("month"),"Monthly")}
               {toggleBtn(dashView==="range",()=>setDashView("range"),"Date range")}
               {dashView==="month"&&(
-                <select value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={{marginLeft:4}}>
-                  {availableMonths.map(m=><option key={m} value={m}>{monthLabel(m)}</option>)}
-                </select>
+                <FluidDropdown width={190} style={{marginLeft:4}} value={selMonth} ariaLabel="Select month"
+                  options={availableMonths.map(m=>({value:m,label:monthLabel(m)}))}
+                  onChange={v=>setSelMonth(v)}/>
               )}
               {dashView==="range"&&(
                 <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:4,flexWrap:"wrap"}}>
@@ -1441,9 +1453,9 @@ export default function App() {
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
               <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
                 <span>Show</span>
-                <select value={memberPageSize} onChange={e=>setMemberPageSize(Number(e.target.value))} style={{padding:"4px 8px",width:"auto"}}>
-                  {PAGE_SIZES.map(n=><option key={n} value={n}>{n}</option>)}
-                </select>
+                <FluidDropdown width={100} value={memberPageSize} ariaLabel="Rows per page"
+                  options={PAGE_SIZES.map(n=>({value:n,label:String(n)}))}
+                  onChange={v=>setMemberPageSize(Number(v))}/>
                 <span>per page</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:C.muted}}>
@@ -1515,11 +1527,11 @@ export default function App() {
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Search across all saved transactions — any date, member, bank, or type.</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
                 <div><label style={labelStyle}>Keyword</label><input type="text" placeholder="Name, ID, bank..." value={search.term} onChange={e=>setSearch(s=>({...s,term:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                <div><label style={labelStyle}>Member</label><select value={search.member} onChange={e=>setSearch(s=>({...s,member:e.target.value}))} style={{width:"100%"}}><option value="">All members</option>{members.map(m=><option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}</select></div>
-                <div><label style={labelStyle}>Bank</label><select value={search.bank} onChange={e=>setSearch(s=>({...s,bank:e.target.value}))} style={{width:"100%"}}><option value="">All banks</option>{banks.map(b=><option key={b.id} value={b.id}>{b.holder?`${b.holder} — ${b.name}`:b.name}</option>)}</select></div>
+                <div><label style={labelStyle}>Member</label><FluidDropdown value={search.member} placeholder="All members" ariaLabel="Filter by member" options={[{value:"",label:"All members"},...members.map(m=>({value:String(m.id),label:`${m.name} (${m.id})`}))]} onChange={v=>setSearch(s=>({...s,member:v}))}/></div>
+                <div><label style={labelStyle}>Bank</label><FluidDropdown value={search.bank} placeholder="All banks" ariaLabel="Filter by bank" options={[{value:"",label:"All banks"},...banks.map(b=>({value:String(b.id),label:b.holder?`${b.holder} — ${b.name}`:b.name}))]} onChange={v=>setSearch(s=>({...s,bank:v}))}/></div>
                 <div><label style={labelStyle}>From date</label><input type="date" value={search.dateFrom} onChange={e=>setSearch(s=>({...s,dateFrom:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>To date</label><input type="date" value={search.dateTo} onChange={e=>setSearch(s=>({...s,dateTo:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                <div><label style={labelStyle}>Entry type</label><select value={search.type} onChange={e=>setSearch(s=>({...s,type:e.target.value}))} style={{width:"100%"}}><option value="">All types</option>{ENTRY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
+                <div><label style={labelStyle}>Entry type</label><FluidDropdown value={search.type} placeholder="All types" ariaLabel="Filter by type" options={[{value:"",label:"All types"},...ENTRY_TYPES.map(t=>({value:t,label:t,color:TYPE_COLORS[t]}))]} onChange={v=>setSearch(s=>({...s,type:v}))}/></div>
               </div>
               <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div style={{fontSize:12,color:C.muted}}>{filteredTx.length} result{filteredTx.length!==1?"s":""} found</div>

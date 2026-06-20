@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import FluidDropdown from '../components/FluidDropdown.jsx';
 import {
   ROLES,
   listTeam,
@@ -133,9 +134,9 @@ function CompanyTimezone({ company }) {
       <h3 style={styles.cardTitle}><i className="ti ti-clock-hour-4" aria-hidden="true" /> Company time zone</h3>
       <p style={styles.cardSub}>Transactions for {company.name} are stamped with this clock. Currently: <strong>{tzLabel(company.timezone)}</strong>.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={tz} onChange={(e) => setTz(e.target.value)} style={{ flex: '1 1 260px', maxWidth: 380 }}>
-          {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
+        <FluidDropdown value={tz} ariaLabel="Company time zone" style={{ flex: '1 1 260px', maxWidth: 380 }}
+          options={TIMEZONES.map((t) => ({ value: t.value, label: t.label }))}
+          onChange={(v) => setTz(v)} />
         <button className="btn btn-primary btn-sm" onClick={save} disabled={!changed || busy}>
           <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Saving…' : 'Save time zone'}
         </button>
@@ -176,9 +177,9 @@ function CreateAccountForm({ currentUser, onCreated }) {
           <input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="≥ 6 chars" /></div>
         <div className="field" style={{ margin: 0 }}><label>Role</label>
           {roles.length > 1 ? (
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              {roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-            </select>
+            <FluidDropdown value={form.role} ariaLabel="Role"
+              options={roles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+              onChange={(v) => setForm({ ...form, role: v })} />
           ) : (
             <input value={ROLE_LABEL[roles[0]] || 'Staff'} disabled />
           )}

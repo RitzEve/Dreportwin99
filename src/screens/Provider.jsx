@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import FluidDropdown from '../components/FluidDropdown.jsx';
 import {
   listCompaniesWithMasters,
   provisionCompany,
@@ -120,9 +121,9 @@ function CreateCompany({ onCreated }) {
         <div className="field"><label>Company name</label>
           <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Acme Pty Ltd" /></div>
         <div className="field"><label>Time zone <span style={styles.opt}>(its log follows this)</span></label>
-          <select value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })}>
-            {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </select></div>
+          <FluidDropdown value={form.timezone} ariaLabel="Time zone"
+            options={TIMEZONES.map((t) => ({ value: t.value, label: t.label }))}
+            onChange={(v) => setForm({ ...form, timezone: v })} /></div>
         <div className="field"><label>Master Name / ID <span style={styles.opt}>(optional)</span></label>
           <input value={form.masterName} onChange={(e) => setForm({ ...form, masterName: e.target.value })} placeholder="e.g. Mario (used for login)" /></div>
         <div className="field"><label>Master email <span style={styles.opt}>(optional)</span></label>
@@ -223,9 +224,9 @@ function CompanyCard({ company, onChanged }) {
             <form onSubmit={doEditCompany} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
                 placeholder="Company name" style={{ width: '100%' }} />
-              <select value={tzDraft} onChange={(e) => setTzDraft(e.target.value)} style={{ width: '100%' }}>
-                {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
+              <FluidDropdown value={tzDraft} ariaLabel="Time zone"
+                options={TIMEZONES.map((t) => ({ value: t.value, label: t.label }))}
+                onChange={(v) => setTzDraft(v)} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button type="submit" className="btn btn-primary btn-sm" disabled={!nameDraft.trim() || busy}>
                   <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> Save

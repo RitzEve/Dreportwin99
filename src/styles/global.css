@@ -183,6 +183,12 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
   [data-glow]::before, [data-glow]::after { display: none; }
 }
 
+/* ---- FluidDropdown panel pop-in (src/components/FluidDropdown.jsx) ---- */
+@keyframes fluid-dd-in {
+  from { opacity: 0; transform: translateY(-6px) scaleY(0.96); }
+  to   { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
 /* ---- Toast animations (src/components/Toast.jsx) ---- */
 @keyframes toast-in-right  { from { opacity: 0; transform: translateX(115%); } to { opacity: 1; transform: translateX(0); } }
 @keyframes toast-out-right { from { opacity: 1; transform: translateX(0); }    to { opacity: 0; transform: translateX(115%); } }

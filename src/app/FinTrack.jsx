@@ -498,12 +498,14 @@ export default function App() {
   const [newMember,setNewMember] = useState({name:"",phone:"",id:""});
   const [newMemberError,setNewMemberError] = useState("");
   const [showOperatorMenu,setShowOperatorMenu] = useState(false);
+  const [showMoreTypes,setShowMoreTypes] = useState(false); // "More" entry-type drawer
   const [showPasswordModal,setShowPasswordModal] = useState(false);
   const [pwForm,setPwForm] = useState({current:"",next:"",confirm:""});
   const [pwError,setPwError] = useState("");
   const [pwSuccess,setPwSuccess] = useState("");
   const opMenuRef = useRef(null);
   const sidebarMenuRef = useRef(null);
+  const moreTypesRef = useRef(null);
   const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
 
   const [search,setSearch] = useState({term:"",dateFrom:"",dateTo:"",type:"",bank:"",member:""});
@@ -577,6 +579,7 @@ export default function App() {
     const handler = e => {
       if(opMenuRef.current&&!opMenuRef.current.contains(e.target)) setShowOperatorMenu(false);
       if(sidebarMenuRef.current&&!sidebarMenuRef.current.contains(e.target)) setShowSidebarMenu(false);
+      if(moreTypesRef.current&&!moreTypesRef.current.contains(e.target)) setShowMoreTypes(false);
     };
     document.addEventListener("mousedown",handler);
     return ()=>document.removeEventListener("mousedown",handler);
@@ -668,6 +671,8 @@ export default function App() {
   },[transactions,search,banks]);
 
   const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
+  // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
+  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -1357,15 +1362,41 @@ export default function App() {
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Choose an entry type to open the entry form.</div>
               {banks.length===0&&<div style={{fontSize:13,color:"#d97706",marginBottom:14,padding:"10px 14px",background:dark?"#3a2a10":"#fdf3e0",borderRadius:8,border:`1px solid #d9770655`}}><i className="ti ti-alert-triangle" aria-hidden="true"/> Add a bank account on the Bank Accounts page before recording transactions.</div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
-                {ENTRY_TYPES.map(t=>{
+                {ENTRY_TYPES.slice(0,5).map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
-                  return <button key={t} type="button" onClick={()=>{ setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(true); }}
+                  return <button key={t} type="button" onClick={()=>openEntryType(t)}
                     style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:dark?c+"22":c+"12",color:c,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color="#fff";}}
                     onMouseLeave={e=>{e.currentTarget.style.background=dark?c+"22":c+"12";e.currentTarget.style.color=c;}}>
                     <i className="ti ti-plus" aria-hidden="true" style={{fontSize:18}}/>{t}
                   </button>;
                 })}
+                {/* "More" drawer — the less-common types (Mistake, Rental, Adjust, Other) */}
+                <div style={{position:"relative"}} ref={moreTypesRef}>
+                  <button type="button" onClick={()=>setShowMoreTypes(s=>!s)} aria-haspopup="menu" aria-expanded={showMoreTypes}
+                    style={{width:"100%",height:"100%",boxSizing:"border-box",cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px dashed ${showMoreTypes?C.accent:C.borderStrong}`,background:showMoreTypes?C.surface2:"transparent",color:showMoreTypes?C.text:C.muted,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"all 0.12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}
+                    onMouseLeave={e=>{if(!showMoreTypes){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}}>
+                    <i className="ti ti-dots" aria-hidden="true" style={{fontSize:18}}/>More
+                  </button>
+                  {showMoreTypes&&(
+                    <div role="menu" style={{position:"absolute",top:"calc(100% + 6px)",left:0,minWidth:200,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:dark?"0 12px 32px rgba(0,0,0,0.5)":"0 12px 32px rgba(0,0,0,0.15)",zIndex:60,overflow:"hidden",padding:6,transformOrigin:"top",animation:"fluid-dd-in 0.18s ease"}}>
+                      {ENTRY_TYPES.slice(5).map(t=>{
+                        const c = TYPE_COLORS[t]||C.accent;
+                        return (
+                          <button key={t} type="button" role="menuitem" onClick={()=>openEntryType(t)}
+                            style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:8,border:"none",cursor:"pointer",background:"transparent",color:C.text,fontSize:13.5,fontWeight:500,textAlign:"left",transition:"background 0.12s"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <span style={{width:9,height:9,borderRadius:"50%",background:c,flexShrink:0}}/>
+                            <i className="ti ti-plus" aria-hidden="true" style={{fontSize:14,color:c,flexShrink:0}}/>
+                            <span>{t}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div style={sectionStyle}>

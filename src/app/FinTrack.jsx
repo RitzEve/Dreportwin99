@@ -453,7 +453,8 @@ export default function App() {
   const [page,setPage] = useState("dashboard");
   const [memberPage,setMemberPage] = useState(1);
   const [memberPageSize,setMemberPageSize] = useState(50);
-  useEffect(()=>{ setMemberPage(1); },[memberPageSize]);
+  const [memberSearch,setMemberSearch] = useState("");
+  useEffect(()=>{ setMemberPage(1); },[memberPageSize,memberSearch]);
   // Sidebar behaviour: "expanded" | "collapsed" | "hover" (expand-on-hover) — default hover.
   const [sidebarMode,setSidebarMode] = useState(()=>{ try{ return localStorage.getItem("fintrack-sidebar-mode-v2")||"hover"; }catch(e){ return "hover"; } });
   useEffect(()=>{ try{ localStorage.setItem("fintrack-sidebar-mode-v2",sidebarMode); }catch(e){} },[sidebarMode]);
@@ -895,12 +896,17 @@ export default function App() {
     {id:"search",icon:"ti-search",label:"Search"},
   ];
 
-  // Members list pagination (same controls as the transaction log).
-  const memberTotal = members.length;
+  // Members list: optional search (name / ID / phone) then pagination.
+  const memberFiltered = useMemo(()=>{
+    const q = memberSearch.trim().toLowerCase();
+    if(!q) return members;
+    return members.filter(m=>(m.name||"").toLowerCase().includes(q)||(m.id||"").toLowerCase().includes(q)||(m.phone||"").toLowerCase().includes(q));
+  },[members,memberSearch]);
+  const memberTotal = memberFiltered.length;
   const memberPages = Math.max(1, Math.ceil(memberTotal/memberPageSize));
   const memberCurPage = Math.min(memberPage, memberPages);
   const memberStart = (memberCurPage-1)*memberPageSize;
-  const memberSlice = members.slice(memberStart, memberStart+memberPageSize);
+  const memberSlice = memberFiltered.slice(memberStart, memberStart+memberPageSize);
 
   const labelStyle = {fontSize:12,color:C.muted,display:"block",marginBottom:4};  const SectionTitle = ({icon,children,right}) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"0 0 12px"}}>
@@ -937,6 +943,57 @@ export default function App() {
       transactions: list,
     });
   };
+
+  // The 10 clickable stat cards (shared by the Dashboard + Transactions pages).
+  const statCardsGrid = (<>
+    <StatCard label="Total deposits" count={stats.deposits.length} amount={stats.sum(stats.deposits)} color="#16a34a" onClick={()=>openStatDetail("Total deposits", stats.deposits)}/>
+    <StatCard label="Total withdrawals" count={stats.withdrawals.length} amount={stats.sum(stats.withdrawals)} color="#dc2626" onClick={()=>openStatDetail("Total withdrawals", stats.withdrawals)}/>
+    <StatCard label="Win / Loss" amount={stats.sum(stats.deposits)-stats.sum(stats.withdrawals)} color={(stats.sum(stats.deposits)-stats.sum(stats.withdrawals))>=0?"#16a34a":"#dc2626"} onClick={()=>openStatDetail("Win / Loss (deposits & withdrawals)", [...stats.deposits, ...stats.withdrawals], stats.sum(stats.deposits)-stats.sum(stats.withdrawals))}/>
+    <StatCard label="New members" count={stats.newMembers.length} amount={stats.sum(stats.newMembers)} color="#2563eb" onClick={()=>openStatDetail("New members", stats.newMembers)}/>
+    <StatCard label="Unclaimed credits" count={stats.unclaimed.length} amount={stats.sum(stats.unclaimed)} color="#d97706" onClick={()=>openStatDetail("Unclaimed credits", stats.unclaimed)}/>
+    <StatCard label="Mistakes" count={stats.mistakes.length} amount={stats.sum(stats.mistakes)} color="#7c3aed" onClick={()=>openStatDetail("Mistakes", stats.mistakes)}/>
+    <StatCard label="Rentals" count={stats.rentals.length} amount={stats.sum(stats.rentals)} color="#0891b2" onClick={()=>openStatDetail("Rentals", stats.rentals)}/>
+    <StatCard label="Store entries" count={stats.store.length} amount={stats.sum(stats.store)} color="#9333ea" onClick={()=>openStatDetail("Store entries", stats.store)}/>
+    <StatCard label="Transfers" count={stats.transfers.length} amount={stats.sum(stats.transfers)} color="#6366f1" onClick={()=>openStatDetail("Transfers", stats.transfers)}/>
+    <StatCard label="Adjustments" count={stats.adjustments.length} amount={stats.sum(stats.adjustments)} color="#0d9488" onClick={()=>openStatDetail("Adjustments", stats.adjustments)}/>
+  </>);
+
+  // The full date-scoped overview (scope tabs + export + the stat-card grid),
+  // shared by the Dashboard and the Transactions page.
+  const statOverview = (<>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+      {toggleBtn(dashView==="today",()=>setDashView("today"),"Today")}
+      {toggleBtn(dashView==="yesterday",()=>setDashView("yesterday"),"Yesterday")}
+      {toggleBtn(dashView==="week",()=>setDashView("week"),"This week")}
+      {toggleBtn(dashView==="month",()=>setDashView("month"),"Monthly")}
+      {toggleBtn(dashView==="range",()=>setDashView("range"),"Date range")}
+      {dashView==="month"&&(
+        <FluidDropdown width={190} style={{marginLeft:4}} value={selMonth} ariaLabel="Select month"
+          options={availableMonths.map(m=>({value:m,label:monthLabel(m)}))}
+          onChange={v=>setSelMonth(v)}/>
+      )}
+      {dashView==="range"&&(
+        <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:4,flexWrap:"wrap"}}>
+          <span style={{fontSize:12,color:C.muted}}>From</span>
+          <input type="date" value={rangeFrom} max={rangeTo||undefined} onChange={e=>setRangeFrom(e.target.value)} style={{boxSizing:"border-box"}}/>
+          <span style={{fontSize:12,color:C.muted}}>To</span>
+          <input type="date" value={rangeTo} min={rangeFrom||undefined} onChange={e=>setRangeTo(e.target.value)} style={{boxSizing:"border-box"}}/>
+        </div>
+      )}
+      <span style={{fontSize:13,color:C.muted,marginLeft:"auto"}}>{dashScopeLabel}</span>
+    </div>
+
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+      <span style={{fontSize:12,color:C.muted,marginRight:2}}>Export this view:</span>
+      <button onClick={()=>exportCSV(dashTx,`fintrack_${scopeName}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
+      <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
+      <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:isWideView?"repeat(5, minmax(0,1fr))":"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
+      {statCardsGrid}
+    </div>
+  </>);
 
   return (
     <div style={{display:"flex",minHeight:620,fontFamily:"var(--font-sans)",position:"relative",overflow:"hidden",borderRadius:12,border:`1px solid ${C.border}`}}>
@@ -1291,47 +1348,7 @@ export default function App() {
 
         {page==="dashboard"&&(
           <div>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-              {toggleBtn(dashView==="today",()=>setDashView("today"),"Today")}
-              {toggleBtn(dashView==="yesterday",()=>setDashView("yesterday"),"Yesterday")}
-              {toggleBtn(dashView==="week",()=>setDashView("week"),"This week")}
-              {toggleBtn(dashView==="month",()=>setDashView("month"),"Monthly")}
-              {toggleBtn(dashView==="range",()=>setDashView("range"),"Date range")}
-              {dashView==="month"&&(
-                <FluidDropdown width={190} style={{marginLeft:4}} value={selMonth} ariaLabel="Select month"
-                  options={availableMonths.map(m=>({value:m,label:monthLabel(m)}))}
-                  onChange={v=>setSelMonth(v)}/>
-              )}
-              {dashView==="range"&&(
-                <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:4,flexWrap:"wrap"}}>
-                  <span style={{fontSize:12,color:C.muted}}>From</span>
-                  <input type="date" value={rangeFrom} max={rangeTo||undefined} onChange={e=>setRangeFrom(e.target.value)} style={{boxSizing:"border-box"}}/>
-                  <span style={{fontSize:12,color:C.muted}}>To</span>
-                  <input type="date" value={rangeTo} min={rangeFrom||undefined} onChange={e=>setRangeTo(e.target.value)} style={{boxSizing:"border-box"}}/>
-                </div>
-              )}
-              <span style={{fontSize:13,color:C.muted,marginLeft:"auto"}}>{dashScopeLabel}</span>
-            </div>
-
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
-              <span style={{fontSize:12,color:C.muted,marginRight:2}}>Export this view:</span>
-              <button onClick={()=>exportCSV(dashTx,`fintrack_${scopeName}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
-              <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
-              <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
-            </div>
-
-            <div style={{display:"grid",gridTemplateColumns:isWideView?"repeat(5, minmax(0,1fr))":"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
-              <StatCard label="Total deposits" count={stats.deposits.length} amount={stats.sum(stats.deposits)} color="#16a34a" onClick={()=>openStatDetail("Total deposits", stats.deposits)}/>
-              <StatCard label="Total withdrawals" count={stats.withdrawals.length} amount={stats.sum(stats.withdrawals)} color="#dc2626" onClick={()=>openStatDetail("Total withdrawals", stats.withdrawals)}/>
-              <StatCard label="Win / Loss" amount={stats.sum(stats.deposits)-stats.sum(stats.withdrawals)} color={(stats.sum(stats.deposits)-stats.sum(stats.withdrawals))>=0?"#16a34a":"#dc2626"} onClick={()=>openStatDetail("Win / Loss (deposits & withdrawals)", [...stats.deposits, ...stats.withdrawals], stats.sum(stats.deposits)-stats.sum(stats.withdrawals))}/>
-              <StatCard label="New members" count={stats.newMembers.length} amount={stats.sum(stats.newMembers)} color="#2563eb" onClick={()=>openStatDetail("New members", stats.newMembers)}/>
-              <StatCard label="Unclaimed credits" count={stats.unclaimed.length} amount={stats.sum(stats.unclaimed)} color="#d97706" onClick={()=>openStatDetail("Unclaimed credits", stats.unclaimed)}/>
-              <StatCard label="Mistakes" count={stats.mistakes.length} amount={stats.sum(stats.mistakes)} color="#7c3aed" onClick={()=>openStatDetail("Mistakes", stats.mistakes)}/>
-              <StatCard label="Rentals" count={stats.rentals.length} amount={stats.sum(stats.rentals)} color="#0891b2" onClick={()=>openStatDetail("Rentals", stats.rentals)}/>
-              <StatCard label="Store entries" count={stats.store.length} amount={stats.sum(stats.store)} color="#9333ea" onClick={()=>openStatDetail("Store entries", stats.store)}/>
-              <StatCard label="Transfers" count={stats.transfers.length} amount={stats.sum(stats.transfers)} color="#6366f1" onClick={()=>openStatDetail("Transfers", stats.transfers)}/>
-              <StatCard label="Adjustments" count={stats.adjustments.length} amount={stats.sum(stats.adjustments)} color="#0d9488" onClick={()=>openStatDetail("Adjustments", stats.adjustments)}/>
-            </div>
+            {statOverview}
 
             <div style={{display:"grid",gridTemplateColumns:isWideView?"2fr 1fr":"1fr",gap:20,alignItems:"start"}}>
               {/* Recent transactions — newest 10, "Show all" jumps to Transactions */}
@@ -1386,6 +1403,7 @@ export default function App() {
 
         {page==="transactions"&&(
           <div>
+            {statOverview}
             <div style={sectionStyle}>
               <SectionTitle icon="ti-plus">Record a transaction</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Choose an entry type to open the entry form.</div>
@@ -1530,6 +1548,11 @@ export default function App() {
               </div>
             }>Members directory</SectionTitle>
             <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a row to view a member's full transaction history.</div>
+            <div style={{position:"relative",maxWidth:380,marginBottom:12}}>
+              <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+              <input type="text" value={memberSearch} onChange={e=>setMemberSearch(e.target.value)} placeholder="Search by name, ID or phone…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+              {memberSearch&&<button type="button" onClick={()=>setMemberSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+            </div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
               <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
                 <span>Show</span>
@@ -1594,6 +1617,9 @@ export default function App() {
                       </tr>
                     );
                   })}
+                  {memberSlice.length===0&&(
+                    <tr><td colSpan={8} style={{padding:"18px",textAlign:"center",color:C.muted,fontSize:13}}>{memberSearch?`No members match “${memberSearch}”.`:"No members yet — add one above."}</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

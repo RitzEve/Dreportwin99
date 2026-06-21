@@ -1475,8 +1475,10 @@ export default function App() {
 
         {page==="transactions"&&(
           <div>
-            {statOverviewCompact}
-            <div style={{marginBottom:20}}>{activeBankCard}</div>
+            <div style={{display:"grid",gridTemplateColumns:isWideView?"1fr 1.8fr":"1fr",gap:20,alignItems:"start",marginBottom:20}}>
+              <div>{activeBankCard}</div>
+              <div>{statOverviewCompact}</div>
+            </div>
             <div style={sectionStyle}>
               <SectionTitle icon="ti-plus">Record a transaction</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Choose an entry type to open the entry form.</div>

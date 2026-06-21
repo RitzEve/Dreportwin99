@@ -204,7 +204,7 @@ function TxBadge({type}) {
   return <span style={{background:c+"26",color:c,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:500,whiteSpace:"nowrap",border:`1px solid ${c}55`}}>{type}</span>;
 }
 
-function TxTable({data, showDelete, onDelete, banks}) {
+function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
   const isCredit = t => ["Regular Deposit","Unclaimed Credit","Adjust"].includes(t.type);
   const bankCell = name => {
     const b = (banks||[]).find(x=>x.name===name);
@@ -215,14 +215,15 @@ function TxTable({data, showDelete, onDelete, banks}) {
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
         <thead>
           <tr style={{background:C.header}}>
-            {["Date / Time","Type","Member / Ref","ID","Amount","Bank","Operator","Notes",...(showDelete?["Action"]:[])]
+            {["No.","Date / Time","Type","Member / Ref","ID","Amount","Bank","Operator","Notes",...(showDelete?["Action"]:[])]
               .map((h,i)=><th key={i} style={{textAlign:"left",padding:"10px",color:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`}}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
-          {data.length===0&&<tr><td colSpan={9} style={{padding:"24px 10px",textAlign:"center",color:C.muted}}>No entries found.</td></tr>}
+          {data.length===0&&<tr><td colSpan={10} style={{padding:"24px 10px",textAlign:"center",color:C.muted}}>No entries found.</td></tr>}
           {data.map((t,idx)=>(
             <tr key={t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
+              <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{startIndex+idx+1}</td>
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{t.date} {t.time}</td>
               <td style={{padding:"9px 10px"}}>
                 <TxBadge type={t.type}/>
@@ -321,7 +322,7 @@ function TxLog({data, showDelete, onDelete, banks}) {
           <button onClick={()=>setPage(Math.min(pages,curPage+1))} disabled={curPage>=pages} style={pagerBtn(curPage>=pages)} aria-label="Next page"><i className="ti ti-chevron-right" aria-hidden="true"/></button>
         </div>
       </div>
-      <TxTable data={slice} showDelete={showDelete} onDelete={onDelete} banks={banks}/>
+      <TxTable data={slice} showDelete={showDelete} onDelete={onDelete} banks={banks} startIndex={start}/>
     </div>
   );
 }
@@ -344,11 +345,21 @@ function Confirm({message,onConfirm,onCancel}) {
 }
 
 function DetailModal({title,subtitle,transactions,onClose,banks}) {
-  const isCredit = t => ["Regular Deposit","Unclaimed Credit","Adjust"].includes(t.type);
-  const bankCell = name => {
-    const b = (banks||[]).find(x=>x.name===name);
-    return b ? <span><span style={{display:"block"}}>{b.holder}</span><span style={{fontSize:11,color:C.muted}}>{name}</span></span> : name;
-  };
+  const [search,setSearch] = useState("");
+  const [sortKey,setSortKey] = useState("date");
+  const [sortDir,setSortDir] = useState("desc");
+  const SORT_COLS = [
+    {key:"date",label:"Date / Time"},{key:"type",label:"Type"},{key:"memberName",label:"Member / Ref"},
+    {key:"memberId",label:"ID"},{key:"amount",label:"Amount"},{key:"bank",label:"Bank"},
+    {key:"operator",label:"Operator"},{key:"notes",label:"Notes"},
+  ];
+  const sortVal = (t,key)=> key==="amount" ? (t.amount||0) : key==="date" ? `${t.date} ${t.time}` : String(t[key]||"").toLowerCase();
+  const q = search.trim().toLowerCase();
+  const filtered = !q ? transactions : transactions.filter(t=>
+    [t.memberName,t.memberId,t.bank,t.type,t.operator,t.notes,t.date].some(v=>String(v||"").toLowerCase().includes(q)) || String(t.amount||"").includes(q));
+  const rows = [...filtered].sort((a,b)=>{ const av=sortVal(a,sortKey),bv=sortVal(b,sortKey); const cmp=av<bv?-1:av>bv?1:0; return sortDir==="asc"?cmp:-cmp; });
+  const toggleSort = key => { if(sortKey===key) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortKey(key); setSortDir((key==="amount"||key==="date")?"desc":"asc"); } };
+  const arrow = key => sortKey===key ? <i className={`ti ti-${sortDir==="asc"?"arrow-up":"arrow-down"}`} aria-hidden="true" style={{fontSize:12,marginLeft:3,verticalAlign:"middle"}}/> : null;
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998,padding:"24px 16px"}} onClick={onClose}>
       <div style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"96%",maxWidth:1240,maxHeight:"82vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
@@ -362,20 +373,43 @@ function DetailModal({title,subtitle,transactions,onClose,banks}) {
           </button>
         </div>
         <div style={{padding:"16px",overflowY:"auto",background:C.bg}}>
-          {transactions.length===0
-            ?<div style={{padding:"30px",textAlign:"center",color:C.muted,fontSize:13}}>No transactions found.</div>
+          <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+            <div style={{position:"relative",flex:"1 1 220px",maxWidth:340}}>
+              <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+              <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search this log…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+              {search&&<button type="button" onClick={()=>setSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+              <span>Sort</span>
+              <FluidDropdown width={150} value={sortKey} ariaLabel="Sort by"
+                options={SORT_COLS.map(c=>({value:c.key,label:c.label}))}
+                onChange={v=>setSortKey(v)}/>
+              <button type="button" onClick={()=>setSortDir(d=>d==="asc"?"desc":"asc")} title={sortDir==="asc"?"Ascending — click for descending":"Descending — click for ascending"}
+                style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,padding:"7px 10px",border:`1px solid ${C.border}`,borderRadius:8,background:C.surface2,color:C.text,fontSize:12,fontWeight:500}}>
+                <i className={`ti ti-${sortDir==="asc"?"sort-ascending":"sort-descending"}`} aria-hidden="true" style={{fontSize:15}}/>{sortDir==="asc"?"Asc":"Desc"}
+              </button>
+            </div>
+            <span style={{fontSize:12,color:C.muted,marginLeft:"auto"}}>{rows.length===transactions.length?`${transactions.length} ${transactions.length===1?"entry":"entries"}`:`${rows.length} of ${transactions.length}`}</span>
+          </div>
+          {rows.length===0
+            ?<div style={{padding:"30px",textAlign:"center",color:C.muted,fontSize:13}}>{search?`No entries match “${search}”.`:"No transactions found."}</div>
             :<div style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                 <thead>
                   <tr style={{background:C.header}}>
-                    {["Date / Time","Type","Member / Ref","ID","Amount","Bank","Operator","Notes"].map((h,i)=>(
-                      <th key={i} style={{textAlign:"left",padding:"10px",color:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`}}>{h}</th>
+                    <th style={{textAlign:"left",padding:"10px",color:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`}}>No.</th>
+                    {SORT_COLS.map(c=>(
+                      <th key={c.key} onClick={()=>toggleSort(c.key)} title="Click to sort by this column"
+                        style={{textAlign:"left",padding:"10px",color:sortKey===c.key?C.text:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`,cursor:"pointer",userSelect:"none"}}>
+                        {c.label}{arrow(c.key)}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((t,idx)=>(
+                  {rows.map((t,idx)=>(
                     <tr key={t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
+                      <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{idx+1}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{t.date} {t.time}</td>
                       <td style={{padding:"9px 10px"}}><TxBadge type={t.type}/>{t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}</td>
                       <td style={{padding:"9px 10px",color:C.text,textDecoration:t.deleted?"line-through":"none"}}>{t.memberName}</td>

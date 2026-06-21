@@ -502,6 +502,7 @@ export default function App() {
   const [newMemberError,setNewMemberError] = useState("");
   const [showOperatorMenu,setShowOperatorMenu] = useState(false);
   const [showMoreTypes,setShowMoreTypes] = useState(false); // "More" entry-type drawer
+  const [showShortcuts,setShowShortcuts] = useState(()=>{ try{ return localStorage.getItem("ft_show_shortcuts")!=="0"; }catch{ return true; } }); // collapsible shortcut strip (remembered)
   const [showPasswordModal,setShowPasswordModal] = useState(false);
   const [pwForm,setPwForm] = useState({current:"",next:"",confirm:""});
   const [pwError,setPwError] = useState("");
@@ -1384,15 +1385,25 @@ export default function App() {
               <SectionTitle icon="ti-plus">Record a transaction</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Choose an entry type to open the entry form.</div>
               {banks.length===0&&<div style={{fontSize:13,color:"#d97706",marginBottom:14,padding:"10px 14px",background:dark?"#3a2a10":"#fdf3e0",borderRadius:8,border:`1px solid #d9770655`}}><i className="ti ti-alert-triangle" aria-hidden="true"/> Add a bank account on the Bank Accounts page before recording transactions.</div>}
-              <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,marginBottom:14,padding:"10px 12px",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8}}>
-                <span style={{fontSize:12,fontWeight:600,color:C.text,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-keyboard" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>Shortcuts:</span>
-                {ENTRY_TYPES.map(t=>{
-                  const c = TYPE_COLORS[t]||C.accent;
-                  return <span key={t} style={{fontSize:11.5,color:C.muted,display:"inline-flex",alignItems:"center",gap:5}}>
-                    <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:c,background:dark?c+"22":c+"14",border:`1px solid ${c}66`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
-                  </span>;
-                })}
-                <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>
+              <div style={{marginBottom:14,padding:"8px 12px",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8}}>
+                <button type="button" onClick={()=>{ const v=!showShortcuts; setShowShortcuts(v); try{ localStorage.setItem("ft_show_shortcuts",v?"1":"0"); }catch{} }} aria-expanded={showShortcuts}
+                  style={{display:"flex",alignItems:"center",gap:6,width:"100%",background:"transparent",border:"none",cursor:"pointer",color:C.text,fontSize:12,fontWeight:600,padding:0,textAlign:"left",fontFamily:"inherit"}}>
+                  <i className="ti ti-keyboard" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>
+                  Keyboard shortcuts
+                  <i className={`ti ti-chevron-${showShortcuts?"up":"down"}`} aria-hidden="true" style={{fontSize:14,color:C.muted,marginLeft:4}}/>
+                  {!showShortcuts&&<span style={{fontSize:11,color:C.muted,fontWeight:400,marginLeft:"auto"}}>Alt + first letter · tap to show</span>}
+                </button>
+                {showShortcuts&&(
+                  <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,marginTop:10}}>
+                    {ENTRY_TYPES.map(t=>{
+                      const c = TYPE_COLORS[t]||C.accent;
+                      return <span key={t} style={{fontSize:11.5,color:C.muted,display:"inline-flex",alignItems:"center",gap:5}}>
+                        <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:c,background:dark?c+"22":c+"14",border:`1px solid ${c}66`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
+                      </span>;
+                    })}
+                    <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>
+                  </div>
+                )}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
                 {ENTRY_TYPES.slice(0,5).map(t=>{

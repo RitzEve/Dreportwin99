@@ -31,10 +31,13 @@ export default function FluidDropdown({
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(null);
   const [rect, setRect] = useState(null);
+  const [kbIndex, setKbIndex] = useState(-1); // keyboard cursor (arrow-key highlight)
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
+  const listRef = useRef(null);
 
   const selected = options.find((o) => String(o.value) === String(value)) || null;
+  const selIdx = options.findIndex((o) => String(o.value) === String(value));
 
   const place = () => {
     const el = wrapRef.current;
@@ -72,13 +75,63 @@ export default function FluidDropdown({
     /* eslint-disable-next-line */
   }, [open]);
 
-  const activeVal = hovered != null ? hovered : (selected ? selected.value : null);
-  const activeIndex = options.findIndex((o) => o.value === activeVal);
+  // Reset the keyboard cursor to the selected row each time the panel opens.
+  useEffect(() => {
+    if (open) setKbIndex(selIdx < 0 ? 0 : selIdx);
+    else { setKbIndex(-1); setHovered(null); }
+    /* eslint-disable-next-line */
+  }, [open]);
+
+  // Keep the keyboard-highlighted row scrolled into view.
+  useEffect(() => {
+    if (!open || kbIndex < 0 || !listRef.current) return;
+    const el = listRef.current;
+    const top = kbIndex * ITEM_H;
+    if (top < el.scrollTop) el.scrollTop = top;
+    else if (top + ITEM_H > el.scrollTop + el.clientHeight) el.scrollTop = top + ITEM_H - el.clientHeight;
+  }, [kbIndex, open]);
+
+  const hoveredIdx = hovered != null ? options.findIndex((o) => o.value === hovered) : -1;
+  const activeIndex = hoveredIdx >= 0 ? hoveredIdx : (kbIndex >= 0 ? kbIndex : selIdx);
+  const activeVal = activeIndex >= 0 ? options[activeIndex].value : null;
+
+  // Keyboard control: ↑/↓ move, Enter/Space select (or open), Esc close, Home/End jump.
+  const moveKb = (delta) => {
+    setHovered(null);
+    setKbIndex((i) => {
+      const base = i < 0 ? (selIdx < 0 ? 0 : selIdx) : i;
+      return Math.min(options.length - 1, Math.max(0, base + delta));
+    });
+  };
+  const onTriggerKey = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) setOpen(true);
+      else moveKb(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      if (open) {
+        e.preventDefault(); e.stopPropagation();
+        if (activeIndex >= 0) onChange(options[activeIndex].value);
+        setOpen(false); setHovered(null);
+      } else {
+        e.preventDefault(); // open with the keyboard instead of bubbling
+        setOpen(true);
+      }
+    } else if (e.key === 'Escape') {
+      if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+    } else if (e.key === 'Home') {
+      if (open) { e.preventDefault(); setHovered(null); setKbIndex(0); }
+    } else if (e.key === 'End') {
+      if (open) { e.preventDefault(); setHovered(null); setKbIndex(options.length - 1); }
+    } else if (e.key === 'Tab') {
+      if (open) setOpen(false);
+    }
+  };
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', width, ...style }}>
       <button
-        type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
+        type="button" onClick={() => setOpen((o) => !o)} onKeyDown={onTriggerKey} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
         style={{
           width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           padding: '8px 12px', minHeight: 38, cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
@@ -98,6 +151,7 @@ export default function FluidDropdown({
       {open && rect && createPortal(
         <div ref={panelRef} style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 4000 }}>
           <div
+            ref={listRef}
             style={{
               background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
               boxShadow: 'var(--shadow, 0 12px 32px rgba(0,0,0,0.28))', padding: 6,

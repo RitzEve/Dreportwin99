@@ -43,6 +43,9 @@ const TYPE_COLORS = {
   "Rental":"#0891b2","Store":"#9333ea","Transfer":"#6366f1","Adjust":"#0d9488",
   "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b"
 };
+// Keyboard shortcuts: Alt + first letter picks an entry type on the Transactions page.
+const SHORTCUT_LETTER = {"Regular Deposit":"D","Regular Withdrawal":"W","Unclaimed Credit":"U","Transfer":"T","Store":"S","Mistake":"M","Rental":"R","Adjust":"A","Other":"O"};
+const TYPE_SHORTCUTS = {d:"Regular Deposit",w:"Regular Withdrawal",u:"Unclaimed Credit",t:"Transfer",s:"Store",m:"Mistake",r:"Rental",a:"Adjust",o:"Other"};
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
 const fmt = n => { const v = Number(n)||0; return (v<0?"-$":"$")+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); };
@@ -506,6 +509,7 @@ export default function App() {
   const opMenuRef = useRef(null);
   const sidebarMenuRef = useRef(null);
   const moreTypesRef = useRef(null);
+  const amountRef = useRef(null); // entry modal: first field to focus on open
   const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
 
   const [search,setSearch] = useState({term:"",dateFrom:"",dateTo:"",type:"",bank:"",member:""});
@@ -690,6 +694,24 @@ export default function App() {
   };
   // Picking any suggestion fills the member's name + ID + phone, and closes all lists.
   const selectMember = m => { setForm(f=>({...f,memberName:m.name,memberId:m.id,memberPhone:m.phone||""})); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); };
+
+  // When the entry modal opens, move focus into it (so Tab cycles the fields).
+  useEffect(()=>{ if(!showEntryModal) return undefined; const id=setTimeout(()=>amountRef.current?.focus(),40); return ()=>clearTimeout(id); },[showEntryModal]);
+
+  // Alt + first letter picks an entry type while on the Transactions page.
+  useEffect(()=>{
+    const onKey = (e)=>{
+      if(!e.altKey||e.ctrlKey||e.metaKey) return;
+      if(page!=="transactions") return;
+      const type = TYPE_SHORTCUTS[(e.key||"").toLowerCase()];
+      if(!type) return;
+      e.preventDefault();
+      if(showEntryModal) setForm(f=>({...f,type}));   // already open → just switch type (keeps typed data)
+      else openEntryType(type);                        // closed → open fresh on that type
+    };
+    window.addEventListener("keydown",onKey);
+    return ()=>window.removeEventListener("keydown",onKey);
+  },[page,showEntryModal,activeBanks]);
 
   const handleDeleteTx = id => {
     const target = transactions.find(t=>t.id===id);
@@ -1024,7 +1046,8 @@ export default function App() {
 
       {showEntryModal&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"24px 16px"}} onClick={closeEntryModal}>
-          <div style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}
+            onKeyDown={e=>{ if(e.key==="Enter"){ const tag=e.target.tagName; if(tag==="BUTTON"||tag==="TEXTAREA") return; e.preventDefault(); handleAddTx(); } }}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
               <div style={{fontWeight:500,fontSize:17,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-plus" aria-hidden="true" style={{color:C.accent}}/> New transaction entry</div>
               <button onClick={closeEntryModal} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}><i className="ti ti-x" aria-hidden="true"/> Close</button>
@@ -1043,12 +1066,28 @@ export default function App() {
                   <FluidDropdown value={form.bankId??""} placeholder="— None —" ariaLabel="Bank account affected"
                     options={[{value:"",label:"— None —"},...activeBanks.map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
                     onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/></div>
-                {form.type==="Transfer"&&<div><label style={labelStyle}>Destination bank (optional)</label>
+                <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
+                  <input ref={amountRef} type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                {form.type==="Transfer"&&<div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Destination bank (optional)</label>
                   <FluidDropdown value={form.toBankId??""} placeholder="— None —" ariaLabel="Destination bank"
                     options={[{value:"",label:"— None —"},...activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
                     onChange={v=>setForm(f=>({...f,toBankId:v===""?null:Number(v)}))}/></div>}
-                <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
-                  <input type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                <div style={{position:"relative",gridColumn:"1/-1"}} ref={suggestRef}>
+                  <label style={labelStyle}>Member name / reference{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")?" (optional)":""}</label>
+                  <input type="text" placeholder="Type to search members..." value={form.memberName} onChange={e=>handleNameInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
+                  {nameSuggestions.length>0&&(
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden"}}>
+                      {nameSuggestions.map(m=>(
+                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
+                          onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+                          <span style={{fontWeight:500}}><i className="ti ti-user" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.name}</span>
+                          <span style={{color:C.muted,fontSize:11,background:C.surface2,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{m.id}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div style={{position:"relative"}} ref={idSuggestRef}><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>
                   <input type="text" placeholder="Type to search by ID…" value={form.memberId} onChange={e=>handleIdInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
                   {idSuggestions.length>0&&(
@@ -1074,22 +1113,6 @@ export default function App() {
                           onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
                           <span style={{fontWeight:500}}><i className="ti ti-phone" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.phone||"—"}</span>
                           <span style={{color:C.muted,fontSize:11}}>{m.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div style={{position:"relative",gridColumn:"1/-1"}} ref={suggestRef}>
-                  <label style={labelStyle}>Member name / reference{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")?" (optional)":""}</label>
-                  <input type="text" placeholder="Type to search members..." value={form.memberName} onChange={e=>handleNameInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
-                  {nameSuggestions.length>0&&(
-                    <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden"}}>
-                      {nameSuggestions.map(m=>(
-                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
-                          onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
-                          <span style={{fontWeight:500}}><i className="ti ti-user" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.name}</span>
-                          <span style={{color:C.muted,fontSize:11,background:C.surface2,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{m.id}</span>
                         </div>
                       ))}
                     </div>
@@ -1361,6 +1384,16 @@ export default function App() {
               <SectionTitle icon="ti-plus">Record a transaction</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Choose an entry type to open the entry form.</div>
               {banks.length===0&&<div style={{fontSize:13,color:"#d97706",marginBottom:14,padding:"10px 14px",background:dark?"#3a2a10":"#fdf3e0",borderRadius:8,border:`1px solid #d9770655`}}><i className="ti ti-alert-triangle" aria-hidden="true"/> Add a bank account on the Bank Accounts page before recording transactions.</div>}
+              <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,marginBottom:14,padding:"10px 12px",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8}}>
+                <span style={{fontSize:12,fontWeight:600,color:C.text,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-keyboard" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>Shortcuts:</span>
+                {ENTRY_TYPES.map(t=>{
+                  const c = TYPE_COLORS[t]||C.accent;
+                  return <span key={t} style={{fontSize:11.5,color:C.muted,display:"inline-flex",alignItems:"center",gap:5}}>
+                    <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:c,background:dark?c+"22":c+"14",border:`1px solid ${c}66`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
+                  </span>;
+                })}
+                <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>
+              </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
                 {ENTRY_TYPES.slice(0,5).map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;

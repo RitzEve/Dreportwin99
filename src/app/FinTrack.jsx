@@ -538,6 +538,7 @@ export default function App() {
   const [newMemberError,setNewMemberError] = useState("");
   const [showOperatorMenu,setShowOperatorMenu] = useState(false);
   const [showMoreTypes,setShowMoreTypes] = useState(false); // "More" entry-type drawer
+  const [showMoreStats,setShowMoreStats] = useState(false); // "More stats" drawer (Transactions page)
   const [showShortcuts,setShowShortcuts] = useState(()=>{ try{ return localStorage.getItem("ft_show_shortcuts")!=="0"; }catch{ return true; } }); // collapsible shortcut strip (remembered)
   const [showPasswordModal,setShowPasswordModal] = useState(false);
   const [pwForm,setPwForm] = useState({current:"",next:"",confirm:""});
@@ -546,6 +547,7 @@ export default function App() {
   const opMenuRef = useRef(null);
   const sidebarMenuRef = useRef(null);
   const moreTypesRef = useRef(null);
+  const moreStatsRef = useRef(null);
   const amountRef = useRef(null); // entry modal: first field to focus on open
   const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
 
@@ -621,6 +623,7 @@ export default function App() {
       if(opMenuRef.current&&!opMenuRef.current.contains(e.target)) setShowOperatorMenu(false);
       if(sidebarMenuRef.current&&!sidebarMenuRef.current.contains(e.target)) setShowSidebarMenu(false);
       if(moreTypesRef.current&&!moreTypesRef.current.contains(e.target)) setShowMoreTypes(false);
+      if(moreStatsRef.current&&!moreStatsRef.current.contains(e.target)) setShowMoreStats(false);
     };
     document.addEventListener("mousedown",handler);
     return ()=>document.removeEventListener("mousedown",handler);
@@ -978,23 +981,28 @@ export default function App() {
     });
   };
 
-  // The 10 clickable stat cards (shared by the Dashboard + Transactions pages).
-  const statCardsGrid = (<>
-    <StatCard label="Total deposits" count={stats.deposits.length} amount={stats.sum(stats.deposits)} color="#16a34a" onClick={()=>openStatDetail("Total deposits", stats.deposits)}/>
-    <StatCard label="Total withdrawals" count={stats.withdrawals.length} amount={stats.sum(stats.withdrawals)} color="#dc2626" onClick={()=>openStatDetail("Total withdrawals", stats.withdrawals)}/>
-    <StatCard label="Win / Loss" amount={stats.sum(stats.deposits)-stats.sum(stats.withdrawals)} color={(stats.sum(stats.deposits)-stats.sum(stats.withdrawals))>=0?"#16a34a":"#dc2626"} onClick={()=>openStatDetail("Win / Loss (deposits & withdrawals)", [...stats.deposits, ...stats.withdrawals], stats.sum(stats.deposits)-stats.sum(stats.withdrawals))}/>
-    <StatCard label="New members" count={stats.newMembers.length} amount={stats.sum(stats.newMembers)} color="#2563eb" onClick={()=>openStatDetail("New members", stats.newMembers)}/>
-    <StatCard label="Unclaimed credits" count={stats.unclaimed.length} amount={stats.sum(stats.unclaimed)} color="#d97706" onClick={()=>openStatDetail("Unclaimed credits", stats.unclaimed)}/>
-    <StatCard label="Mistakes" count={stats.mistakes.length} amount={stats.sum(stats.mistakes)} color="#7c3aed" onClick={()=>openStatDetail("Mistakes", stats.mistakes)}/>
-    <StatCard label="Rentals" count={stats.rentals.length} amount={stats.sum(stats.rentals)} color="#0891b2" onClick={()=>openStatDetail("Rentals", stats.rentals)}/>
-    <StatCard label="Store entries" count={stats.store.length} amount={stats.sum(stats.store)} color="#9333ea" onClick={()=>openStatDetail("Store entries", stats.store)}/>
-    <StatCard label="Transfers" count={stats.transfers.length} amount={stats.sum(stats.transfers)} color="#6366f1" onClick={()=>openStatDetail("Transfers", stats.transfers)}/>
-    <StatCard label="Adjustments" count={stats.adjustments.length} amount={stats.sum(stats.adjustments)} color="#0d9488" onClick={()=>openStatDetail("Adjustments", stats.adjustments)}/>
-  </>);
+  // Stat-card definitions (shared). On Transactions, the 5 "primary" cards stay
+  // visible and the rest fold into a "More stats" drawer.
+  const win = stats.sum(stats.deposits)-stats.sum(stats.withdrawals);
+  const statCardDefs = [
+    {label:"Total deposits", count:stats.deposits.length, amount:stats.sum(stats.deposits), color:"#16a34a", onClick:()=>openStatDetail("Total deposits", stats.deposits)},
+    {label:"Total withdrawals", count:stats.withdrawals.length, amount:stats.sum(stats.withdrawals), color:"#dc2626", onClick:()=>openStatDetail("Total withdrawals", stats.withdrawals)},
+    {label:"Win / Loss", amount:win, color:win>=0?"#16a34a":"#dc2626", onClick:()=>openStatDetail("Win / Loss (deposits & withdrawals)", [...stats.deposits, ...stats.withdrawals], win)},
+    {label:"New members", count:stats.newMembers.length, amount:stats.sum(stats.newMembers), color:"#2563eb", onClick:()=>openStatDetail("New members", stats.newMembers)},
+    {label:"Unclaimed credits", count:stats.unclaimed.length, amount:stats.sum(stats.unclaimed), color:"#d97706", onClick:()=>openStatDetail("Unclaimed credits", stats.unclaimed)},
+    {label:"Mistakes", count:stats.mistakes.length, amount:stats.sum(stats.mistakes), color:"#7c3aed", onClick:()=>openStatDetail("Mistakes", stats.mistakes)},
+    {label:"Rentals", count:stats.rentals.length, amount:stats.sum(stats.rentals), color:"#0891b2", onClick:()=>openStatDetail("Rentals", stats.rentals)},
+    {label:"Store entries", count:stats.store.length, amount:stats.sum(stats.store), color:"#9333ea", onClick:()=>openStatDetail("Store entries", stats.store)},
+    {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
+    {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
+  ];
+  const PRIMARY_STATS = ["Total deposits","Total withdrawals","Win / Loss","Unclaimed credits","Store entries"];
+  const primaryStatCards = statCardDefs.filter(c=>PRIMARY_STATS.includes(c.label));
+  const drawerStatCards  = statCardDefs.filter(c=>!PRIMARY_STATS.includes(c.label));
+  const statCardsGrid = (<>{statCardDefs.map(c=><StatCard key={c.label} {...c}/>)}</>);
 
-  // The full date-scoped overview (scope tabs + export + the stat-card grid),
-  // shared by the Dashboard and the Transactions page.
-  const statOverview = (<>
+  // Scope tabs + export row — the shared header above either stat grid.
+  const statScopeBar = (<>
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
       {toggleBtn(dashView==="today",()=>setDashView("today"),"Today")}
       {toggleBtn(dashView==="yesterday",()=>setDashView("yesterday"),"Yesterday")}
@@ -1023,11 +1031,57 @@ export default function App() {
       <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
       <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
     </div>
+  </>);
 
+  // Dashboard overview — scope bar + ALL 10 stat cards.
+  const statOverview = (<>
+    {statScopeBar}
     <div style={{display:"grid",gridTemplateColumns:isWideView?"repeat(5, minmax(0,1fr))":"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
       {statCardsGrid}
     </div>
   </>);
+
+  // Transactions overview — scope bar + 5 primary cards + a "More stats" drawer.
+  const statOverviewCompact = (<>
+    {statScopeBar}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:18}}>
+      {primaryStatCards.map(c=><StatCard key={c.label} {...c}/>)}
+      <div style={{position:"relative"}} ref={moreStatsRef}>
+        <button type="button" onClick={()=>setShowMoreStats(s=>!s)} aria-haspopup="menu" aria-expanded={showMoreStats}
+          style={{width:"100%",height:"100%",minHeight:78,boxSizing:"border-box",cursor:"pointer",padding:"10px 12px",fontSize:13,fontWeight:500,borderRadius:10,border:`1.5px dashed ${showMoreStats?C.accent:C.borderStrong}`,background:showMoreStats?C.surface2:"transparent",color:showMoreStats?C.text:C.muted,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,transition:"all 0.12s"}}
+          onMouseEnter={e=>{e.currentTarget.style.background=C.surface2;e.currentTarget.style.color=C.text;}}
+          onMouseLeave={e=>{if(!showMoreStats){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.muted;}}}>
+          <i className="ti ti-dots" aria-hidden="true" style={{fontSize:18}}/>More stats
+        </button>
+        {showMoreStats&&(
+          <div role="menu" style={{position:"absolute",top:"calc(100% + 6px)",right:0,width:260,maxWidth:"82vw",maxHeight:"60vh",overflowY:"auto",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:dark?"0 12px 32px rgba(0,0,0,0.5)":"0 12px 32px rgba(0,0,0,0.15)",zIndex:60,padding:8,display:"flex",flexDirection:"column",gap:8,transformOrigin:"top",animation:"fluid-dd-in 0.18s ease"}}>
+            {drawerStatCards.map(c=><StatCard key={c.label} {...c}/>)}
+          </div>
+        )}
+      </div>
+    </div>
+  </>);
+
+  // "Current active bank" card (reused on the Dashboard + Transactions pages).
+  const activeBankCard = (
+    <div style={cardStyle}>
+      <h3 style={{fontSize:16,fontWeight:600,margin:"0 0 14px",color:C.text,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-building-bank" aria-hidden="true" style={{color:C.accent}}/> Current active bank</h3>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {activeBanks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"14px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No active banks.</div>}
+        {activeBanks.map(b=>(
+          <GlowCard key={b.id} color={C.accent} onClick={()=>openBankDetail(b)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:C.bg,borderRadius:10,padding:"11px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+            <div style={{minWidth:0}}>
+              <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={b.holder||b.name}>{b.holder||b.name}</div>
+              <div style={{fontSize:11.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.name}</div>
+            </div>
+            <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:"nowrap",flexShrink:0}}>{fmt(b.balance)}</div>
+          </GlowCard>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{display:"flex",minHeight:620,fontFamily:"var(--font-sans)",position:"relative",overflow:"hidden",borderRadius:12,border:`1px solid ${C.border}`}}>
@@ -1413,23 +1467,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={cardStyle}>
-                  <h3 style={{fontSize:16,fontWeight:600,margin:"0 0 14px",color:C.text,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-building-bank" aria-hidden="true" style={{color:C.accent}}/> Current active bank</h3>
-                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                    {activeBanks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"14px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No active banks.</div>}
-                    {activeBanks.map(b=>(
-                      <GlowCard key={b.id} color={C.accent} onClick={()=>openBankDetail(b)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:C.bg,borderRadius:10,padding:"11px 14px",cursor:"pointer",border:`1px solid ${C.border}`}}
-                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={b.holder||b.name}>{b.holder||b.name}</div>
-                          <div style={{fontSize:11.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.name}</div>
-                        </div>
-                        <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:"nowrap",flexShrink:0}}>{fmt(b.balance)}</div>
-                      </GlowCard>
-                    ))}
-                  </div>
-                </div>
+                {activeBankCard}
               </div>
             </div>
           </div>
@@ -1437,7 +1475,8 @@ export default function App() {
 
         {page==="transactions"&&(
           <div>
-            {statOverview}
+            {statOverviewCompact}
+            <div style={{marginBottom:20}}>{activeBankCard}</div>
             <div style={sectionStyle}>
               <SectionTitle icon="ti-plus">Record a transaction</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Choose an entry type to open the entry form.</div>

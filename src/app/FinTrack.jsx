@@ -482,6 +482,7 @@ export default function App() {
   const [nameSuggestions,setNameSuggestions] = useState([]);
   const [idSuggestions,setIdSuggestions] = useState([]);
   const [phoneSuggestions,setPhoneSuggestions] = useState([]);
+  const [suggestIndex,setSuggestIndex] = useState(-1); // keyboard highlight in member-suggestion lists
   const suggestRef = useRef(null);
   const idSuggestRef = useRef(null);
   const phoneSuggestRef = useRef(null);
@@ -682,19 +683,29 @@ export default function App() {
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
   const handleNameInput = val => {
-    setForm(f=>({...f,memberName:val}));
+    setForm(f=>({...f,memberName:val})); setSuggestIndex(-1); setIdSuggestions([]); setPhoneSuggestions([]);
     setNameSuggestions(val.length>0 ? members.filter(m=>m.name.toLowerCase().includes(val.toLowerCase())) : []);
   };
   const handleIdInput = val => {
-    setForm(f=>({...f,memberId:val}));
+    setForm(f=>({...f,memberId:val})); setSuggestIndex(-1); setNameSuggestions([]); setPhoneSuggestions([]);
     setIdSuggestions(val.length>0 ? members.filter(m=>(m.id||"").toLowerCase().includes(val.toLowerCase())) : []);
   };
   const handlePhoneInput = val => {
-    setForm(f=>({...f,memberPhone:val}));
+    setForm(f=>({...f,memberPhone:val})); setSuggestIndex(-1); setNameSuggestions([]); setIdSuggestions([]);
     setPhoneSuggestions(val.length>0 ? members.filter(m=>(m.phone||"").toLowerCase().includes(val.toLowerCase())) : []);
   };
   // Picking any suggestion fills the member's name + ID + phone, and closes all lists.
-  const selectMember = m => { setForm(f=>({...f,memberName:m.name,memberId:m.id,memberPhone:m.phone||""})); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); };
+  const selectMember = m => { setForm(f=>({...f,memberName:m.name,memberId:m.id,memberPhone:m.phone||""})); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setSuggestIndex(-1); };
+  // Keyboard nav for the member-suggestion lists: ↑/↓ move, Enter selects the
+  // highlighted row (and stops the Enter from also submitting the form), Esc closes.
+  // With nothing highlighted, Enter falls through so the form still saves.
+  const onSuggestKey = (e, suggestions) => {
+    if(!suggestions || suggestions.length===0) return;
+    if(e.key==="ArrowDown"){ e.preventDefault(); e.stopPropagation(); setSuggestIndex(i=>Math.min(suggestions.length-1,(i<0?-1:i)+1)); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); e.stopPropagation(); setSuggestIndex(i=>Math.max(0,(i<0?0:i)-1)); }
+    else if(e.key==="Enter"){ if(suggestIndex>=0&&suggestIndex<suggestions.length){ e.preventDefault(); e.stopPropagation(); selectMember(suggestions[suggestIndex]); } }
+    else if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setSuggestIndex(-1); }
+  };
 
   // When the entry modal opens, move focus into it (so Tab cycles the fields).
   useEffect(()=>{ if(!showEntryModal) return undefined; const id=setTimeout(()=>amountRef.current?.focus(),40); return ()=>clearTimeout(id); },[showEntryModal]);
@@ -1075,13 +1086,11 @@ export default function App() {
                     onChange={v=>setForm(f=>({...f,toBankId:v===""?null:Number(v)}))}/></div>}
                 <div style={{position:"relative",gridColumn:"1/-1"}} ref={suggestRef}>
                   <label style={labelStyle}>Member name / reference{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")?" (optional)":""}</label>
-                  <input type="text" placeholder="Type to search members..." value={form.memberName} onChange={e=>handleNameInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
+                  <input type="text" placeholder="Type to search members..." value={form.memberName} onChange={e=>handleNameInput(e.target.value)} onKeyDown={e=>onSuggestKey(e,nameSuggestions)} style={{width:"100%",boxSizing:"border-box"}}/>
                   {nameSuggestions.length>0&&(
                     <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden"}}>
-                      {nameSuggestions.map(m=>(
-                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
-                          onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+                      {nameSuggestions.map((m,idx)=>(
+                        <div key={m.id} onMouseDown={()=>selectMember(m)} onMouseEnter={()=>setSuggestIndex(idx)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:idx===suggestIndex?C.surface2:C.bg,color:C.text}}>
                           <span style={{fontWeight:500}}><i className="ti ti-user" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.name}</span>
                           <span style={{color:C.muted,fontSize:11,background:C.surface2,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{m.id}</span>
                         </div>
@@ -1090,13 +1099,11 @@ export default function App() {
                   )}
                 </div>
                 <div style={{position:"relative"}} ref={idSuggestRef}><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>
-                  <input type="text" placeholder="Type to search by ID…" value={form.memberId} onChange={e=>handleIdInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
+                  <input type="text" placeholder="Type to search by ID…" value={form.memberId} onChange={e=>handleIdInput(e.target.value)} onKeyDown={e=>onSuggestKey(e,idSuggestions)} style={{width:"100%",boxSizing:"border-box"}}/>
                   {idSuggestions.length>0&&(
                     <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden",maxHeight:220,overflowY:"auto"}}>
-                      {idSuggestions.map(m=>(
-                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
-                          onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+                      {idSuggestions.map((m,idx)=>(
+                        <div key={m.id} onMouseDown={()=>selectMember(m)} onMouseEnter={()=>setSuggestIndex(idx)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:idx===suggestIndex?C.surface2:C.bg,color:C.text}}>
                           <span style={{fontWeight:500}}><i className="ti ti-id" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.id}</span>
                           <span style={{color:C.muted,fontSize:11}}>{m.name}</span>
                         </div>
@@ -1105,13 +1112,11 @@ export default function App() {
                   )}
                 </div>
                 <div style={{position:"relative"}} ref={phoneSuggestRef}><label style={labelStyle}>Phone number <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
-                  <input type="text" placeholder="Type to search by phone…" value={form.memberPhone} onChange={e=>handlePhoneInput(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/>
+                  <input type="text" placeholder="Type to search by phone…" value={form.memberPhone} onChange={e=>handlePhoneInput(e.target.value)} onKeyDown={e=>onSuggestKey(e,phoneSuggestions)} style={{width:"100%",boxSizing:"border-box"}}/>
                   {phoneSuggestions.length>0&&(
                     <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:`2px solid ${C.accent}`,borderRadius:8,zIndex:50,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",marginTop:2,overflow:"hidden",maxHeight:220,overflowY:"auto"}}>
-                      {phoneSuggestions.map(m=>(
-                        <div key={m.id} onMouseDown={()=>selectMember(m)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:C.bg,color:C.text}}
-                          onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+                      {phoneSuggestions.map((m,idx)=>(
+                        <div key={m.id} onMouseDown={()=>selectMember(m)} onMouseEnter={()=>setSuggestIndex(idx)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:idx===suggestIndex?C.surface2:C.bg,color:C.text}}>
                           <span style={{fontWeight:500}}><i className="ti ti-phone" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.phone||"—"}</span>
                           <span style={{color:C.muted,fontSize:11}}>{m.name}</span>
                         </div>

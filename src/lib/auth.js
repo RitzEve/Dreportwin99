@@ -350,6 +350,24 @@ export async function deleteCompany(companyId, password) {
   return { ok: true };
 }
 
+/**
+ * Provider one-click cleanup: delete leftover logins (emails) from accounts that
+ * were deleted BEFORE the auto-free functions existed, so those emails/IDs can be
+ * reused. Returns { ok, count }. Live accounts are never touched (they have a profile).
+ */
+export async function purgeOrphanLogins() {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  const { data, error } = await supabase.rpc('admin_purge_orphan_logins');
+  if (error) {
+    if (/admin_purge_orphan_logins|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      return { ok: false, error: 'This needs a one-time database setup (run migration-007.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true, count: data ?? 0 };
+}
+
 // ---- company team management (master / manager) ---------------------------
 
 export async function listTeam(companyId) {

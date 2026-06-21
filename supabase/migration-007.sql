@@ -76,3 +76,34 @@ end;
 $$;
 
 grant execute on function public.admin_delete_company(uuid) to authenticated;
+
+-- ---- One-click cleanup of OLD leftovers (provider only) ---------------------
+-- Powers the "Clear freed-up emails" button on the Provider page. It removes any
+-- login (auth.users row) that has NO account attached — i.e. the leftovers from
+-- accounts that were deleted BEFORE the functions above existed. Live accounts
+-- always have a profile, so they are never touched. Returns how many it cleared.
+create or replace function public.admin_purge_orphan_logins()
+returns integer
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  caller_role text;
+  n integer;
+begin
+  select role into caller_role from public.profiles where id = auth.uid();
+
+  if caller_role <> 'provider' then
+    raise exception 'Not authorised.';
+  end if;
+
+  with deleted as (
+    delete from auth.users
+     where not exists (select 1 from public.profiles where profiles.id = auth.users.id)
+     returning 1
+  )
+  select count(*) into n from deleted;
+
+  return n;
+end;
+$$;
+
+grant execute on function public.admin_purge_orphan_logins() to authenticated;

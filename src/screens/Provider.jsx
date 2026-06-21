@@ -9,6 +9,7 @@ import {
   updateCompany,
   updateAccountInfo,
   setCompanyLogo,
+  purgeOrphanLogins,
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
@@ -60,6 +61,7 @@ export default function Provider({ ctx, onLogout }) {
         <div style={styles.grid}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <CreateCompany onCreated={refresh} />
+            <MaintenanceCard />
           </div>
 
           <section style={styles.card}>
@@ -136,6 +138,61 @@ function CreateCompany({ onCreated }) {
           <i className={`ti ti-${busy ? 'loader-2' : 'plus'}`} aria-hidden="true" /> {busy ? 'Creating…' : 'Create company'}
         </button>
       </form>
+    </section>
+  );
+}
+
+/* One-click cleanup of leftover login emails from already-deleted accounts. */
+function MaintenanceCard() {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null); // { type:'ok'|'none'|'err', text }
+
+  async function run() {
+    setBusy(true); setResult(null);
+    const res = await purgeOrphanLogins();
+    setBusy(false); setConfirming(false);
+    if (!res.ok) {
+      setResult({ type: 'err', text: res.error });
+      window.showToast?.('Error , Please Try Again', 'error');
+      return;
+    }
+    if (res.count > 0) {
+      setResult({ type: 'ok', text: `Cleared ${res.count} freed-up email${res.count === 1 ? '' : 's'}. They can be used again now.` });
+      window.showToast?.('Action Done !', 'success');
+    } else {
+      setResult({ type: 'none', text: 'Nothing to clear — there are no leftover emails right now.' });
+    }
+  }
+
+  return (
+    <section style={styles.card}>
+      <h3 style={styles.cardTitle}><i className="ti ti-eraser" aria-hidden="true" /> Maintenance</h3>
+      <p style={styles.cardSub}>
+        Clear leftover login emails from accounts that were deleted before the auto-free
+        update, so those emails &amp; IDs can be registered again. Live accounts are never touched.
+      </p>
+
+      {!confirming ? (
+        <button type="button" className="btn btn-ghost" style={{ width: '100%' }}
+          onClick={() => { setResult(null); setConfirming(true); }} disabled={busy}>
+          <i className="ti ti-eraser" aria-hidden="true" /> Clear freed-up emails
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <p style={{ ...styles.cardSub, margin: 0 }}>This permanently removes leftover logins that have no account attached. Continue?</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setConfirming(false)} disabled={busy}>Cancel</button>
+            <button type="button" className="btn btn-primary" style={{ flex: 1 }} onClick={run} disabled={busy}>
+              <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Clearing…' : 'Clear now'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {result?.type === 'ok' && <div className="success-text" style={{ marginTop: 10 }}><i className="ti ti-circle-check" aria-hidden="true" />{result.text}</div>}
+      {result?.type === 'none' && <p style={{ ...styles.cardSub, marginTop: 10 }}>{result.text}</p>}
+      {result?.type === 'err' && <div className="error-text" style={{ marginTop: 10 }}>{result.text}</div>}
     </section>
   );
 }

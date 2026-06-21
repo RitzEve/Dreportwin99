@@ -336,8 +336,17 @@ export async function deleteCompany(companyId, password) {
   if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
   const { error: authErr } = await supabase.auth.signInWithPassword({ email: me.email, password });
   if (authErr) return { ok: false, error: 'Password is incorrect.' };
-  const { error } = await supabase.from('companies').delete().eq('id', companyId);
-  if (error) return { ok: false, error: friendly(error) };
+  // Delete the real logins too (frees every member's email + ID for reuse), then
+  // the company. Falls back to the old delete if the function isn't installed yet.
+  const { error } = await supabase.rpc('admin_delete_company', { target_company: companyId });
+  if (error) {
+    if (/admin_delete_company|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      const { error: delErr } = await supabase.from('companies').delete().eq('id', companyId);
+      if (delErr) return { ok: false, error: friendly(delErr) };
+      return { ok: true };
+    }
+    return { ok: false, error: friendly(error) };
+  }
   return { ok: true };
 }
 
@@ -381,8 +390,17 @@ export async function setActive(userId, active) {
 }
 
 export async function removeAccount(userId) {
-  const { error } = await supabase.from('profiles').delete().eq('id', userId);
-  if (error) return { ok: false, error: friendly(error) };
+  // Delete the real login (frees its email + ID for reuse); this cascades the
+  // profile row away. Falls back to the old delete if the function isn't installed.
+  const { error } = await supabase.rpc('admin_delete_account', { target_id: userId });
+  if (error) {
+    if (/admin_delete_account|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      const { error: delErr } = await supabase.from('profiles').delete().eq('id', userId);
+      if (delErr) return { ok: false, error: friendly(delErr) };
+      return { ok: true };
+    }
+    return { ok: false, error: friendly(error) };
+  }
   return { ok: true };
 }
 

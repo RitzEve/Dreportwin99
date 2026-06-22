@@ -1253,17 +1253,6 @@ export default function App() {
                     onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/></div>
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
                   <input ref={amountRef} type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                {form.type==="Regular Deposit"&&(
-                  <div style={{gridColumn:"1/-1"}}>
-                    <label style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:8,border:`1px solid ${form.fromUnclaimed?"#d97706":C.border}`,background:form.fromUnclaimed?(dark?"#3a2a10":"#fdf3e0"):C.surface2,cursor:"pointer",transition:"all 0.12s"}}>
-                      <input type="checkbox" checked={!!form.fromUnclaimed} onChange={e=>setForm(f=>({...f,fromUnclaimed:e.target.checked}))} style={{marginTop:2,width:16,height:16,cursor:"pointer",accentColor:"#d97706",flexShrink:0}}/>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:500,color:C.text,display:"flex",alignItems:"center",gap:6}}><i className="ti ti-coin" aria-hidden="true" style={{color:"#d97706"}}/>Deposit from unclaimed credit</div>
-                        <div style={{fontSize:11.5,color:C.muted,marginTop:3,lineHeight:1.5}}>Counts as a deposit but takes the amount from the <strong style={{color:C.text}}>unclaimed-credit balance</strong> — no bank account is touched, even if one is selected. Available now: <strong style={{color:unclaimedBalance>0?"#d97706":C.muted}}>{fmt(unclaimedBalance)}</strong></div>
-                      </div>
-                    </label>
-                  </div>
-                )}
                 {form.type==="Transfer"&&<div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Destination bank (optional)</label>
                   <FluidDropdown value={form.toBankId??""} placeholder="— None —" ariaLabel="Destination bank"
                     options={[{value:"",label:"— None —"},...activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
@@ -1310,6 +1299,20 @@ export default function App() {
                 </div>
                 <div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Notes</label>
                   <input type="text" placeholder="Optional notes" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                {form.type==="Regular Deposit"&&(
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:10,padding:"6px 12px",borderRadius:8,border:`1px solid ${form.fromUnclaimed?"#16a34a":C.border}`,background:C.surface2,cursor:"pointer",userSelect:"none",transition:"border-color 0.15s"}}>
+                      <input type="checkbox" checked={!!form.fromUnclaimed} onChange={e=>setForm(f=>({...f,fromUnclaimed:e.target.checked}))} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                      <span aria-hidden="true" style={{width:20,height:20,borderRadius:6,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:form.fromUnclaimed?"#16a34a":"#0b0f16",border:`1px solid ${form.fromUnclaimed?"#16a34a":C.borderStrong}`,boxShadow:form.fromUnclaimed?"0 0 0 3px rgba(22,163,74,0.30), 0 0 9px rgba(22,163,74,0.7)":"none",transition:"all 0.15s"}}>
+                        {form.fromUnclaimed&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:14}}/>}
+                      </span>
+                      <span style={{display:"flex",flexDirection:"column",lineHeight:1.25}}>
+                        <span style={{fontSize:13,fontWeight:500,color:C.text}}>Unclaimed Credit</span>
+                        <span style={{fontSize:10.5,color:C.muted}}>Available now: {fmt(unclaimedBalance)}</span>
+                      </span>
+                    </label>
+                  </div>
+                )}
                 <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:C.surface2,borderRadius:8,border:`1px solid ${C.border}`}}>
                   <i className="ti ti-user-cog" aria-hidden="true" style={{fontSize:16,color:C.accent}}/>
                   <span style={{fontSize:12,color:C.muted}}>Recording as operator</span>

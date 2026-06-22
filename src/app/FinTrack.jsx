@@ -237,6 +237,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
               </td>
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                 const b = bankOfTx(t, banks);
+                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit</span>;
                 const holder = (b&&b.holder) || t.bankHolder || "";
                 return (<span>
                   <span style={{display:"block"}}>{holder || t.bank}</span>
@@ -417,6 +418,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks}) {
                       <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none",color:amtDisplay(t).color}}>{amtDisplay(t).sign}{amtDisplay(t).val}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                         const b = bankOfTx(t, banks);
+                        if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit</span>;
                         const holder = (b&&b.holder) || t.bankHolder || "";
                         return (<span>
                           <span style={{display:"block"}}>{holder || t.bank}</span>
@@ -512,7 +514,7 @@ export default function App() {
   const [rangeFrom,setRangeFrom] = useState(weekAgo);
   const [rangeTo,setRangeTo] = useState(today);
 
-  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:""});
+  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false});
   const [formError,setFormError] = useState("");
   const [nameSuggestions,setNameSuggestions] = useState([]);
   const [idSuggestions,setIdSuggestions] = useState([]);
@@ -689,6 +691,8 @@ export default function App() {
     return transactions.filter(t=>t.date.slice(0,7)===selMonth);
   },[transactions,dashView,selMonth,rangeFrom,rangeTo]);
   const stats = useMemo(()=>computeStats(dashTx),[dashTx]);
+  // All-time unclaimed-credit balance (what a "Deposit from unclaimed credit" draws on).
+  const unclaimedBalance = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Unclaimed Credit"&&!t.fundLeg).reduce((s,t)=>s+(t.amount||0),0),[transactions]);
 
   const monthlyComparison = useMemo(()=>{
     const months = availableMonths.slice(0,6).reverse();
@@ -714,9 +718,9 @@ export default function App() {
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   },[transactions,search,banks]);
 
-  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
+  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
-  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
+  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -795,7 +799,7 @@ export default function App() {
     const time = timeInTz(tz);
     const txDate = form.date || today;   // chosen "Entry date", else default to today
     const ref = form.memberName.trim();
-    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:""};
+    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false};
     // Entry saved OK — close the form, reset it, and pop the success toast.
     const done = ()=>{ setShowEntryModal(false); setForm(blank); window.showToast?.("Action Done !","success"); };
 
@@ -827,6 +831,29 @@ export default function App() {
         const bucketLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:form.type,notes:form.notes,operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,...prev]);
         setNextId(n=>n+1);
+      }
+      done();
+      return;
+    }
+
+    // ---- Regular Deposit funded by Unclaimed Credit (the "Deposit from unclaimed
+    // credit" tick-box): it COUNTS as a deposit AND reduces the unclaimed-credit
+    // balance, WITHOUT touching any bank balance (the money is already in a bank
+    // from when the unclaimed credit was recorded). Two linked legs, no bank. ----
+    if(form.type==="Regular Deposit" && form.fromUnclaimed){
+      if(amt > unclaimedBalance + 1e-9){ setFormError(`Not enough unclaimed credit to claim. Available: ${fmt(unclaimedBalance)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
+      const pairId = `UC-${nextId}`;
+      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const isNew = !existingMember && !!ref;
+      const assignedId = form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`;
+      const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,operator:op,isNew,deleted:false,pairId,fromUnclaimed:true};
+      const ucLeg  = {id:nextId+1,date:txDate,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||"Claimed by deposit",operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
+      setTransactions(prev=>[ucLeg,depLeg,...prev]);
+      setNextId(n=>n+2);
+      if(isNew){
+        setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate}]);
+      } else if(existingMember){
+        setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:txDate}:m));
       }
       done();
       return;
@@ -1226,6 +1253,17 @@ export default function App() {
                     onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/></div>
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
                   <input ref={amountRef} type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                {form.type==="Regular Deposit"&&(
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:8,border:`1px solid ${form.fromUnclaimed?"#d97706":C.border}`,background:form.fromUnclaimed?(dark?"#3a2a10":"#fdf3e0"):C.surface2,cursor:"pointer",transition:"all 0.12s"}}>
+                      <input type="checkbox" checked={!!form.fromUnclaimed} onChange={e=>setForm(f=>({...f,fromUnclaimed:e.target.checked}))} style={{marginTop:2,width:16,height:16,cursor:"pointer",accentColor:"#d97706",flexShrink:0}}/>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:500,color:C.text,display:"flex",alignItems:"center",gap:6}}><i className="ti ti-coin" aria-hidden="true" style={{color:"#d97706"}}/>Deposit from unclaimed credit</div>
+                        <div style={{fontSize:11.5,color:C.muted,marginTop:3,lineHeight:1.5}}>Counts as a deposit but takes the amount from the <strong style={{color:C.text}}>unclaimed-credit balance</strong> — no bank account is touched, even if one is selected. Available now: <strong style={{color:unclaimedBalance>0?"#d97706":C.muted}}>{fmt(unclaimedBalance)}</strong></div>
+                      </div>
+                    </label>
+                  </div>
+                )}
                 {form.type==="Transfer"&&<div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Destination bank (optional)</label>
                   <FluidDropdown value={form.toBankId??""} placeholder="— None —" ariaLabel="Destination bank"
                     options={[{value:"",label:"— None —"},...activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}

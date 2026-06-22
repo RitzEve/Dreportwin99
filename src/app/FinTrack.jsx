@@ -693,6 +693,9 @@ export default function App() {
   const stats = useMemo(()=>computeStats(dashTx),[dashTx]);
   // All-time unclaimed-credit balance (what a "Deposit from unclaimed credit" draws on).
   const unclaimedBalance = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Unclaimed Credit"&&!t.fundLeg).reduce((s,t)=>s+(t.amount||0),0),[transactions]);
+  // Store entries are a running TOTAL (a balance), not a daily flow — so the Store
+  // card always shows the all-time accumulation, ignoring the selected date scope.
+  const storeAllTime = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Store"&&!t.fundLeg),[transactions]);
 
   const monthlyComparison = useMemo(()=>{
     const months = availableMonths.slice(0,6).reverse();
@@ -999,12 +1002,12 @@ export default function App() {
 
   // Click a dashboard stat card → open the detail popup listing that stat's
   // transactions for the currently selected date scope (today / yesterday / etc.).
-  const openStatDetail = (label, rows, totalOverride) => {
+  const openStatDetail = (label, rows, totalOverride, scopeOverride) => {
     const list = rows.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
     const total = totalOverride!==undefined ? totalOverride : rows.reduce((s,t)=>s+(t.amount||0),0);
     setDetailModal({
       title: label,
-      subtitle: `${dashScopeLabel} · ${rows.length} ${rows.length===1?"entry":"entries"} · Total: ${fmt(total)}`,
+      subtitle: `${scopeOverride||dashScopeLabel} · ${rows.length} ${rows.length===1?"entry":"entries"} · Total: ${fmt(total)}`,
       transactions: list,
     });
   };
@@ -1020,7 +1023,7 @@ export default function App() {
     {label:"Unclaimed credits", count:stats.unclaimed.length, amount:stats.sum(stats.unclaimed), color:"#d97706", onClick:()=>openStatDetail("Unclaimed credits", stats.unclaimed)},
     {label:"Mistakes", count:stats.mistakes.length, amount:stats.sum(stats.mistakes), color:"#7c3aed", onClick:()=>openStatDetail("Mistakes", stats.mistakes)},
     {label:"Rentals", count:stats.rentals.length, amount:stats.sum(stats.rentals), color:"#0891b2", onClick:()=>openStatDetail("Rentals", stats.rentals)},
-    {label:"Store entries", count:stats.store.length, amount:stats.sum(stats.store), color:"#9333ea", onClick:()=>openStatDetail("Store entries", stats.store)},
+    {label:"Store entries", count:storeAllTime.length, amount:stats.sum(storeAllTime), color:"#9333ea", onClick:()=>openStatDetail("Store entries", storeAllTime, undefined, "All time (running total)")},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
   ];

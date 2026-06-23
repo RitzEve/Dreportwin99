@@ -48,6 +48,16 @@ const TYPE_COLORS = {
   "Rental":"#0891b2","Store":"#FFDE63","Transfer":"#6366f1","Adjust":"#0d9488",
   "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b"
 };
+// Store's brand colour (#FFDE63) is a pale yellow — readable on a dark background
+// but nearly invisible as plain text on a light one. So we PAIR it with dark ink /
+// a dark outline so it stays legible in BOTH themes: dark ink text when the yellow
+// is a solid fill (badges, active tiles), and a dark text-outline when the yellow
+// itself is the text colour (amounts, counts, inactive pills).
+const STORE_COLOR = "#FFDE63";
+const STORE_INK = "#3d2f00"; // dark brown text placed on top of a solid yellow fill
+const STORE_OUTLINE = "0 0 1px rgba(0,0,0,0.95), 0 1px 1px rgba(0,0,0,0.55)"; // dark outline for yellow text
+const isPaleColor = c => c===STORE_COLOR; // colours too light to use as plain text
+const paleShadow = c => isPaleColor(c) ? STORE_OUTLINE : undefined;
 // Keyboard shortcuts: Alt + first letter picks an entry type on the Transactions page.
 const SHORTCUT_LETTER = {"Regular Deposit":"D","Regular Withdrawal":"W","Unclaimed Credit":"U","Transfer":"T","Store":"S","Mistake":"M","Rental":"R","Adjust":"A","Other":"O"};
 const TYPE_SHORTCUTS = {d:"Regular Deposit",w:"Regular Withdrawal",u:"Unclaimed Credit",t:"Transfer",s:"Store",m:"Mistake",r:"Rental",a:"Adjust",o:"Other"};
@@ -211,13 +221,15 @@ const amtDisplay = t => {
   if(SIGNED_TYPES.includes(t.type)){
     const pos = t.amount>=0;
     const posColor = t.type==="Adjust" ? "#0d9488" : (TYPE_COLORS[t.type]||"#16a34a");
-    return {sign:pos?"+":"-",val:fmt(Math.abs(t.amount)),color:pos?posColor:"#dc2626"};
+    const color = pos?posColor:"#dc2626";
+    return {sign:pos?"+":"-",val:fmt(Math.abs(t.amount)),color,outline:paleShadow(color)};
   }
   const credit=isCreditType(t); return {sign:credit?"+":"-",val:fmt(t.amount),color:credit?"#16a34a":"#dc2626"};
 };
 
 function TxBadge({type}) {
   const c = TYPE_COLORS[type]||"#888";
+  if(isPaleColor(c)) return <span style={{background:c,color:STORE_INK,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:600,whiteSpace:"nowrap",border:`1px solid ${STORE_INK}55`}}>{type}</span>;
   return <span style={{background:c+"26",color:c,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:500,whiteSpace:"nowrap",border:`1px solid ${c}55`}}>{type}</span>;
 }
 
@@ -249,7 +261,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
               </td>
               <td style={{padding:"9px 10px",color:C.text,textDecoration:t.deleted?"line-through":"none"}}>{t.memberName}</td>
               <td style={{padding:"9px 10px",color:C.muted,textDecoration:t.deleted?"line-through":"none"}}>{t.memberId||"—"}</td>
-              <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none",color:amtDisplay(t).color}}>
+              <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none",color:amtDisplay(t).color,textShadow:amtDisplay(t).outline}}>
                 {amtDisplay(t).sign}{amtDisplay(t).val}
               </td>
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
@@ -276,13 +288,13 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
 
 function StatCard({label,count,amount,color,onClick,note}) {
   const accent = color||C.accent;
-  const viewHint = <span style={{color:accent,display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap"}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
+  const viewHint = <span style={{color:accent,textShadow:paleShadow(accent),display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap"}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
   return (
     <GlowCard color={color||C.borderStrong} onClick={onClick}
       style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)",cursor:onClick?"pointer":"default"}}
       title={onClick?"Click to view these entries for the selected date":undefined}>
       <div style={{fontSize:11.5,color:C.muted,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={label}>{label}</div>
-      <div style={{fontSize:17,fontWeight:600,color:color||C.text}}>{fmt(amount)}</div>
+      <div style={{fontSize:17,fontWeight:600,color:color||C.text,textShadow:paleShadow(color)}}>{fmt(amount)}</div>
       {count!==undefined
         ? <div style={{fontSize:11,color:C.muted,marginTop:2,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}><span>{count} {count===1?"entry":"entries"}</span>{onClick&&viewHint}</div>
         : (onClick&&<div style={{fontSize:11,marginTop:2}}>{viewHint}</div>)}
@@ -442,7 +454,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                       <td style={{padding:"9px 10px"}}><TxBadge type={t.type}/>{t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}</td>
                       <td style={{padding:"9px 10px",color:C.text,textDecoration:t.deleted?"line-through":"none"}}>{t.memberName}</td>
                       <td style={{padding:"9px 10px",color:C.muted,textDecoration:t.deleted?"line-through":"none"}}>{t.memberId||"—"}</td>
-                      <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none",color:amtDisplay(t).color}}>{amtDisplay(t).sign}{amtDisplay(t).val}</td>
+                      <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none",color:amtDisplay(t).color,textShadow:amtDisplay(t).outline}}>{amtDisplay(t).sign}{amtDisplay(t).val}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                         const b = bankOfTx(t, banks);
                         if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit</span>;
@@ -1155,7 +1167,7 @@ export default function App() {
         <i className="ti ti-arrows-exchange" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.tfToday||0}{compact?"":" transfers"}
       </span>
       {!compact&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
-      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#FFDE63",fontWeight:600}} title="Store entries from this bank today">
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:STORE_COLOR,textShadow:STORE_OUTLINE,fontWeight:600}} title="Store entries from this bank today">
         <i className="ti ti-building-store" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.stToday||0}{compact?"":" store"}
       </span>
     </div>
@@ -1317,7 +1329,7 @@ export default function App() {
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   const active = form.type===t;
-                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
+                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?(isPaleColor(c)?STORE_INK:"#fff"):c,textShadow:(isPaleColor(c)&&!active)?STORE_OUTLINE:undefined}}>{t}</button>;
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
@@ -1626,7 +1638,7 @@ export default function App() {
                     {ENTRY_TYPES.map(t=>{
                       const c = TYPE_COLORS[t]||C.accent;
                       return <span key={t} style={{fontSize:11.5,color:C.muted,display:"inline-flex",alignItems:"center",gap:5}}>
-                        <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:c,background:dark?c+"22":c+"14",border:`1px solid ${c}66`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
+                        <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:c,textShadow:paleShadow(c),background:dark?c+"22":c+"14",border:`1px solid ${c}66`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
                       </span>;
                     })}
                     <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>
@@ -1637,9 +1649,9 @@ export default function App() {
                 {ENTRY_TYPES.slice(0,5).map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   return <button key={t} type="button" onClick={()=>openEntryType(t)}
-                    style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:dark?c+"22":c+"12",color:c,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color="#fff";}}
-                    onMouseLeave={e=>{e.currentTarget.style.background=dark?c+"22":c+"12";e.currentTarget.style.color=c;}}>
+                    style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:dark?c+"22":c+"12",color:c,textShadow:paleShadow(c),display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color=isPaleColor(c)?STORE_INK:"#fff";e.currentTarget.style.textShadow="none";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=dark?c+"22":c+"12";e.currentTarget.style.color=c;e.currentTarget.style.textShadow=isPaleColor(c)?STORE_OUTLINE:"none";}}>
                     <i className="ti ti-plus" aria-hidden="true" style={{fontSize:18}}/>{t}
                   </button>;
                 })}

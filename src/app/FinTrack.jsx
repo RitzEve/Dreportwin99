@@ -703,14 +703,16 @@ export default function App() {
   // Ordered by priority (active first, latest-activated on top). This single order
   // drives the Bank Accounts cards, the dashboard per-bank list, and the totals.
   const banksLive = useMemo(()=>orderBanks(banks.map(b=>{
-    // Today's entry counts for this bank: deposits in vs withdrawals out.
-    let depToday=0, wdToday=0;
+    // Today's entry counts for this bank: deposits in, withdrawals out, transfers
+    // (a transfer counts on both the source bank (Transfer Out) and destination (Transfer In)).
+    let depToday=0, wdToday=0, tfToday=0;
     for(const t of transactions){
       if(t.deleted||t.fundLeg||t.date!==today||!txInBank(t,b)) continue;
       if(t.type==="Regular Deposit") depToday++;
       else if(t.type==="Regular Withdrawal") wdToday++;
+      else if(t.type==="Transfer In"||t.type==="Transfer Out") tfToday++;
     }
-    return {...b,balance:ftBankBalance(b,transactions),yBalance:ftBankBalanceAsOf(b,transactions,yesterday),depToday,wdToday};
+    return {...b,balance:ftBankBalance(b,transactions),yBalance:ftBankBalanceAsOf(b,transactions,yesterday),depToday,wdToday,tfToday};
   })),[banks,transactions,yesterday,today]);
   // Active banks only, in the same priority order — used in the dashboard per-bank
   // list and the entry-form bank dropdowns (so the top bank is the default choice).
@@ -1134,16 +1136,20 @@ export default function App() {
   </>);
 
   // "Current active bank" card (reused on the Dashboard + Transactions pages).
-  // Small green/red line: how many deposit vs withdrawal ENTRIES hit this bank today.
+  // Small coloured line: how many deposit / withdrawal / transfer ENTRIES hit this bank today.
   const bankTodayCounts = (b, compact=false) => (
-    <div style={{display:"flex",alignItems:"center",gap:compact?6:8,marginTop:compact?3:6,fontSize:compact?10:11.5,flexWrap:"wrap"}}>
+    <div style={{display:"flex",alignItems:"center",gap:compact?7:8,marginTop:compact?3:6,fontSize:compact?10:11.5,flexWrap:"wrap"}}>
       {!compact&&<span style={{color:C.muted}}>Today:</span>}
       <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#16a34a",fontWeight:600}} title="Deposit entries recorded today">
         <i className="ti ti-arrow-down-left" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.depToday||0}{compact?"":" deposits"}
       </span>
-      <span aria-hidden="true" style={{color:C.border}}>·</span>
+      {!compact&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
       <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#dc2626",fontWeight:600}} title="Withdrawal entries recorded today">
         <i className="ti ti-arrow-up-right" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.wdToday||0}{compact?"":" withdrawals"}
+      </span>
+      {!compact&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#6366f1",fontWeight:600}} title="Transfer entries (in + out) recorded today">
+        <i className="ti ti-arrows-exchange" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.tfToday||0}{compact?"":" transfers"}
       </span>
     </div>
   );

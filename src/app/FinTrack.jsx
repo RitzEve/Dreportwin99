@@ -229,14 +229,14 @@ const amtDisplay = t => {
 // text; every other type stays as plain coloured text.
 function Amt({t}) {
   const a = amtDisplay(t);
-  return isPaleColor(a.color)
+  return (isPaleColor(a.color) && !dark)
     ? <span style={{...goldChip,whiteSpace:"nowrap"}}>{a.sign}{a.val}</span>
     : <span style={{color:a.color}}>{a.sign}{a.val}</span>;
 }
 
 function TxBadge({type}) {
   const c = TYPE_COLORS[type]||"#888";
-  if(isPaleColor(c)) return <span style={{background:c,color:STORE_INK,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:600,whiteSpace:"nowrap",border:`1px solid ${STORE_INK}55`}}>{type}</span>;
+  if(isPaleColor(c) && !dark) return <span style={{background:c,color:STORE_INK,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:600,whiteSpace:"nowrap",border:`1px solid ${STORE_INK}55`}}>{type}</span>;
   return <span style={{background:c+"26",color:c,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:500,whiteSpace:"nowrap",border:`1px solid ${c}55`}}>{type}</span>;
 }
 
@@ -293,13 +293,13 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
 
 function StatCard({label,count,amount,color,onClick,note}) {
   const accent = color||C.accent;
-  const viewHint = <span style={{display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap",...(isPaleColor(accent)?goldChip:{color:accent})}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
+  const viewHint = <span style={{display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap",...((isPaleColor(accent)&&!dark)?goldChip:{color:accent})}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
   return (
     <GlowCard color={color||C.borderStrong} onClick={onClick}
       style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)",cursor:onClick?"pointer":"default"}}
       title={onClick?"Click to view these entries for the selected date":undefined}>
       <div style={{fontSize:11.5,color:C.muted,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={label}>{label}</div>
-      <div style={{fontSize:17,fontWeight:600,color:isPaleColor(color)?C.text:(color||C.text)}}>{isPaleColor(color)?<span style={{...goldChip,padding:"1px 8px",borderRadius:6}}>{fmt(amount)}</span>:fmt(amount)}</div>
+      <div style={{fontSize:17,fontWeight:600,color:(isPaleColor(color)&&!dark)?C.text:(color||C.text)}}>{(isPaleColor(color)&&!dark)?<span style={{...goldChip,padding:"1px 8px",borderRadius:6}}>{fmt(amount)}</span>:fmt(amount)}</div>
       {count!==undefined
         ? <div style={{fontSize:11,color:C.muted,marginTop:2,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}><span>{count} {count===1?"entry":"entries"}</span>{onClick&&viewHint}</div>
         : (onClick&&<div style={{fontSize:11,marginTop:2}}>{viewHint}</div>)}
@@ -1172,7 +1172,7 @@ export default function App() {
         <i className="ti ti-arrows-exchange" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.tfToday||0}{compact?"":" transfers"}
       </span>
       {!compact&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
-      <span style={{display:"inline-flex",alignItems:"center",gap:3,background:STORE_COLOR,color:STORE_INK,borderRadius:5,padding:compact?"0 5px":"1px 7px",fontWeight:600}} title="Store entries from this bank today">
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,fontWeight:600,...(dark?{color:STORE_COLOR}:{background:STORE_COLOR,color:STORE_INK,borderRadius:5,padding:compact?"0 5px":"1px 7px"})}} title="Store entries from this bank today">
         <i className="ti ti-building-store" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.stToday||0}{compact?"":" store"}
       </span>
     </div>
@@ -1643,7 +1643,7 @@ export default function App() {
                     {ENTRY_TYPES.map(t=>{
                       const c = TYPE_COLORS[t]||C.accent;
                       return <span key={t} style={{fontSize:11.5,color:C.muted,display:"inline-flex",alignItems:"center",gap:5}}>
-                        <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:isPaleColor(c)?STORE_INK:c,background:isPaleColor(c)?c:(dark?c+"22":c+"14"),border:`1px solid ${isPaleColor(c)?STORE_INK+"55":c+"66"}`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
+                        <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:(isPaleColor(c)&&!dark)?STORE_INK:c,background:(isPaleColor(c)&&!dark)?c:(dark?c+"22":c+"14"),border:`1px solid ${(isPaleColor(c)&&!dark)?STORE_INK+"55":c+"66"}`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
                       </span>;
                     })}
                     <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>

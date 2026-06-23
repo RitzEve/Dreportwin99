@@ -15,6 +15,7 @@ import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import useIsMobile from '../lib/useIsMobile.js';
 
 /*
  * Provider — the distributor's backend (super-admin).
@@ -24,6 +25,7 @@ import ThemeToggle from '../components/ThemeToggle.jsx';
  */
 export default function Provider({ ctx, onLogout }) {
   const { user } = ctx;
+  const isMobile = useIsMobile();
   const [companies, setCompanies] = useState(null); // null = loading
   const [query, setQuery] = useState('');
 
@@ -57,8 +59,8 @@ export default function Provider({ ctx, onLogout }) {
         </div>
       </header>
 
-      <main style={styles.main}>
-        <div style={styles.grid}>
+      <main style={{ ...styles.main, padding: isMobile ? 14 : 24 }}>
+        <div style={{ ...styles.grid, gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 340px) minmax(0, 1fr)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <CreateCompany onCreated={refresh} />
             <MaintenanceCard />
@@ -387,7 +389,7 @@ function CompanyCard({ company, onChanged }) {
 
       {adding && (
         <form onSubmit={doAddMaster} style={styles.addBox}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
             <input placeholder="Name / ID (login)" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
             <input type="email" placeholder="Email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} />
             <input type="text" placeholder="Temp password" value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })} style={{ gridColumn: '1 / -1' }} />

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { login } from '../lib/auth.js';
+import InstallPrompt from '../components/InstallPrompt.jsx';
 
 /*
  * Login — email/Name-ID + password, with a playful animated scene on the left.
@@ -276,8 +277,10 @@ export default function Login({ onAuthed }) {
             </button>
           </form>
 
+          <InstallPrompt />
+
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · v1.5.4
+            Secure access · authorised accounts only · v1.6.0
           </div>
         </div>
       </div>

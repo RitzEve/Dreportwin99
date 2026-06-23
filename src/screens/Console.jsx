@@ -18,6 +18,7 @@ import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import useIsMobile from '../lib/useIsMobile.js';
 
 /*
  * Console — landing page for master & manager accounts.
@@ -33,6 +34,7 @@ const ROLE_LABEL = { master: 'Master', manager: 'Manager', staff: 'Staff' };
 
 export default function Console({ ctx, onOpenApp, onLogout }) {
   const { company, user } = ctx;
+  const isMobile = useIsMobile();
   const [team, setTeam] = useState(null);
   const roleClass = user.role === ROLES.MASTER ? 'badge-master' : 'badge-manager';
 
@@ -63,7 +65,7 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
         </div>
       </header>
 
-      <main style={styles.main}>
+      <main style={{ ...styles.main, padding: isMobile ? 14 : 24 }}>
         <section style={styles.launchCard} onClick={onOpenApp} role="button" tabIndex={0}
           onKeyDown={(e) => (e.key === 'Enter' ? onOpenApp() : null)}>
           <div style={styles.launchIcon}><i className="ti ti-wallet" aria-hidden="true" /></div>
@@ -148,6 +150,7 @@ function CompanyTimezone({ company }) {
 }
 
 function CreateAccountForm({ currentUser, onCreated }) {
+  const isMobile = useIsMobile();
   const roles = creatableRoles(currentUser.role);
   const blank = { name: '', email: '', password: '', role: roles[roles.length - 1] || ROLES.STAFF };
   const [form, setForm] = useState(blank);
@@ -168,7 +171,7 @@ function CreateAccountForm({ currentUser, onCreated }) {
 
   return (
     <form onSubmit={submit} style={styles.createBox}>
-      <div style={styles.createGrid}>
+      <div style={{ ...styles.createGrid, gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr' }}>
         <div className="field" style={{ margin: 0 }}><label>Name / ID</label>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Mario (login)" /></div>
         <div className="field" style={{ margin: 0 }}><label>Email</label>

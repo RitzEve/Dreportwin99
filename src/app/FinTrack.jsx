@@ -1,5 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import FluidDropdown from "../components/FluidDropdown.jsx";
+import useIsMobile from "../lib/useIsMobile.js";
+
+// Short labels for the mobile bottom tab bar (the desktop sidebar uses the full
+// nav labels, but "Bank Accounts" / "Transactions" are too wide for a phone tab).
+const MOBILE_TAB_LABEL = { dashboard:"Home", transactions:"Record", banks:"Banks", members:"Members", search:"Search" };
 
 // ============================================================================
 // SESSION — when this goes online, your login frontend/backend injects the
@@ -363,6 +368,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
   const [search,setSearch] = useState("");
   const [sortKey,setSortKey] = useState("date");
   const [sortDir,setSortDir] = useState("desc");
+  const isMobile = useIsMobile();
   const SORT_COLS = [
     {key:"date",label:"Date / Time"},{key:"type",label:"Type"},{key:"memberName",label:"Member / Ref"},
     {key:"memberId",label:"ID"},{key:"amount",label:"Amount"},{key:"bank",label:"Bank"},
@@ -376,8 +382,8 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
   const toggleSort = key => { if(sortKey===key) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortKey(key); setSortDir((key==="amount"||key==="date")?"desc":"asc"); } };
   const arrow = key => sortKey===key ? <i className={`ti ti-${sortDir==="asc"?"arrow-up":"arrow-down"}`} aria-hidden="true" style={{fontSize:12,marginLeft:3,verticalAlign:"middle"}}/> : null;
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998,padding:"24px 16px"}} onClick={onClose}>
-      <div style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"96%",maxWidth:1240,maxHeight:"82vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:isMobile?"stretch":"center",justifyContent:"center",zIndex:998,padding:isMobile?0:"24px 16px"}} onClick={onClose}>
+      <div style={{background:C.bg,border:isMobile?"none":`2px solid ${C.border}`,borderRadius:isMobile?0:14,width:isMobile?"100%":"96%",maxWidth:isMobile?"none":1240,height:isMobile?"100%":"auto",maxHeight:isMobile?"none":"82vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
           <div>
             <div style={{fontWeight:500,fontSize:17}}>{title}</div>
@@ -419,7 +425,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                 <thead>
                   <tr style={{background:C.header}}>
-                    <th style={{textAlign:"left",padding:"10px",color:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`}}>No.</th>
+                    <th style={{textAlign:"left",padding:"10px",color:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`,...(isMobile?{position:"sticky",left:0,zIndex:2,background:C.header}:null)}}>No.</th>
                     {SORT_COLS.map(c=>(
                       <th key={c.key} onClick={()=>toggleSort(c.key)} title="Click to sort by this column"
                         style={{textAlign:"left",padding:"10px",color:sortKey===c.key?C.text:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`,cursor:"pointer",userSelect:"none"}}>
@@ -431,7 +437,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                 <tbody>
                   {rows.map((t,idx)=>(
                     <tr key={t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
-                      <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{idx+1}</td>
+                      <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",...(isMobile?{position:"sticky",left:0,zIndex:1,background:idx%2?C.surface:C.bg}:null)}}>{idx+1}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{t.date} {t.time}</td>
                       <td style={{padding:"9px 10px"}}><TxBadge type={t.type}/>{t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}</td>
                       <td style={{padding:"9px 10px",color:C.text,textDecoration:t.deleted?"line-through":"none"}}>{t.memberName}</td>
@@ -523,6 +529,7 @@ export default function App() {
   // Wide enough for the 2:1 dashboard split + 5 stat cards per row.
   const [isWideView,setIsWideView] = useState(()=>typeof window!=="undefined" && window.matchMedia("(min-width: 1000px)").matches);
   useEffect(()=>{ const mq=window.matchMedia("(min-width: 1000px)"); const h=e=>setIsWideView(e.matches); mq.addEventListener("change",h); return ()=>mq.removeEventListener("change",h); },[]);
+  const isMobile = useIsMobile();
   const [loaded,setLoaded] = useState(false);
   const [transactions,setTransactions] = useState(initTx);
   const [banks,setBanks] = useState(initBanks);
@@ -1142,7 +1149,7 @@ export default function App() {
   );
 
   return (
-    <div style={{display:"flex",minHeight:620,fontFamily:"var(--font-sans)",position:"relative",overflow:"hidden",borderRadius:12,border:`1px solid ${C.border}`}}>
+    <div style={{display:"flex",minHeight:isMobile?"auto":620,fontFamily:"var(--font-sans)",position:"relative",overflow:"hidden",borderRadius:isMobile?0:12,border:isMobile?"none":`1px solid ${C.border}`}}>
       <style>{`
         .ft-scope input, .ft-scope select, .ft-modal input, .ft-modal select {
           border-radius: 8px;
@@ -1260,8 +1267,8 @@ export default function App() {
       )}
 
       {showEntryModal&&(
-        <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"24px 16px"}} onClick={closeEntryModal}>
-          <div style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}
+        <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:isMobile?"stretch":"center",justifyContent:"center",zIndex:1000,padding:isMobile?0:"24px 16px"}} onClick={closeEntryModal}>
+          <div style={{background:C.bg,border:isMobile?"none":`2px solid ${C.border}`,borderRadius:isMobile?0:14,width:"100%",maxWidth:isMobile?"none":640,height:isMobile?"100%":"auto",maxHeight:isMobile?"none":"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}
             onKeyDown={e=>{ if(e.key==="Enter"){ const tag=e.target.tagName; if(tag==="BUTTON"||tag==="TEXTAREA") return; e.preventDefault(); handleAddTx(); } }}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
               <div style={{fontWeight:500,fontSize:17,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-plus" aria-hidden="true" style={{color:C.accent}}/> New transaction entry</div>
@@ -1276,7 +1283,7 @@ export default function App() {
                   return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
                 })}
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
                 <div><label style={labelStyle}>Bank account affected (optional)</label>
                   <FluidDropdown value={form.bankId??""} placeholder="— None —" ariaLabel="Bank account affected"
                     options={[{value:"",label:"— None —"},...activeBanks.map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
@@ -1361,15 +1368,16 @@ export default function App() {
                 </div>
               </div>
               {formError&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>{formError}</div>}
-              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6}}>
-                <button onClick={closeEntryModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
-                <button onClick={handleAddTx} style={{padding:"9px 22px",cursor:"pointer",fontWeight:500,background:C.accent,color:"#fff",border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Add entry</button>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6,...(isMobile?{position:"sticky",bottom:0,background:C.bg,paddingTop:12,paddingBottom:"calc(6px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.border}`,margin:"6px -20px 0",paddingLeft:20,paddingRight:20}:null)}}>
+                <button onClick={closeEntryModal} style={{cursor:"pointer",padding:"11px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,flex:isMobile?1:"none",minHeight:isMobile?46:"auto"}}>Cancel</button>
+                <button onClick={handleAddTx} style={{padding:"11px 22px",cursor:"pointer",fontWeight:500,background:C.accent,color:"#fff",border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,flex:isMobile?1:"none",minHeight:isMobile?46:"auto"}}><i className="ti ti-check" aria-hidden="true"/> Add entry</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {!isMobile && (
       <aside style={{width:sidebarMode==="expanded"?240:64,minWidth:sidebarMode==="expanded"?240:64,position:"relative",flexShrink:0,overflow:(sidebarHoverExpanding||showSidebarMenu)?"visible":"hidden",zIndex:(sidebarHoverExpanding||showSidebarMenu)?40:"auto",transition:"width 0.3s ease, min-width 0.3s ease"}}
         onMouseEnter={()=>setSidebarHovered(true)} onMouseLeave={()=>{setSidebarHovered(false); setShowSidebarMenu(false);}}>
         <div style={{position:sidebarHoverExpanding?"absolute":"relative",top:0,left:0,width:sidebarExpanded?240:64,height:"100%",display:"flex",flexDirection:"column",background:C.surface,borderRight:`1px solid ${C.border}`,boxShadow:sidebarHoverExpanding?(dark?"0 14px 44px rgba(0,0,0,0.6)":"0 14px 44px rgba(0,0,0,0.18)"):"none",transition:"width 0.25s ease"}}>
@@ -1460,8 +1468,9 @@ export default function App() {
           </div>
         </div>
       </aside>
+      )}
 
-      <main style={{flex:1,padding:"16px 24px 24px",overflowY:"auto",minWidth:0,background:C.bg}}>
+      <main style={{flex:1,padding:isMobile?"12px 12px calc(82px + env(safe-area-inset-bottom))":"16px 24px 24px",overflowY:"auto",minWidth:0,background:C.bg}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
           <h2 style={{margin:0,fontSize:18,fontWeight:500,color:C.text}}>{nav.find(n=>n.id===page)?.label}</h2>
 
@@ -1477,6 +1486,7 @@ export default function App() {
               <span style={{fontWeight:600,color:C.text}}>{clockNow}</span>
               <span style={{whiteSpace:"nowrap"}}>{tzCity(tz)} time</span>
             </div>
+            {!isMobile && (
             <div style={{display:"flex",alignItems:"center",gap:7,fontSize:13,color:C.text}}>
               {SESSION.companyLogo ? (
                 <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{height:26,maxWidth:170,objectFit:"contain",display:"block"}}/>
@@ -1487,6 +1497,7 @@ export default function App() {
                 </>
               )}
             </div>
+            )}
             <div style={{position:"relative"}} ref={opMenuRef}>
               <button onClick={()=>setShowOperatorMenu(o=>!o)} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 10px 6px 6px",color:C.text}}>
                 <div style={{width:26,height:26,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0}}>
@@ -1823,6 +1834,23 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Mobile bottom tab bar — replaces the hover sidebar (no hover on touch).
+          position:fixed so it sits at the very bottom of the phone screen. */}
+      {isMobile && (
+        <nav className="safe-bottom" aria-label="Main navigation" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,display:"flex",background:C.surface,borderTop:`1px solid ${C.border}`,boxShadow:dark?"0 -4px 18px rgba(0,0,0,0.45)":"0 -4px 18px rgba(0,0,0,0.08)"}}>
+          {nav.map(n=>{
+            const active = page===n.id;
+            return (
+              <button key={n.id} onClick={()=>setPage(n.id)} aria-label={n.label} aria-current={active?"page":undefined}
+                style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"7px 2px",minHeight:56,border:"none",borderTop:`2px solid ${active?C.accent:"transparent"}`,background:active?C.accentBg:"transparent",cursor:"pointer",color:active?C.accent:C.muted,fontWeight:active?600:500,transition:"color 0.15s, background 0.15s"}}>
+                <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:21}}/>
+                <span style={{fontSize:10.5,lineHeight:1,whiteSpace:"nowrap"}}>{MOBILE_TAB_LABEL[n.id]||n.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
       </div>
     </div>
   );

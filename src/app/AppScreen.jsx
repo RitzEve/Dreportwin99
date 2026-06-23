@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { changeOwnPassword } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
+import useIsMobile from '../lib/useIsMobile.js';
 
 /*
  * AppScreen — hosts the FinTrack artifact for the logged-in company.
@@ -11,6 +12,7 @@ import FluxLoader from '../components/FluxLoader.jsx';
  */
 export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = true }) {
   const [Comp, setComp] = useState(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!ctx || !ctx.company) { onLogout(); return; }
@@ -56,7 +58,7 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
           {ctx?.user.operatorId} ({ctx?.user.role})
         </span>
       </div>
-      <div style={styles.appArea}>
+      <div style={{ ...styles.appArea, padding: isMobile ? 0 : '16px' }}>
         {Comp ? <Comp /> : (
           <div style={styles.loadingWrap}>
             <FluxLoader phases={[

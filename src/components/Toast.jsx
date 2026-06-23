@@ -70,7 +70,7 @@ export default function ToastHost() {
         if (latest && latest !== BUILD && !notified.has(latest)) {
           notified.add(latest);
           window.showToast?.(
-            `New Version Available, Please Logout Now, Then Press CTRL+SHIFT+R for Hard Refresh, Should Read V${latest} at Login Page Footer , Thanks !`,
+            `New Version V${latest} is ready. To update: log out, fully close this tab or app, then open it again. The login screen should show V${latest}.`,
             'update',
           );
         }

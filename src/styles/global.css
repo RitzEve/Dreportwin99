@@ -202,8 +202,9 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
    and a bottom tab bar / full-screen sheets in the React code.
    ===================================================================== */
 
-/* Never let a page scroll sideways on a phone (stray wide element = bad UX). */
-@media (max-width: 700px) {
+/* Never let a page scroll sideways on a phone (stray wide element = bad UX).
+   Kept in sync with the useIsMobile() hook's default breakpoint (900px). */
+@media (max-width: 900px) {
   html, body { max-width: 100%; overflow-x: hidden; }
 
   /* 16px inputs stop iOS Safari from auto-zooming when a field is focused. */

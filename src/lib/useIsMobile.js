@@ -6,12 +6,12 @@ import { useEffect, useState } from 'react';
  * SAME breakpoint. Mirrors the matchMedia pattern already used for `isWideView`
  * inside FinTrack.jsx.
  *
- *   const isMobile = useIsMobile();   // true when viewport <= 700px wide
+ *   const isMobile = useIsMobile();   // true when viewport <= 900px wide
  *
  * Pass a custom max-width if a component needs a different cutoff:
- *   const isNarrow = useIsMobile(900);
+ *   const isNarrow = useIsMobile(1100);
  */
-export default function useIsMobile(maxWidth = 700) {
+export default function useIsMobile(maxWidth = 900) {
   const query = `(max-width: ${maxWidth}px)`;
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.matchMedia(query).matches,

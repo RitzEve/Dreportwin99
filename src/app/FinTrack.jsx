@@ -704,15 +704,18 @@ export default function App() {
   // drives the Bank Accounts cards, the dashboard per-bank list, and the totals.
   const banksLive = useMemo(()=>orderBanks(banks.map(b=>{
     // Today's entry counts for this bank: deposits in, withdrawals out, transfers
-    // (a transfer counts on both the source bank (Transfer Out) and destination (Transfer In)).
-    let depToday=0, wdToday=0, tfToday=0;
+    // (counted on both the source (Transfer Out) and destination (Transfer In) bank), and store
+    // entries (whose bank-side leg is tagged fundLeg — money taken from the bank into the store).
+    let depToday=0, wdToday=0, tfToday=0, stToday=0;
     for(const t of transactions){
-      if(t.deleted||t.fundLeg||t.date!==today||!txInBank(t,b)) continue;
+      if(t.deleted||t.date!==today) continue;
+      if(t.type==="Store"){ if(t.fundLeg && txInBank(t,b)) stToday++; continue; }
+      if(t.fundLeg||!txInBank(t,b)) continue;
       if(t.type==="Regular Deposit") depToday++;
       else if(t.type==="Regular Withdrawal") wdToday++;
       else if(t.type==="Transfer In"||t.type==="Transfer Out") tfToday++;
     }
-    return {...b,balance:ftBankBalance(b,transactions),yBalance:ftBankBalanceAsOf(b,transactions,yesterday),depToday,wdToday,tfToday};
+    return {...b,balance:ftBankBalance(b,transactions),yBalance:ftBankBalanceAsOf(b,transactions,yesterday),depToday,wdToday,tfToday,stToday};
   })),[banks,transactions,yesterday,today]);
   // Active banks only, in the same priority order — used in the dashboard per-bank
   // list and the entry-form bank dropdowns (so the top bank is the default choice).
@@ -1150,6 +1153,10 @@ export default function App() {
       {!compact&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
       <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#6366f1",fontWeight:600}} title="Transfer entries (in + out) recorded today">
         <i className="ti ti-arrows-exchange" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.tfToday||0}{compact?"":" transfers"}
+      </span>
+      {!compact&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#9333ea",fontWeight:600}} title="Store entries from this bank today">
+        <i className="ti ti-building-store" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.stToday||0}{compact?"":" store"}
       </span>
     </div>
   );

@@ -1334,7 +1334,7 @@ export default function App() {
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   const active = form.type===t;
-                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:active?700:500,borderRadius:8,border:`1.5px solid ${isPaleColor(c)&&active?STORE_INK:c}`,background:isPaleColor(c)?c:(active?c:(dark?c+"22":c+"14")),color:isPaleColor(c)?STORE_INK:(active?"#fff":c)}}>{t}</button>;
+                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
@@ -1654,9 +1654,9 @@ export default function App() {
                 {ENTRY_TYPES.slice(0,5).map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   return <button key={t} type="button" onClick={()=>openEntryType(t)}
-                    style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:isPaleColor(c)?c:(dark?c+"22":c+"12"),color:isPaleColor(c)?STORE_INK:c,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color=isPaleColor(c)?STORE_INK:"#fff";}}
-                    onMouseLeave={e=>{e.currentTarget.style.background=isPaleColor(c)?c:(dark?c+"22":c+"12");e.currentTarget.style.color=isPaleColor(c)?STORE_INK:c;}}>
+                    style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:dark?c+"22":c+"12",color:c,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color="#fff";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=dark?c+"22":c+"12";e.currentTarget.style.color=c;}}>
                     <i className="ti ti-plus" aria-hidden="true" style={{fontSize:18}}/>{t}
                   </button>;
                 })}

@@ -359,7 +359,7 @@ function Confirm({message,onConfirm,onCancel}) {
   );
 }
 
-function DetailModal({title,subtitle,transactions,onClose,banks}) {
+function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
   const [search,setSearch] = useState("");
   const [sortKey,setSortKey] = useState("date");
   const [sortDir,setSortDir] = useState("desc");
@@ -388,6 +388,13 @@ function DetailModal({title,subtitle,transactions,onClose,banks}) {
           </button>
         </div>
         <div style={{padding:"16px",overflowY:"auto",background:C.bg}}>
+          {typeof yesterday==="number"&&(
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"9px 12px",borderRadius:8,background:C.surface2,border:`1px solid ${C.border}`,fontSize:12.5}}>
+              <i className="ti ti-history" aria-hidden="true" style={{color:C.accent,fontSize:16,flexShrink:0}}/>
+              <span style={{color:C.muted}}>Yesterday's closing balance:</span>
+              <strong style={{color:C.text,fontSize:14}}>{fmt(yesterday)}</strong>
+            </div>
+          )}
           <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
             <div style={{position:"relative",flex:"1 1 220px",maxWidth:340}}>
               <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
@@ -969,7 +976,7 @@ export default function App() {
   };
   const openBankDetail = b => {
     const tx = transactions.filter(t=>txInBank(t,b)).sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time));
-    setDetailModal({title:b.name,subtitle:`Holder: ${b.holder} · BSB: ${b.bsb||"—"} · Acc: ${b.account} · ${tx.length} transactions · Balance: ${fmt(b.balance)}`,transactions:tx});
+    setDetailModal({title:b.name,subtitle:`Holder: ${b.holder} · BSB: ${b.bsb||"—"} · Acc: ${b.account} · ${tx.length} transactions · Balance: ${fmt(b.balance)}`,transactions:tx,yesterday:b.yBalance});
   };
 
   const nav = [
@@ -1018,13 +1025,14 @@ export default function App() {
 
   // Click a dashboard stat card → open the detail popup listing that stat's
   // transactions for the currently selected date scope (today / yesterday / etc.).
-  const openStatDetail = (label, rows, totalOverride, scopeOverride) => {
+  const openStatDetail = (label, rows, totalOverride, scopeOverride, yesterdayAmount) => {
     const list = rows.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
     const total = totalOverride!==undefined ? totalOverride : rows.reduce((s,t)=>s+(t.amount||0),0);
     setDetailModal({
       title: label,
       subtitle: `${scopeOverride||dashScopeLabel} · ${rows.length} ${rows.length===1?"entry":"entries"} · Total: ${fmt(total)}`,
       transactions: list,
+      yesterday: yesterdayAmount,
     });
   };
 
@@ -1039,7 +1047,7 @@ export default function App() {
     {label:"Unclaimed credits", count:stats.unclaimed.length, amount:stats.sum(stats.unclaimed), color:"#d97706", onClick:()=>openStatDetail("Unclaimed credits", stats.unclaimed)},
     {label:"Mistakes", count:stats.mistakes.length, amount:stats.sum(stats.mistakes), color:"#7c3aed", onClick:()=>openStatDetail("Mistakes", stats.mistakes)},
     {label:"Rentals", count:stats.rentals.length, amount:stats.sum(stats.rentals), color:"#0891b2", onClick:()=>openStatDetail("Rentals", stats.rentals)},
-    {label:"Store entries", count:storeAllTime.length, amount:stats.sum(storeAllTime), color:"#9333ea", note:`Yesterday: ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", storeAllTime, undefined, "All time (running total)")},
+    {label:"Store entries", count:storeAllTime.length, amount:stats.sum(storeAllTime), color:"#9333ea", note:`Yesterday: ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", storeAllTime, undefined, "All time (running total)", storeYesterday)},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
   ];
@@ -1167,7 +1175,7 @@ export default function App() {
       `}</style>
       <div className="ft-scope" style={{display:"flex",width:"100%",minWidth:0}}>
       {confirm&&<Confirm message={confirm.message} onConfirm={confirm.onConfirm} onCancel={()=>setConfirm(null)}/>}
-      {detailModal&&<DetailModal title={detailModal.title} subtitle={detailModal.subtitle} transactions={detailModal.transactions} banks={banks} onClose={()=>setDetailModal(null)}/>}
+      {detailModal&&<DetailModal title={detailModal.title} subtitle={detailModal.subtitle} transactions={detailModal.transactions} banks={banks} yesterday={detailModal.yesterday} onClose={()=>setDetailModal(null)}/>}
 
       {showPasswordModal&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1001,padding:"24px 16px"}} onClick={closePasswordModal}>

@@ -55,7 +55,7 @@ const TYPE_COLORS = {
 // itself is the text colour (amounts, counts, inactive pills).
 const STORE_COLOR = "#FFDE63";
 const STORE_INK = "#3d2f00"; // dark brown text placed on top of a solid yellow fill
-const STORE_OUTLINE = "0 0 1px rgba(0,0,0,0.95), 0 1px 1px rgba(0,0,0,0.55)"; // dark outline for yellow text
+const STORE_OUTLINE = "0 0 2px rgba(0,0,0,1), 1px 1px 1px rgba(0,0,0,0.9), -1px -1px 1px rgba(0,0,0,0.75), 0 0 3px rgba(0,0,0,0.6)"; // dark outline for yellow text (stronger)
 const isPaleColor = c => c===STORE_COLOR; // colours too light to use as plain text
 const paleShadow = c => isPaleColor(c) ? STORE_OUTLINE : undefined;
 // Keyboard shortcuts: Alt + first letter picks an entry type on the Transactions page.

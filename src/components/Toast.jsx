@@ -26,7 +26,7 @@ import { useEffect, useRef, useState } from 'react';
 const TYPE_CFG = {
   success: { accent: 'var(--success)', icon: 'ti-circle-check', duration: 1000, position: 'bottom-right' },
   error:   { accent: 'var(--danger)',  icon: 'ti-alert-circle', duration: 1000, position: 'bottom-right' },
-  update:  { accent: 'var(--accent)',  icon: 'ti-rocket',       duration: 5000, position: 'top' },
+  update:  { accent: 'var(--accent)',  icon: 'ti-rocket',       duration: 30000, position: 'top' },
 };
 
 let _idSeq = 1;

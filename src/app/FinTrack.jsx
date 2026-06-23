@@ -105,6 +105,18 @@ function ftBankBalance(bank, txs){
   }
   return bal;
 }
+// Running balance for a bank as of the END of a given date (date <= asOf) — used to
+// show "yesterday's closing balance" on the bank cards.
+function ftBankBalanceAsOf(bank, txs, asOf){
+  let bal = bank.openingBalance ?? 0;
+  for(const t of txs){
+    if(t.deleted) continue;
+    if(t.bucketLeg) continue;
+    if(asOf && t.date > asOf) continue;
+    if(txInBank(t,bank)) bal += ftTxDelta(t);
+  }
+  return bal;
+}
 // ---- end balance helpers ----
 const ftHelpersDefined = true;
 // Live balance for a bank = its opening balance + all active transaction effects.
@@ -257,7 +269,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
   );
 }
 
-function StatCard({label,count,amount,color,onClick}) {
+function StatCard({label,count,amount,color,onClick,note}) {
   const accent = color||C.accent;
   const viewHint = <span style={{color:accent,display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap"}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
   return (
@@ -269,6 +281,7 @@ function StatCard({label,count,amount,color,onClick}) {
       {count!==undefined
         ? <div style={{fontSize:11,color:C.muted,marginTop:2,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}><span>{count} {count===1?"entry":"entries"}</span>{onClick&&viewHint}</div>
         : (onClick&&<div style={{fontSize:11,marginTop:2}}>{viewHint}</div>)}
+      {note&&<div style={{fontSize:10.5,color:C.muted,marginTop:3}}>{note}</div>}
     </GlowCard>
   );
 }
@@ -276,20 +289,21 @@ function StatCard({label,count,amount,color,onClick}) {
 // Totals across all bank accounts: all / active-only / inactive-only.
 function BankTotals({banksLive}) {
   const sum = arr => arr.reduce((s,b)=>s+(b.balance||0),0);
+  const ysum = arr => arr.reduce((s,b)=>s+(b.yBalance||0),0);
   const active = banksLive.filter(b=>b.active!==false);
   const inactive = banksLive.filter(b=>b.active===false);
-  const Card = ({label,amount,count,color,icon}) => (
+  const Card = ({label,amount,yamount,count,color,icon}) => (
     <GlowCard color={color} style={{background:C.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color}`}}>
       <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${icon}`} aria-hidden="true" style={{color}}/>{label}</div>
       <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(amount)}</div>
-      <div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"bank":"banks"}</div>
+      <div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"bank":"banks"} · Yesterday: {fmt(yamount)}</div>
     </GlowCard>
   );
   return (
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10}}>
-      <Card label="All banks total" amount={sum(banksLive)} count={banksLive.length} color={C.accent} icon="ti-building-bank"/>
-      <Card label="Active banks total" amount={sum(active)} count={active.length} color="#16a34a" icon="ti-circle-check"/>
-      <Card label="Inactive banks total" amount={sum(inactive)} count={inactive.length} color="#64748b" icon="ti-circle-off"/>
+      <Card label="All banks total" amount={sum(banksLive)} yamount={ysum(banksLive)} count={banksLive.length} color={C.accent} icon="ti-building-bank"/>
+      <Card label="Active banks total" amount={sum(active)} yamount={ysum(active)} count={active.length} color="#16a34a" icon="ti-circle-check"/>
+      <Card label="Inactive banks total" amount={sum(inactive)} yamount={ysum(inactive)} count={inactive.length} color="#64748b" icon="ti-circle-off"/>
     </div>
   );
 }
@@ -674,7 +688,7 @@ export default function App() {
 
   // Ordered by priority (active first, latest-activated on top). This single order
   // drives the Bank Accounts cards, the dashboard per-bank list, and the totals.
-  const banksLive = useMemo(()=>orderBanks(banks.map(b=>({...b,balance:ftBankBalance(b,transactions)}))),[banks,transactions]);
+  const banksLive = useMemo(()=>orderBanks(banks.map(b=>({...b,balance:ftBankBalance(b,transactions),yBalance:ftBankBalanceAsOf(b,transactions,yesterday)}))),[banks,transactions,yesterday]);
   // Active banks only, in the same priority order — used in the dashboard per-bank
   // list and the entry-form bank dropdowns (so the top bank is the default choice).
   const activeBanks = useMemo(()=>banksLive.filter(b=>b.active!==false),[banksLive]);
@@ -696,6 +710,8 @@ export default function App() {
   // Store entries are a running TOTAL (a balance), not a daily flow — so the Store
   // card always shows the all-time accumulation, ignoring the selected date scope.
   const storeAllTime = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Store"&&!t.fundLeg),[transactions]);
+  // Store total as of the end of yesterday (date <= yesterday) — the "yesterday close".
+  const storeYesterday = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Store"&&!t.fundLeg&&t.date<=yesterday).reduce((s,t)=>s+(t.amount||0),0),[transactions,yesterday]);
 
   const monthlyComparison = useMemo(()=>{
     const months = availableMonths.slice(0,6).reverse();
@@ -1023,7 +1039,7 @@ export default function App() {
     {label:"Unclaimed credits", count:stats.unclaimed.length, amount:stats.sum(stats.unclaimed), color:"#d97706", onClick:()=>openStatDetail("Unclaimed credits", stats.unclaimed)},
     {label:"Mistakes", count:stats.mistakes.length, amount:stats.sum(stats.mistakes), color:"#7c3aed", onClick:()=>openStatDetail("Mistakes", stats.mistakes)},
     {label:"Rentals", count:stats.rentals.length, amount:stats.sum(stats.rentals), color:"#0891b2", onClick:()=>openStatDetail("Rentals", stats.rentals)},
-    {label:"Store entries", count:storeAllTime.length, amount:stats.sum(storeAllTime), color:"#9333ea", onClick:()=>openStatDetail("Store entries", storeAllTime, undefined, "All time (running total)")},
+    {label:"Store entries", count:storeAllTime.length, amount:stats.sum(storeAllTime), color:"#9333ea", note:`Yesterday: ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", storeAllTime, undefined, "All time (running total)")},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
   ];
@@ -1107,7 +1123,10 @@ export default function App() {
               <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={b.holder||b.name}>{b.holder||b.name}</div>
               <div style={{fontSize:11.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.name}</div>
             </div>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:"nowrap",flexShrink:0}}>{fmt(b.balance)}</div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:"nowrap"}}>{fmt(b.balance)}</div>
+              <div style={{fontSize:10,color:C.muted,whiteSpace:"nowrap"}}>Yest: {fmt(b.yBalance)}</div>
+            </div>
           </GlowCard>
         ))}
       </div>
@@ -1516,7 +1535,7 @@ export default function App() {
                       <GlowCard key={row.label} color={row.color} style={{background:C.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${row.color}`}}>
                         <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${row.icon}`} aria-hidden="true" style={{color:row.color}}/>{row.label}</div>
                         <div style={{fontSize:19,fontWeight:600,color:C.text}}>{fmt(row.arr.reduce((s,b)=>s+(b.balance||0),0))}</div>
-                        <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{row.arr.length} {row.arr.length===1?"bank":"banks"}</div>
+                        <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{row.arr.length} {row.arr.length===1?"bank":"banks"} · Yesterday: {fmt(row.arr.reduce((s,b)=>s+(b.yBalance||0),0))}</div>
                       </GlowCard>
                     ))}
                   </div>
@@ -1646,6 +1665,7 @@ export default function App() {
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>PayID: {b.payid||"—"}</div>
                         <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(b.balance)}</div>
+                        <div style={{fontSize:11,color:C.muted,marginTop:2}}>Yesterday: {fmt(b.yBalance)}</div>
                         <div style={{fontSize:11,color:C.muted,marginTop:6}}>Click card to view history</div>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
                           <div style={{display:"flex",gap:6}}>

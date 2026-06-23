@@ -45,7 +45,7 @@ const BANK_CHOICES = [
 const TYPE_COLORS = {
   "Regular Deposit":"#16a34a","Regular Withdrawal":"#dc2626",
   "Unclaimed Credit":"#d97706","Mistake":"#7c3aed",
-  "Rental":"#0891b2","Store":"#9333ea","Transfer":"#6366f1","Adjust":"#0d9488",
+  "Rental":"#0891b2","Store":"#FFDE63","Transfer":"#6366f1","Adjust":"#0d9488",
   "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b"
 };
 // Keyboard shortcuts: Alt + first letter picks an entry type on the Transactions page.
@@ -1068,7 +1068,7 @@ export default function App() {
     {label:"Unclaimed credits", count:stats.unclaimed.length, amount:stats.sum(stats.unclaimed), color:"#d97706", onClick:()=>openStatDetail("Unclaimed credits", stats.unclaimed)},
     {label:"Mistakes", count:stats.mistakes.length, amount:stats.sum(stats.mistakes), color:"#7c3aed", onClick:()=>openStatDetail("Mistakes", stats.mistakes)},
     {label:"Rentals", count:stats.rentals.length, amount:stats.sum(stats.rentals), color:"#0891b2", onClick:()=>openStatDetail("Rentals", stats.rentals)},
-    {label:"Store entries", count:storeAllTime.length, amount:stats.sum(storeAllTime), color:"#9333ea", note:`Yesterday: ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", storeAllTime, undefined, "All time (running total)", storeYesterday)},
+    {label:"Store entries", count:storeAllTime.length, amount:stats.sum(storeAllTime), color:"#FFDE63", note:`Yesterday: ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", storeAllTime, undefined, "All time (running total)", storeYesterday)},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
   ];
@@ -1155,7 +1155,7 @@ export default function App() {
         <i className="ti ti-arrows-exchange" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.tfToday||0}{compact?"":" transfers"}
       </span>
       {!compact&&<span aria-hidden="true" style={{color:C.border}}>·</span>}
-      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#9333ea",fontWeight:600}} title="Store entries from this bank today">
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#FFDE63",fontWeight:600}} title="Store entries from this bank today">
         <i className="ti ti-building-store" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.stToday||0}{compact?"":" store"}
       </span>
     </div>

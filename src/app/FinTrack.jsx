@@ -702,7 +702,16 @@ export default function App() {
 
   // Ordered by priority (active first, latest-activated on top). This single order
   // drives the Bank Accounts cards, the dashboard per-bank list, and the totals.
-  const banksLive = useMemo(()=>orderBanks(banks.map(b=>({...b,balance:ftBankBalance(b,transactions),yBalance:ftBankBalanceAsOf(b,transactions,yesterday)}))),[banks,transactions,yesterday]);
+  const banksLive = useMemo(()=>orderBanks(banks.map(b=>{
+    // Today's entry counts for this bank: deposits in vs withdrawals out.
+    let depToday=0, wdToday=0;
+    for(const t of transactions){
+      if(t.deleted||t.fundLeg||t.date!==today||!txInBank(t,b)) continue;
+      if(t.type==="Regular Deposit") depToday++;
+      else if(t.type==="Regular Withdrawal") wdToday++;
+    }
+    return {...b,balance:ftBankBalance(b,transactions),yBalance:ftBankBalanceAsOf(b,transactions,yesterday),depToday,wdToday};
+  })),[banks,transactions,yesterday,today]);
   // Active banks only, in the same priority order — used in the dashboard per-bank
   // list and the entry-form bank dropdowns (so the top bank is the default choice).
   const activeBanks = useMemo(()=>banksLive.filter(b=>b.active!==false),[banksLive]);
@@ -1125,6 +1134,20 @@ export default function App() {
   </>);
 
   // "Current active bank" card (reused on the Dashboard + Transactions pages).
+  // Small green/red line: how many deposit vs withdrawal ENTRIES hit this bank today.
+  const bankTodayCounts = (b, compact=false) => (
+    <div style={{display:"flex",alignItems:"center",gap:compact?6:8,marginTop:compact?3:6,fontSize:compact?10:11.5,flexWrap:"wrap"}}>
+      {!compact&&<span style={{color:C.muted}}>Today:</span>}
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#16a34a",fontWeight:600}} title="Deposit entries recorded today">
+        <i className="ti ti-arrow-down-left" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.depToday||0}{compact?"":" deposits"}
+      </span>
+      <span aria-hidden="true" style={{color:C.border}}>·</span>
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#dc2626",fontWeight:600}} title="Withdrawal entries recorded today">
+        <i className="ti ti-arrow-up-right" aria-hidden="true" style={{fontSize:compact?11:13}}/>{b.wdToday||0}{compact?"":" withdrawals"}
+      </span>
+    </div>
+  );
+
   const activeBankCard = (
     <div style={cardStyle}>
       <h3 style={{fontSize:16,fontWeight:600,margin:"0 0 14px",color:C.text,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-building-bank" aria-hidden="true" style={{color:C.accent}}/> Current active bank</h3>
@@ -1137,6 +1160,7 @@ export default function App() {
             <div style={{minWidth:0}}>
               <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={b.holder||b.name}>{b.holder||b.name}</div>
               <div style={{fontSize:11.5,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.name}</div>
+              {bankTodayCounts(b,true)}
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:"nowrap"}}>{fmt(b.balance)}</div>
@@ -1685,6 +1709,7 @@ export default function App() {
                         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>PayID: {b.payid||"—"}</div>
                         <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(b.balance)}</div>
                         <div style={{fontSize:11,color:C.muted,marginTop:2}}>Yesterday: {fmt(b.yBalance)}</div>
+                        {bankTodayCounts(b)}
                         <div style={{fontSize:11,color:C.muted,marginTop:6}}>Click card to view history</div>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
                           <div style={{display:"flex",gap:6}}>

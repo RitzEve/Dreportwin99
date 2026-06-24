@@ -29,13 +29,24 @@ if (typeof window !== 'undefined') {
     },
     async set(key, value) {
       const companyId = companyIdFromKey(key);
-      if (!companyId) return false;
+      if (!companyId) return null;
       let obj;
       try { obj = JSON.parse(value); } catch { obj = value; }
-      const { error } = await supabase
+      // Preferred path (migration-008): the database merges our data into the company
+      // row ATOMICALLY (it locks the row), so two devices saving at the same instant
+      // can never clobber each other. It returns the merged result so we can sync.
+      const { data, error } = await supabase
+        .rpc('app_data_merge', { p_company_id: companyId, p_incoming: obj });
+      if (!error) return { value: JSON.stringify(data ?? {}) };
+      // Fallback ONLY when the merge function isn't installed yet — plain whole-row
+      // upsert (same as the client-side-merge behaviour shipped in v1.6.17).
+      const missing = error.code === 'PGRST202'
+        || /Could not find the function|does not exist/i.test(error.message || '');
+      if (!missing) return null; // real error (network/permission) — let the app retry; don't overwrite
+      const { error: upErr } = await supabase
         .from('app_data')
         .upsert({ company_id: companyId, data: obj, updated_at: new Date().toISOString() });
-      return !error;
+      return upErr ? null : { value };
     },
     async delete() {
       // legacy key cleanup is a no-op now (data is per-company in the DB)

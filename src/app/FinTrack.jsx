@@ -703,10 +703,14 @@ export default function App() {
         try{ const r = await window.storage.get(key); if(r&&r.value) remote = JSON.parse(r.value); }catch(e){}
         const merged = remote ? mergeData(remote,{transactions,banks,members,nextId}) : {transactions,banks,members,nextId};
         const mergedStr = JSON.stringify(merged);
-        const ok = await window.storage.set(key,mergedStr);
-        if(cancelled || !ok) return;
-        lastSyncRef.current = mergedStr;
-        if(mergedStr !== serialized) applyData(merged); // reflect any entries the merge pulled in from other devices
+        const res = await window.storage.set(key,mergedStr);
+        if(cancelled || !res) return;
+        // With migration-008 the DB merges atomically and returns the authoritative
+        // result — adopt that (it may include entries other devices saved at the same
+        // moment). Without it, res.value just echoes what we sent.
+        const finalStr = (res && res.value) ? res.value : mergedStr;
+        lastSyncRef.current = finalStr;
+        if(finalStr !== serialized) applyData(JSON.parse(finalStr));
       }catch(e){ /* save failed — will retry on the next change or poll */ }
     })();
     return ()=>{ cancelled = true; };

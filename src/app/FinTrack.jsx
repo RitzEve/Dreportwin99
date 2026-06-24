@@ -272,7 +272,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                 const b = bankOfTx(t, banks);
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
-                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit</span>;
+                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${t.claimedFromDate}`:""}</span>;
                 const holder = (b&&b.holder) || t.bankHolder || "";
                 return (<span>
                   <span style={{display:"block"}}>{holder || t.bank}</span>
@@ -386,6 +386,8 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
   const [search,setSearch] = useState("");
   const [sortKey,setSortKey] = useState("date");
   const [sortDir,setSortDir] = useState("desc");
+  const [dateFrom,setDateFrom] = useState("");
+  const [dateTo,setDateTo] = useState("");
   const isMobile = useIsMobile();
   const SORT_COLS = [
     {key:"date",label:"Date / Time"},{key:"type",label:"Type"},{key:"memberName",label:"Member / Ref"},
@@ -394,8 +396,9 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
   ];
   const sortVal = (t,key)=> key==="amount" ? (t.amount||0) : key==="date" ? `${t.date} ${t.time}` : String(t[key]||"").toLowerCase();
   const q = search.trim().toLowerCase();
-  const filtered = !q ? transactions : transactions.filter(t=>
-    [t.memberName,t.memberId,t.bank,t.type,t.operator,t.notes,t.date].some(v=>String(v||"").toLowerCase().includes(q)) || String(t.amount||"").includes(q));
+  const inRange = t => (!dateFrom || t.date>=dateFrom) && (!dateTo || t.date<=dateTo);
+  const matchesQ = t => !q || [t.memberName,t.memberId,t.bank,t.type,t.operator,t.notes,t.date].some(v=>String(v||"").toLowerCase().includes(q)) || String(t.amount||"").includes(q);
+  const filtered = transactions.filter(t=>inRange(t) && matchesQ(t));
   const rows = [...filtered].sort((a,b)=>{ const av=sortVal(a,sortKey),bv=sortVal(b,sortKey); const cmp=av<bv?-1:av>bv?1:0; return sortDir==="asc"?cmp:-cmp; });
   const toggleSort = key => { if(sortKey===key) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortKey(key); setSortDir((key==="amount"||key==="date")?"desc":"asc"); } };
   const arrow = key => sortKey===key ? <i className={`ti ti-${sortDir==="asc"?"arrow-up":"arrow-down"}`} aria-hidden="true" style={{fontSize:12,marginLeft:3,verticalAlign:"middle"}}/> : null;
@@ -435,10 +438,21 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                 <i className={`ti ti-${sortDir==="asc"?"sort-ascending":"sort-descending"}`} aria-hidden="true" style={{fontSize:15}}/>{sortDir==="asc"?"Asc":"Desc"}
               </button>
             </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted,flexWrap:"wrap"}}>
+              <i className="ti ti-calendar-event" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>
+              <span>Date</span>
+              <input type="date" value={dateFrom} max={dateTo||undefined} onChange={e=>setDateFrom(e.target.value)} aria-label="From date" style={{padding:"6px 8px",fontSize:12.5}}/>
+              <span>→</span>
+              <input type="date" value={dateTo} min={dateFrom||undefined} onChange={e=>setDateTo(e.target.value)} aria-label="To date" style={{padding:"6px 8px",fontSize:12.5}}/>
+              {(dateFrom||dateTo)&&<button type="button" onClick={()=>{setDateFrom("");setDateTo("");}} title="Clear date filter"
+                style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,padding:"6px 9px",border:`1px solid ${C.border}`,borderRadius:8,background:C.surface2,color:C.text,fontSize:12,fontWeight:500}}>
+                <i className="ti ti-x" aria-hidden="true" style={{fontSize:14}}/>Clear
+              </button>}
+            </div>
             <span style={{fontSize:12,color:C.muted,marginLeft:"auto"}}>{rows.length===transactions.length?`${transactions.length} ${transactions.length===1?"entry":"entries"}`:`${rows.length} of ${transactions.length}`}</span>
           </div>
           {rows.length===0
-            ?<div style={{padding:"30px",textAlign:"center",color:C.muted,fontSize:13}}>{search?`No entries match “${search}”.`:"No transactions found."}</div>
+            ?<div style={{padding:"30px",textAlign:"center",color:C.muted,fontSize:13}}>{(search||dateFrom||dateTo)?"No entries match your filters.":"No transactions found."}</div>
             :<div style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                 <thead>
@@ -464,7 +478,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                         const b = bankOfTx(t, banks);
                         if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
-                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit</span>;
+                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${t.claimedFromDate}`:""}</span>;
                         const holder = (b&&b.holder) || t.bankHolder || "";
                         return (<span>
                           <span style={{display:"block"}}>{holder || t.bank}</span>
@@ -561,7 +575,7 @@ export default function App() {
   const [rangeFrom,setRangeFrom] = useState(weekAgo);
   const [rangeTo,setRangeTo] = useState(today);
 
-  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false});
+  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""});
   const [formError,setFormError] = useState("");
   const [nameSuggestions,setNameSuggestions] = useState([]);
   const [idSuggestions,setIdSuggestions] = useState([]);
@@ -754,6 +768,19 @@ export default function App() {
   const stats = useMemo(()=>computeStats(dashTx),[dashTx]);
   // All-time unclaimed-credit balance (what a "Deposit from unclaimed credit" draws on).
   const unclaimedBalance = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Unclaimed Credit"&&!t.fundLeg).reduce((s,t)=>s+(t.amount||0),0),[transactions]);
+  // Net unclaimed credit recorded PER DATE (credits minus claim legs, both dated to
+  // that day). A "Deposit from unclaimed credit" can pick which date to claim from;
+  // its claim leg is dated to that day, so it reduces that date's remaining balance.
+  const unclaimedByDate = useMemo(()=>{
+    const m = {};
+    for(const t of transactions){
+      if(t.deleted || t.type!=="Unclaimed Credit" || t.fundLeg) continue;
+      m[t.date] = (m[t.date]||0) + (t.amount||0);
+    }
+    return m;
+  },[transactions]);
+  // Dates that still have credit left to claim, newest first, for the claim-from picker.
+  const claimableDates = useMemo(()=>Object.keys(unclaimedByDate).filter(d=>unclaimedByDate[d]>1e-9).sort((a,b)=>b.localeCompare(a)),[unclaimedByDate]);
   // Store entries are a running TOTAL (a balance), not a daily flow — so the Store
   // card always shows the all-time accumulation, ignoring the selected date scope.
   const storeAllTime = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Store"&&!t.fundLeg),[transactions]);
@@ -784,9 +811,9 @@ export default function App() {
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   },[transactions,search,banks]);
 
-  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
+  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
-  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
+  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -865,7 +892,7 @@ export default function App() {
     const time = timeInTz(tz);
     const txDate = form.date || today;   // chosen "Entry date", else default to today
     const ref = form.memberName.trim();
-    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false};
+    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""};
     // Entry saved OK — close the form, reset it, and pop the success toast.
     const done = ()=>{ setShowEntryModal(false); setForm(blank); window.showToast?.("Action Done !","success"); };
 
@@ -905,15 +932,20 @@ export default function App() {
     // ---- Regular Deposit funded by Unclaimed Credit (the "Deposit from unclaimed
     // credit" tick-box): it COUNTS as a deposit AND reduces the unclaimed-credit
     // balance, WITHOUT touching any bank balance (the money is already in a bank
-    // from when the unclaimed credit was recorded). Two linked legs, no bank. ----
+    // from when the unclaimed credit was recorded). The user picks WHICH DATE's
+    // unclaimed credit to claim from: the deposit leg is dated today (txDate) but the
+    // claim (-amt) leg is dated the chosen day, so it lands in THAT day's log and
+    // reduces that day's remaining unclaimed credit. Two linked legs, no bank. ----
     if(form.type==="Regular Deposit" && form.fromUnclaimed){
-      if(amt > unclaimedBalance + 1e-9){ setFormError(`Not enough unclaimed credit to claim. Available: ${fmt(unclaimedBalance)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
+      const claimFrom = form.claimDate || claimableDates[0] || txDate;   // which day's credit we draw from
+      const availForDate = unclaimedByDate[claimFrom] || 0;
+      if(amt > availForDate + 1e-9){ setFormError(`Not enough unclaimed credit on ${claimFrom} to claim. Available that day: ${fmt(availForDate)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
       const pairId = `UC-${nextId}`;
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`;
-      const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,operator:op,isNew,deleted:false,pairId,fromUnclaimed:true};
-      const ucLeg  = {id:nextId+1,date:txDate,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||"Claimed by deposit",operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
+      const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,operator:op,isNew,deleted:false,pairId,fromUnclaimed:true,claimedFromDate:claimFrom};
+      const ucLeg  = {id:nextId+1,date:claimFrom,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||`Claimed by deposit on ${txDate}`,operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
       setTransactions(prev=>[ucLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
@@ -1360,7 +1392,7 @@ export default function App() {
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   const active = form.type===t;
-                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
+                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false,claimDate:""}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
@@ -1417,9 +1449,9 @@ export default function App() {
                 <div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Notes</label>
                   <input type="text" placeholder="Optional notes" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 {form.type==="Regular Deposit"&&(
-                  <div style={{gridColumn:"1/-1"}}>
-                    <label style={{display:"inline-flex",alignItems:"center",gap:10,padding:"6px 12px",borderRadius:8,border:`1px solid ${form.fromUnclaimed?"#16a34a":C.border}`,background:C.surface2,cursor:"pointer",userSelect:"none",transition:"border-color 0.15s"}}>
-                      <input type="checkbox" checked={!!form.fromUnclaimed} onChange={e=>setForm(f=>({...f,fromUnclaimed:e.target.checked}))} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                  <div style={{gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:10}}>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:10,padding:"6px 12px",borderRadius:8,border:`1px solid ${form.fromUnclaimed?"#16a34a":C.border}`,background:C.surface2,cursor:"pointer",userSelect:"none",transition:"border-color 0.15s",alignSelf:"flex-start"}}>
+                      <input type="checkbox" checked={!!form.fromUnclaimed} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,fromUnclaimed:on,claimDate:on?(f.claimDate||claimableDates[0]||today):f.claimDate}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
                       <span aria-hidden="true" style={{width:20,height:20,borderRadius:6,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:form.fromUnclaimed?"#16a34a":"#0b0f16",border:`1px solid ${form.fromUnclaimed?"#16a34a":C.borderStrong}`,boxShadow:form.fromUnclaimed?"0 0 0 3px rgba(22,163,74,0.30), 0 0 9px rgba(22,163,74,0.7)":"none",transition:"all 0.15s"}}>
                         {form.fromUnclaimed&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:14}}/>}
                       </span>
@@ -1428,6 +1460,16 @@ export default function App() {
                         <span style={{fontSize:10.5,color:C.muted}}>Available now: {fmt(unclaimedBalance)}</span>
                       </span>
                     </label>
+                    {form.fromUnclaimed&&(claimableDates.length===0
+                      ? <div style={{fontSize:12,color:"#d97706",paddingLeft:2,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-alert-triangle" aria-hidden="true"/>No unclaimed credit available to claim yet.</div>
+                      : <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:12.5,color:C.muted,paddingLeft:2}}>
+                          <span style={{fontWeight:500,color:C.text}}>Claim from</span>
+                          <FluidDropdown width={230} value={form.claimDate} ariaLabel="Claim from which date"
+                            options={claimableDates.map(d=>({value:d,label:`${d} — ${fmt(unclaimedByDate[d])} left`}))}
+                            onChange={v=>setForm(f=>({...f,claimDate:v}))}/>
+                          <span>· the deposit still counts as today</span>
+                        </div>
+                    )}
                   </div>
                 )}
                 {form.type==="Regular Withdrawal"&&(

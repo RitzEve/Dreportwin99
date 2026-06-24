@@ -85,6 +85,42 @@ const downloadBlob = (content,filename,mime) => {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 const TX_COLS = ["date","time","type","amount","memberId","memberName","bank","operator","receipt","notes","deleted"];
+
+// A short, globally-unique id stamped on every transaction leg the moment it's
+// created. Because the whole company shares ONE data record, two devices used at the
+// same time must never produce colliding ids — this (time + randomness) guarantees
+// that, so merges below can safely tell every entry apart.
+const mkUid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+
+// Union two saved data blobs so concurrent edits from different devices/operators
+// don't clobber each other. The DB keeps ONE row per company, so a naive overwrite
+// loses whatever the other device added in between. Transactions are matched by their
+// unique `uid` (older rows fall back to `#id`); an entry deleted on EITHER side stays
+// deleted. Members/banks union by id; nextId takes the higher of the two.
+const mergeData = (remote, local) => {
+  remote = remote || {}; local = local || {};
+  const keyOf = t => t && t.uid ? t.uid : `#${t && t.id}`;
+  const txMap = new Map();
+  for(const t of (remote.transactions||[])) txMap.set(keyOf(t), t);
+  for(const t of (local.transactions||[])){
+    const k = keyOf(t), prev = txMap.get(k);
+    txMap.set(k, prev ? {...prev,...t,deleted:!!(prev.deleted||t.deleted)} : t);
+  }
+  const transactions = [...txMap.values()];
+  const memMap = new Map();
+  for(const m of (remote.members||[])) memMap.set(m.id, m);
+  for(const m of (local.members||[])){
+    const prev = memMap.get(m.id);
+    memMap.set(m.id, !prev ? m : ((m.lastActivity||"")>=(prev.lastActivity||"") ? {...prev,...m} : {...m,...prev}));
+  }
+  const members = [...memMap.values()];
+  const bankMap = new Map();
+  for(const b of (remote.banks||[])) bankMap.set(b.id, b);
+  for(const b of (local.banks||[])) bankMap.set(b.id, b);   // local bank edits/toggles win
+  const banks = [...bankMap.values()];
+  const nextId = Math.max(local.nextId||0, remote.nextId||0);
+  return {transactions,banks,members,nextId};
+};
 // ---- balance helpers (single definition) ----
 function ftTxDelta(t){
   if(["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other"].includes(t.type)) return t.amount;
@@ -282,7 +318,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
               <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{t.operator?<span style={{display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-user-cog" aria-hidden="true" style={{fontSize:13}}/>{t.operator}</span>:"—"}</td>
               <td style={{padding:"9px 10px",color:C.muted}}>{t.notes||"—"}{t.receipt?<span style={{display:"block",fontSize:11,color:C.muted}}><i className="ti ti-receipt" aria-hidden="true" style={{fontSize:12,marginRight:3}}/>Receipt: {t.receipt}</span>:null}</td>
               {showDelete&&<td style={{padding:"9px 8px"}}>
-                {!t.deleted&&<button onClick={()=>onDelete(t.id)} style={deleteBtnStyle}><i className="ti ti-trash" aria-hidden="true"/> Delete</button>}
+                {!t.deleted&&<button onClick={()=>onDelete(t.uid||t.id)} style={deleteBtnStyle}><i className="ti ti-trash" aria-hidden="true"/> Delete</button>}
               </td>}
             </tr>
           ))}
@@ -613,6 +649,7 @@ export default function App() {
   const moreStatsRef = useRef(null);
   const amountRef = useRef(null); // entry modal: first field to focus on open
   const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
+  const dataRef = useRef({transactions:[],banks:[],members:[],nextId:1}); // always-current state, so the poller can merge without restarting its timer
 
   const [search,setSearch] = useState({term:"",dateFrom:"",dateTo:"",type:"",bank:"",member:""});
 
@@ -646,26 +683,51 @@ export default function App() {
     })();
   },[]);
 
+  // Keep a ref to the latest state so the poller below can MERGE against it without
+  // having to restart its timer every time something changes.
+  useEffect(()=>{ dataRef.current = {transactions,banks,members,nextId}; });
+
+  // Save. Because the whole company shares ONE record, we don't blindly overwrite:
+  // we re-read the latest saved data and MERGE our changes into it, so an entry that
+  // another device/operator added in the meantime is never wiped out. We only mark
+  // the data "synced" on a confirmed successful write (so a failed save retries).
   useEffect(()=>{
     if(!loaded) return;
     const serialized = JSON.stringify({transactions,banks,members,nextId});
     if(serialized === lastSyncRef.current) return; // nothing new to persist (incl. data we just pulled in)
+    let cancelled = false;
     (async()=>{
-      try{ await window.storage.set(`fintrack-${SESSION.companyId}-v2`,serialized); lastSyncRef.current = serialized; }
-      catch(e){ /* save failed */ }
+      try{
+        const key = `fintrack-${SESSION.companyId}-v2`;
+        let remote = null;
+        try{ const r = await window.storage.get(key); if(r&&r.value) remote = JSON.parse(r.value); }catch(e){}
+        const merged = remote ? mergeData(remote,{transactions,banks,members,nextId}) : {transactions,banks,members,nextId};
+        const mergedStr = JSON.stringify(merged);
+        const ok = await window.storage.set(key,mergedStr);
+        if(cancelled || !ok) return;
+        lastSyncRef.current = mergedStr;
+        if(mergedStr !== serialized) applyData(merged); // reflect any entries the merge pulled in from other devices
+      }catch(e){ /* save failed — will retry on the next change or poll */ }
     })();
+    return ()=>{ cancelled = true; };
   },[transactions,banks,members,nextId,loaded]);
 
   // Auto-refresh: every 10s pull the latest saved data so changes made on other
-  // devices/operators appear here. We only adopt it when it differs from what we
-  // last loaded/saved, so it never clobbers our own just-saved changes.
+  // devices/operators appear here. We MERGE it into whatever we have locally (rather
+  // than replacing), so a refresh never drops an entry we just made that hasn't
+  // finished saving yet.
   useEffect(()=>{
     if(!loaded) return;
     const key = `fintrack-${SESSION.companyId}-v2`;
     const id = setInterval(async()=>{
       try{
         const r = await window.storage.get(key);
-        if(r&&r.value && r.value !== lastSyncRef.current){ applyData(JSON.parse(r.value)); lastSyncRef.current = r.value; }
+        if(r&&r.value && r.value !== lastSyncRef.current){
+          const merged = mergeData(JSON.parse(r.value), dataRef.current);
+          const mergedStr = JSON.stringify(merged);
+          applyData(merged);
+          lastSyncRef.current = mergedStr;
+        }
       }catch(e){ /* offline / transient */ }
     },10000);
     return ()=>clearInterval(id);
@@ -860,15 +922,19 @@ export default function App() {
     return ()=>window.removeEventListener("keydown",onKey);
   },[page,showEntryModal,activeBanks]);
 
-  const handleDeleteTx = id => {
-    const target = transactions.find(t=>t.id===id);
+  const handleDeleteTx = key => {
+    // `key` is the row's uid (preferred) or its numeric id for older rows. Matching on
+    // uid means we delete EXACTLY this row even if another device happened to reuse the
+    // same numeric id.
+    const sameRow = (t,k)=> t.uid ? t.uid===k : t.id===k;
+    const target = transactions.find(t=>sameRow(t,key));
     const isPair = target && target.pairId;
     setConfirm({message: isPair
         ? "Delete this transfer? Both the OUT and IN sides will be marked deleted together."
         : "Mark this entry as deleted? It will remain visible in the log for audit purposes.",
       onConfirm:()=>{
         setTransactions(prev=>prev.map(t=>{
-          if(t.id===id) return {...t,deleted:true};
+          if(sameRow(t,key)) return {...t,deleted:true};
           if(isPair && t.pairId===target.pairId) return {...t,deleted:true};
           return t;
         }));
@@ -902,8 +968,8 @@ export default function App() {
       if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");window.showToast?.("Error , Please Try Again","error");return;}
       const pairId = `TR-${nextId}`;
       const rows = []; let idc = nextId;
-      if(srcBank) rows.push({id:idc++,date:txDate,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),receipt:rcpt,operator:op,isNew:false,deleted:false});
-      if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),receipt:rcpt,operator:op,isNew:false,deleted:false});
+      if(srcBank) rows.push({id:idc++,date:txDate,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
+      if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
       done();
@@ -917,12 +983,12 @@ export default function App() {
     if(form.type==="Store" || form.type==="Mistake"){
       if(srcBank){
         const pairId = `${form.type==="Store"?"ST":"MK"}-${nextId}`;
-        const bankLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:form.type,pairId,notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,fundLeg:true};
-        const bucketLeg = {id:nextId+1,date:txDate,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:form.type,pairId,notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,bucketLeg:true};
+        const bankLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:form.type,pairId,notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,fundLeg:true};
+        const bucketLeg = {id:nextId+1,date:txDate,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:form.type,pairId,notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
         setNextId(n=>n+2);
       } else {
-        const bucketLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:form.type,notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,bucketLeg:true};
+        const bucketLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:form.type,notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,...prev]);
         setNextId(n=>n+1);
       }
@@ -945,8 +1011,8 @@ export default function App() {
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`;
-      const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,isNew,deleted:false,pairId,fromUnclaimed:true,claimedFromDate:claimFrom};
-      const ucLeg  = {id:nextId+1,date:claimFrom,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||`Claimed by deposit on ${txDate}`,receipt:rcpt,operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
+      const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew,deleted:false,pairId,fromUnclaimed:true,claimedFromDate:claimFrom};
+      const ucLeg  = {id:nextId+1,date:claimFrom,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||`Claimed by deposit on ${txDate}`,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
       setTransactions(prev=>[ucLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
@@ -969,8 +1035,8 @@ export default function App() {
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
-      const wdLeg  = {id:nextId,date:txDate,time,type:"Regular Withdrawal",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,pairId,redeposit:true};
-      const depLeg = {id:nextId+1,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,isNew,deleted:false,pairId,redeposit:true};
+      const wdLeg  = {id:nextId,date:txDate,time,type:"Regular Withdrawal",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,pairId,redeposit:true};
+      const depLeg = {id:nextId+1,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew,deleted:false,pairId,redeposit:true};
       setTransactions(prev=>[wdLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
@@ -991,7 +1057,7 @@ export default function App() {
     );
     const isNew = isDeposit && !existingMember && !!ref;
     const assignedId = isDeposit ? (form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`) : form.memberId;
-    const newTx = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,bankHolder:srcBank?srcBank.holder||"":"",notes:form.notes,receipt:rcpt,operator:op,isNew,deleted:false};
+    const newTx = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,bankHolder:srcBank?srcBank.holder||"":"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew,deleted:false};
     setTransactions(prev=>[newTx,...prev]); setNextId(n=>n+1);
     if(isNew){
       setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate}]);

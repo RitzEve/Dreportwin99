@@ -134,8 +134,12 @@ function ftTxDelta(t){
 // can share the same institution name (e.g. two "Ubank" accounts with different
 // holders), so matching by name alone wrongly mixes their balances/history.
 // Older records saved before this only have the name, so fall back to name match.
-function txInBank(t, bank){ return t.bankId!=null ? t.bankId===bank.id : t.bank===bank.name; }
-function bankOfTx(t, banks){ return (banks||[]).find(b => (t.bankId!=null ? b.id===t.bankId : b.name===t.bank)); }
+// Compare bank ids LOOSELY (as strings). The id is a number when an entry is created,
+// but after data round-trips through the database merge it can come back as a string;
+// a strict === would then silently stop matching, so the entry shows its bank in the
+// log (that uses the stored name) but no longer counts toward the bank's balance.
+function txInBank(t, bank){ return t.bankId!=null ? String(t.bankId)===String(bank.id) : t.bank===bank.name; }
+function bankOfTx(t, banks){ return (banks||[]).find(b => (t.bankId!=null ? String(b.id)===String(t.bankId) : b.name===t.bank)); }
 // Display priority: ACTIVE banks first, most-recently-activated on top, then the
 // inactive ones. Falls back to the bank id (its creation timestamp) when a bank
 // has no activatedAt yet (older records or never toggled).
@@ -1051,7 +1055,8 @@ export default function App() {
       const storeAmt = Number(form.storeWithdrawAmount);
       if(form.storeWithdrawAmount===""||isNaN(storeAmt)||storeAmt<=0){ setFormError("Enter the store-credit amount to use."); window.showToast?.("Error , Please Try Again","error"); return; }
       if(storeAmt > amt + 1e-9){ setFormError("The store amount can't be more than the withdrawal amount above."); window.showToast?.("Error , Please Try Again","error"); return; }
-      if(storeAmt > storeCredit + 1e-9){ setFormError(`Not enough store credit. Available: ${fmt(storeCredit)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
+      // NOTE: deliberately NO "not enough store credit" guard — store credit is allowed
+      // to go negative (the user wants to record it even when it overdraws the store).
       const leftover = Math.round((amt - storeAmt)*100)/100;   // any remainder becomes unclaimed credit
       const pairId = `SW-${nextId}`;
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));

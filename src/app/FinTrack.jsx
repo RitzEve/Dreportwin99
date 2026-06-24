@@ -84,7 +84,7 @@ const downloadBlob = (content,filename,mime) => {
   a.href=url; a.download=filename; document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 };
-const TX_COLS = ["date","time","type","amount","memberId","memberName","bank","operator","notes","deleted"];
+const TX_COLS = ["date","time","type","amount","memberId","memberName","bank","operator","receipt","notes","deleted"];
 // ---- balance helpers (single definition) ----
 function ftTxDelta(t){
   if(["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other"].includes(t.type)) return t.amount;
@@ -148,8 +148,8 @@ const exportExcel = (rows,name) => {
 const exportPDF = (rows,title) => {
   const w = window.open("","_blank");
   if(!w) return;
-  const head = "<tr>"+["Date","Time","Type","Amount","ID","Member/Ref","Bank","Operator","Notes"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
-  const body = rows.map(r=>"<tr>"+[r.date,r.time,r.type,amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,r.bank,r.operator||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
+  const head = "<tr>"+["Date","Time","Type","Amount","ID","Member/Ref","Bank","Operator","Receipt","Notes"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
+  const body = rows.map(r=>"<tr>"+[r.date,r.time,r.type,amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,r.bank,r.operator||"",r.receipt||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
   w.document.write(`<html><head><title>${title}</title><style>body{font-family:sans-serif;padding:20px}h2{font-weight:500}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0}</style></head><body><h2>${title}</h2><table>${head}${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 };
@@ -280,7 +280,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
                 </span>);
               })()}</td>
               <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{t.operator?<span style={{display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-user-cog" aria-hidden="true" style={{fontSize:13}}/>{t.operator}</span>:"—"}</td>
-              <td style={{padding:"9px 10px",color:C.muted}}>{t.notes||"—"}</td>
+              <td style={{padding:"9px 10px",color:C.muted}}>{t.notes||"—"}{t.receipt?<span style={{display:"block",fontSize:11,color:C.muted}}><i className="ti ti-receipt" aria-hidden="true" style={{fontSize:12,marginRight:3}}/>Receipt: {t.receipt}</span>:null}</td>
               {showDelete&&<td style={{padding:"9px 8px"}}>
                 {!t.deleted&&<button onClick={()=>onDelete(t.id)} style={deleteBtnStyle}><i className="ti ti-trash" aria-hidden="true"/> Delete</button>}
               </td>}
@@ -397,7 +397,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
   const sortVal = (t,key)=> key==="amount" ? (t.amount||0) : key==="date" ? `${t.date} ${t.time}` : String(t[key]||"").toLowerCase();
   const q = search.trim().toLowerCase();
   const inRange = t => (!dateFrom || t.date>=dateFrom) && (!dateTo || t.date<=dateTo);
-  const matchesQ = t => !q || [t.memberName,t.memberId,t.bank,t.type,t.operator,t.notes,t.date].some(v=>String(v||"").toLowerCase().includes(q)) || String(t.amount||"").includes(q);
+  const matchesQ = t => !q || [t.memberName,t.memberId,t.bank,t.type,t.operator,t.notes,t.date,t.receipt].some(v=>String(v||"").toLowerCase().includes(q)) || String(t.amount||"").includes(q);
   const filtered = transactions.filter(t=>inRange(t) && matchesQ(t));
   const rows = [...filtered].sort((a,b)=>{ const av=sortVal(a,sortKey),bv=sortVal(b,sortKey); const cmp=av<bv?-1:av>bv?1:0; return sortDir==="asc"?cmp:-cmp; });
   const toggleSort = key => { if(sortKey===key) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortKey(key); setSortDir((key==="amount"||key==="date")?"desc":"asc"); } };
@@ -486,7 +486,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                         </span>);
                       })()}</td>
                       <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{t.operator||"—"}</td>
-                      <td style={{padding:"9px 10px",color:C.muted}}>{t.notes||"—"}</td>
+                      <td style={{padding:"9px 10px",color:C.muted}}>{t.notes||"—"}{t.receipt?<span style={{display:"block",fontSize:11,color:C.muted}}><i className="ti ti-receipt" aria-hidden="true" style={{fontSize:12,marginRight:3}}/>Receipt: {t.receipt}</span>:null}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -575,7 +575,7 @@ export default function App() {
   const [rangeFrom,setRangeFrom] = useState(weekAgo);
   const [rangeTo,setRangeTo] = useState(today);
 
-  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""});
+  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""});
   const [formError,setFormError] = useState("");
   const [nameSuggestions,setNameSuggestions] = useState([]);
   const [idSuggestions,setIdSuggestions] = useState([]);
@@ -811,9 +811,9 @@ export default function App() {
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   },[transactions,search,banks]);
 
-  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
+  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
-  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
+  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -892,7 +892,8 @@ export default function App() {
     const time = timeInTz(tz);
     const txDate = form.date || today;   // chosen "Entry date", else default to today
     const ref = form.memberName.trim();
-    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:""};
+    const rcpt = (form.receipt||"").trim();   // optional receipt number, stamped on every leg
+    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""};
     // Entry saved OK — close the form, reset it, and pop the success toast.
     const done = ()=>{ setShowEntryModal(false); setForm(blank); window.showToast?.("Action Done !","success"); };
 
@@ -901,8 +902,8 @@ export default function App() {
       if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");window.showToast?.("Error , Please Try Again","error");return;}
       const pairId = `TR-${nextId}`;
       const rows = []; let idc = nextId;
-      if(srcBank) rows.push({id:idc++,date:txDate,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),operator:op,isNew:false,deleted:false});
-      if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),operator:op,isNew:false,deleted:false});
+      if(srcBank) rows.push({id:idc++,date:txDate,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),receipt:rcpt,operator:op,isNew:false,deleted:false});
+      if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),receipt:rcpt,operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
       done();
@@ -916,12 +917,12 @@ export default function App() {
     if(form.type==="Store" || form.type==="Mistake"){
       if(srcBank){
         const pairId = `${form.type==="Store"?"ST":"MK"}-${nextId}`;
-        const bankLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,fundLeg:true};
-        const bucketLeg = {id:nextId+1,date:txDate,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:form.type,pairId,notes:form.notes,operator:op,isNew:false,deleted:false,bucketLeg:true};
+        const bankLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:form.type,pairId,notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,fundLeg:true};
+        const bucketLeg = {id:nextId+1,date:txDate,time,type:form.type,amount:-amt,memberId:"",memberName:ref||form.type,bank:form.type,pairId,notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
         setNextId(n=>n+2);
       } else {
-        const bucketLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:form.type,notes:form.notes,operator:op,isNew:false,deleted:false,bucketLeg:true};
+        const bucketLeg = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:"",memberName:ref||form.type,bank:form.type,notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,bucketLeg:true};
         setTransactions(prev=>[bucketLeg,...prev]);
         setNextId(n=>n+1);
       }
@@ -944,8 +945,8 @@ export default function App() {
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`;
-      const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,operator:op,isNew,deleted:false,pairId,fromUnclaimed:true,claimedFromDate:claimFrom};
-      const ucLeg  = {id:nextId+1,date:claimFrom,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||`Claimed by deposit on ${txDate}`,operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
+      const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,isNew,deleted:false,pairId,fromUnclaimed:true,claimedFromDate:claimFrom};
+      const ucLeg  = {id:nextId+1,date:claimFrom,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||`Claimed by deposit on ${txDate}`,receipt:rcpt,operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
       setTransactions(prev=>[ucLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
@@ -968,8 +969,8 @@ export default function App() {
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
-      const wdLeg  = {id:nextId,date:txDate,time,type:"Regular Withdrawal",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,operator:op,isNew:false,deleted:false,pairId,redeposit:true};
-      const depLeg = {id:nextId+1,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,operator:op,isNew,deleted:false,pairId,redeposit:true};
+      const wdLeg  = {id:nextId,date:txDate,time,type:"Regular Withdrawal",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,isNew:false,deleted:false,pairId,redeposit:true};
+      const depLeg = {id:nextId+1,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,isNew,deleted:false,pairId,redeposit:true};
       setTransactions(prev=>[wdLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
@@ -990,7 +991,7 @@ export default function App() {
     );
     const isNew = isDeposit && !existingMember && !!ref;
     const assignedId = isDeposit ? (form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`) : form.memberId;
-    const newTx = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,bankHolder:srcBank?srcBank.holder||"":"",notes:form.notes,operator:op,isNew,deleted:false};
+    const newTx = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,bankHolder:srcBank?srcBank.holder||"":"",notes:form.notes,receipt:rcpt,operator:op,isNew,deleted:false};
     setTransactions(prev=>[newTx,...prev]); setNextId(n=>n+1);
     if(isNew){
       setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate}]);
@@ -1446,6 +1447,8 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                <div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Receipt number <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                  <input type="text" placeholder="e.g. receipt / reference no." value={form.receipt} onChange={e=>setForm(f=>({...f,receipt:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Notes</label>
                   <input type="text" placeholder="Optional notes" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 {form.type==="Regular Deposit"&&(

@@ -307,6 +307,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
               <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none"}}><Amt t={t}/></td>
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                 const b = bankOfTx(t, banks);
+                if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${t.claimedFromDate}`:""}</span>;
                 const holder = (b&&b.holder) || t.bankHolder || "";
@@ -513,7 +514,8 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                       <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none"}}><Amt t={t}/></td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.text}}>{(()=>{
                         const b = bankOfTx(t, banks);
-                        if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
+                        if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
+                if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${t.claimedFromDate}`:""}</span>;
                         const holder = (b&&b.holder) || t.bankHolder || "";
                         return (<span>
@@ -611,7 +613,7 @@ export default function App() {
   const [rangeFrom,setRangeFrom] = useState(weekAgo);
   const [rangeTo,setRangeTo] = useState(today);
 
-  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""});
+  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:""});
   const [formError,setFormError] = useState("");
   const [nameSuggestions,setNameSuggestions] = useState([]);
   const [idSuggestions,setIdSuggestions] = useState([]);
@@ -852,6 +854,8 @@ export default function App() {
   // Store entries are a running TOTAL (a balance), not a daily flow — so the Store
   // card always shows the all-time accumulation, ignoring the selected date scope.
   const storeAllTime = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Store"&&!t.fundLeg),[transactions]);
+  // Running store-credit balance (what a "Store withdraw" draws on).
+  const storeCredit = useMemo(()=>storeAllTime.reduce((s,t)=>s+(t.amount||0),0),[storeAllTime]);
   // Store total as of the end of yesterday (date <= yesterday) — the "yesterday close".
   const storeYesterday = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Store"&&!t.fundLeg&&t.date<=yesterday).reduce((s,t)=>s+(t.amount||0),0),[transactions,yesterday]);
 
@@ -879,9 +883,9 @@ export default function App() {
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   },[transactions,search,banks]);
 
-  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
+  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
-  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
+  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -965,7 +969,7 @@ export default function App() {
     const txDate = form.date || today;   // chosen "Entry date", else default to today
     const ref = form.memberName.trim();
     const rcpt = (form.receipt||"").trim();   // optional receipt number, stamped on every leg
-    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:""};
+    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:""};
     // Entry saved OK — close the form, reset it, and pop the success toast.
     const done = ()=>{ setShowEntryModal(false); setForm(blank); window.showToast?.("Action Done !","success"); };
 
@@ -1036,6 +1040,36 @@ export default function App() {
     // is selected. Two linked, bank-less legs (withdrawal first, deposit after) tied
     // by an RD- pairId so deleting one deletes both; the deposit leg shows a
     // "Redeposit" tag in the bank column. ----
+    // ---- Regular Withdrawal funded by STORE credit (the "Store withdraw" tick-box):
+    // the withdrawal still counts in Total withdrawals, but instead of moving a bank
+    // balance it draws from STORE credit and pushes any leftover into UNCLAIMED credit.
+    // No bank is touched even if one is selected. THREE linked, bank-less legs:
+    //   1) Regular Withdrawal  +topAmount   (counts as a withdrawal; shows -topAmount)
+    //   2) Store               -storeAmount  (reduces store credit; shows -storeAmount)
+    //   3) Unclaimed Credit    +leftover     (leftover = top - store; only when > 0)
+    if(form.type==="Regular Withdrawal" && form.storeWithdraw){
+      const storeAmt = Number(form.storeWithdrawAmount);
+      if(form.storeWithdrawAmount===""||isNaN(storeAmt)||storeAmt<=0){ setFormError("Enter the store-credit amount to use."); window.showToast?.("Error , Please Try Again","error"); return; }
+      if(storeAmt > amt + 1e-9){ setFormError("The store amount can't be more than the withdrawal amount above."); window.showToast?.("Error , Please Try Again","error"); return; }
+      if(storeAmt > storeCredit + 1e-9){ setFormError(`Not enough store credit. Available: ${fmt(storeCredit)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
+      const leftover = Math.round((amt - storeAmt)*100)/100;   // any remainder becomes unclaimed credit
+      const pairId = `SW-${nextId}`;
+      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
+      const common = {memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,pairId,storeWithdraw:true,isNew:false,deleted:false};
+      const rows = [
+        {id:nextId,   date:txDate,time,type:"Regular Withdrawal",amount:amt,      uid:mkUid(),...common},
+        {id:nextId+1, date:txDate,time,type:"Store",             amount:-storeAmt, uid:mkUid(),bucketLeg:true,...common},
+      ];
+      let n = nextId+2;
+      if(leftover > 1e-9){ rows.push({id:n,date:txDate,time,type:"Unclaimed Credit",amount:leftover,uid:mkUid(),...common}); n++; }
+      setTransactions(prev=>[...rows,...prev]);
+      setNextId(n);
+      if(existingMember){ setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:txDate}:m)); }
+      done();
+      return;
+    }
+
     if(form.type==="Regular Withdrawal" && form.redeposit){
       const pairId = `RD-${nextId}`;
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
@@ -1465,7 +1499,7 @@ export default function App() {
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   const active = form.type===t;
-                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false,claimDate:""}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
+                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false,claimDate:"",storeWithdraw:false,storeWithdrawAmount:""}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
@@ -1548,9 +1582,9 @@ export default function App() {
                   </div>
                 )}
                 {form.type==="Regular Withdrawal"&&(
-                  <div style={{gridColumn:"1/-1"}}>
-                    <label style={{display:"inline-flex",alignItems:"center",gap:10,padding:"6px 12px",borderRadius:8,border:`1px solid ${form.redeposit?"#2563eb":C.border}`,background:C.surface2,cursor:"pointer",userSelect:"none",transition:"border-color 0.15s"}}>
-                      <input type="checkbox" checked={!!form.redeposit} onChange={e=>setForm(f=>({...f,redeposit:e.target.checked}))} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                  <div style={{gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:10}}>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:10,padding:"6px 12px",borderRadius:8,border:`1px solid ${form.redeposit?"#2563eb":C.border}`,background:C.surface2,cursor:"pointer",userSelect:"none",transition:"border-color 0.15s",alignSelf:"flex-start"}}>
+                      <input type="checkbox" checked={!!form.redeposit} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,redeposit:on,storeWithdraw:on?false:f.storeWithdraw}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
                       <span aria-hidden="true" style={{width:20,height:20,borderRadius:6,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:form.redeposit?"#2563eb":"#0b0f16",border:`1px solid ${form.redeposit?"#2563eb":C.borderStrong}`,boxShadow:form.redeposit?"0 0 0 3px rgba(37,99,235,0.30), 0 0 9px rgba(37,99,235,0.7)":"none",transition:"all 0.15s"}}>
                         {form.redeposit&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:14}}/>}
                       </span>
@@ -1559,6 +1593,30 @@ export default function App() {
                         <span style={{fontSize:10.5,color:C.muted}}>No bank change · counts as withdrawal + deposit</span>
                       </span>
                     </label>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:10,padding:"6px 12px",borderRadius:8,border:`1px solid ${form.storeWithdraw?"#d97706":C.border}`,background:C.surface2,cursor:"pointer",userSelect:"none",transition:"border-color 0.15s",alignSelf:"flex-start"}}>
+                      <input type="checkbox" checked={!!form.storeWithdraw} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,storeWithdraw:on,redeposit:on?false:f.redeposit}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                      <span aria-hidden="true" style={{width:20,height:20,borderRadius:6,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:form.storeWithdraw?"#d97706":"#0b0f16",border:`1px solid ${form.storeWithdraw?"#d97706":C.borderStrong}`,boxShadow:form.storeWithdraw?"0 0 0 3px rgba(217,119,6,0.30), 0 0 9px rgba(217,119,6,0.7)":"none",transition:"all 0.15s"}}>
+                        {form.storeWithdraw&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:14}}/>}
+                      </span>
+                      <span style={{display:"flex",flexDirection:"column",lineHeight:1.25}}>
+                        <span style={{fontSize:13,fontWeight:500,color:C.text}}>Store withdraw</span>
+                        <span style={{fontSize:10.5,color:C.muted}}>Uses store credit · no bank change · leftover → unclaimed</span>
+                      </span>
+                    </label>
+                    {form.storeWithdraw&&(()=>{
+                      const top = Number(form.amount)||0, sw = Number(form.storeWithdrawAmount)||0;
+                      const leftover = Math.round((top - sw)*100)/100;
+                      return (
+                        <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:2}}>
+                          <label style={{fontSize:12,fontWeight:500,color:C.text}}>Store-credit amount to use</label>
+                          <input type="number" placeholder="e.g. 500" value={form.storeWithdrawAmount} onChange={e=>setForm(f=>({...f,storeWithdrawAmount:e.target.value}))} style={{maxWidth:240,boxSizing:"border-box"}}/>
+                          <span style={{fontSize:11.5,color:C.muted}}>
+                            Store credit available: <strong style={{color:C.text}}>{fmt(storeCredit)}</strong>
+                            {sw>0 && <> · leftover <strong style={{color:leftover<0?"#dc2626":C.text}}>{fmt(leftover)}</strong> → unclaimed credit</>}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:C.surface2,borderRadius:8,border:`1px solid ${C.border}`}}>

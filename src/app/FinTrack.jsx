@@ -820,7 +820,9 @@ export default function App() {
   // list and the entry-form bank dropdowns (so the top bank is the default choice).
   const activeBanks = useMemo(()=>banksLive.filter(b=>b.active!==false),[banksLive]);
 
-  const todayTx = transactions.filter(t=>t.date===today);
+  // Newest first. (Sorting matters now that saves merge data — merged entries can land
+  // anywhere in the underlying array, so we can't rely on insertion order here.)
+  const todayTx = transactions.filter(t=>t.date===today).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   const dashTx = useMemo(()=>{
     if(dashView==="today") return transactions.filter(t=>t.date===today);
     if(dashView==="yesterday") return transactions.filter(t=>t.date===yesterday);

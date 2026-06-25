@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import FluidDropdown from "../components/FluidDropdown.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
+import { mergeData } from "../lib/mergeData.js";
 
 // Short labels for the mobile bottom tab bar (the desktop sidebar uses the full
 // nav labels, but "Bank Accounts" / "Transactions" are too wide for a phone tab).
@@ -92,35 +93,8 @@ const TX_COLS = ["date","time","type","amount","memberId","memberName","bank","o
 // that, so merges below can safely tell every entry apart.
 const mkUid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 
-// Union two saved data blobs so concurrent edits from different devices/operators
-// don't clobber each other. The DB keeps ONE row per company, so a naive overwrite
-// loses whatever the other device added in between. Transactions are matched by their
-// unique `uid` (older rows fall back to `#id`); an entry deleted on EITHER side stays
-// deleted. Members/banks union by id; nextId takes the higher of the two.
-const mergeData = (remote, local) => {
-  remote = remote || {}; local = local || {};
-  const keyOf = t => t && t.uid ? t.uid : `#${t && t.id}`;
-  const txMap = new Map();
-  for(const t of (remote.transactions||[])) txMap.set(keyOf(t), t);
-  for(const t of (local.transactions||[])){
-    const k = keyOf(t), prev = txMap.get(k);
-    txMap.set(k, prev ? {...prev,...t,deleted:!!(prev.deleted||t.deleted)} : t);
-  }
-  const transactions = [...txMap.values()];
-  const memMap = new Map();
-  for(const m of (remote.members||[])) memMap.set(m.id, m);
-  for(const m of (local.members||[])){
-    const prev = memMap.get(m.id);
-    memMap.set(m.id, !prev ? m : ((m.lastActivity||"")>=(prev.lastActivity||"") ? {...prev,...m} : {...m,...prev}));
-  }
-  const members = [...memMap.values()];
-  const bankMap = new Map();
-  for(const b of (remote.banks||[])) bankMap.set(b.id, b);
-  for(const b of (local.banks||[])) bankMap.set(b.id, b);   // local bank edits/toggles win
-  const banks = [...bankMap.values()];
-  const nextId = Math.max(local.nextId||0, remote.nextId||0);
-  return {transactions,banks,members,nextId};
-};
+// mergeData (union two data blobs) now lives in ../lib/mergeData.js so the storage
+// bridge can reuse it for its fallback merge. Imported at the top of this file.
 // ---- balance helpers (single definition) ----
 function ftTxDelta(t){
   if(["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other"].includes(t.type)) return t.amount;
@@ -656,6 +630,7 @@ export default function App() {
   const moreStatsRef = useRef(null);
   const amountRef = useRef(null); // entry modal: first field to focus on open
   const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
+  const lastMetaRef = useRef(null); // last seen server updated_at — the poller checks this (cheap) before downloading the full blob
   const dataRef = useRef({transactions:[],banks:[],members:[],nextId:1}); // always-current state, so the poller can merge without restarting its timer
 
   const [search,setSearch] = useState({term:"",dateFrom:"",dateTo:"",type:"",bank:"",member:""});
@@ -683,7 +658,7 @@ export default function App() {
       const key = `fintrack-${SESSION.companyId}-v2`;
       try{
         const r = await window.storage.get(key);
-        if(r&&r.value){ applyData(JSON.parse(r.value)); lastSyncRef.current = r.value; }
+        if(r&&r.value){ applyData(JSON.parse(r.value)); lastSyncRef.current = r.value; lastMetaRef.current = r.updatedAt || null; }
         try{ await window.storage.delete("fintrack-data"); }catch(e){}
       }catch(e){ /* first run, no saved data */ }
       setLoaded(true);
@@ -694,10 +669,10 @@ export default function App() {
   // having to restart its timer every time something changes.
   useEffect(()=>{ dataRef.current = {transactions,banks,members,nextId}; });
 
-  // Save. Because the whole company shares ONE record, we don't blindly overwrite:
-  // we re-read the latest saved data and MERGE our changes into it, so an entry that
-  // another device/operator added in the meantime is never wiped out. We only mark
-  // the data "synced" on a confirmed successful write (so a failed save retries).
+  // Save. The storage bridge MERGES our changes into the shared company record (the DB
+  // does it atomically when migration-008 is installed, else the bridge merges client-
+  // side), so we send our local data and adopt the authoritative merged result it
+  // returns. No pre-read here — that saved an entire extra blob download on every save.
   useEffect(()=>{
     if(!loaded) return;
     const serialized = JSON.stringify({transactions,banks,members,nextId});
@@ -706,42 +681,49 @@ export default function App() {
     (async()=>{
       try{
         const key = `fintrack-${SESSION.companyId}-v2`;
-        let remote = null;
-        try{ const r = await window.storage.get(key); if(r&&r.value) remote = JSON.parse(r.value); }catch(e){}
-        const merged = remote ? mergeData(remote,{transactions,banks,members,nextId}) : {transactions,banks,members,nextId};
-        const mergedStr = JSON.stringify(merged);
-        const res = await window.storage.set(key,mergedStr);
+        const res = await window.storage.set(key,serialized);
         if(cancelled || !res) return;
-        // With migration-008 the DB merges atomically and returns the authoritative
-        // result — adopt that (it may include entries other devices saved at the same
-        // moment). Without it, res.value just echoes what we sent.
-        const finalStr = (res && res.value) ? res.value : mergedStr;
+        const finalStr = (res && res.value) ? res.value : serialized;
         lastSyncRef.current = finalStr;
         if(finalStr !== serialized) applyData(JSON.parse(finalStr));
+        // The write bumped the server's updated_at; let the next poll reconcile it (cheap).
       }catch(e){ /* save failed — will retry on the next change or poll */ }
     })();
     return ()=>{ cancelled = true; };
   },[transactions,banks,members,nextId,loaded]);
 
-  // Auto-refresh: every 10s pull the latest saved data so changes made on other
-  // devices/operators appear here. We MERGE it into whatever we have locally (rather
-  // than replacing), so a refresh never drops an entry we just made that hasn't
-  // finished saving yet.
+  // Auto-refresh — pull other devices' changes WITHOUT wasting egress. Every 20s (only
+  // while the tab is visible) we check the tiny server `updated_at` via getMeta(); we
+  // download the full data blob ONLY when it actually changed, then MERGE it into local
+  // (so a refresh never drops an entry we just made). Also fires the moment the app
+  // regains focus, so returning to it shows the latest right away.
   useEffect(()=>{
     if(!loaded) return;
     const key = `fintrack-${SESSION.companyId}-v2`;
-    const id = setInterval(async()=>{
+    let busy = false;
+    const syncIfChanged = async()=>{
+      if(busy) return;
+      if(typeof document!=="undefined" && document.visibilityState==="hidden") return;
+      busy = true;
       try{
-        const r = await window.storage.get(key);
-        if(r&&r.value && r.value !== lastSyncRef.current){
-          const merged = mergeData(JSON.parse(r.value), dataRef.current);
-          const mergedStr = JSON.stringify(merged);
-          applyData(merged);
-          lastSyncRef.current = mergedStr;
+        const meta = window.storage.getMeta ? await window.storage.getMeta(key) : null;
+        const stamp = meta && meta.updatedAt;
+        if(stamp && stamp !== lastMetaRef.current){
+          const r = await window.storage.get(key);
+          if(r && r.value){
+            const merged = mergeData(JSON.parse(r.value), dataRef.current);
+            applyData(merged);
+            lastSyncRef.current = JSON.stringify(merged);
+            lastMetaRef.current = r.updatedAt || stamp;
+          }
         }
       }catch(e){ /* offline / transient */ }
-    },10000);
-    return ()=>clearInterval(id);
+      finally{ busy = false; }
+    };
+    const id = setInterval(syncIfChanged, 20000);
+    const onVis = ()=>{ if(typeof document!=="undefined" && document.visibilityState==="visible") syncIfChanged(); };
+    if(typeof document!=="undefined") document.addEventListener("visibilitychange", onVis);
+    return ()=>{ clearInterval(id); if(typeof document!=="undefined") document.removeEventListener("visibilitychange", onVis); };
   },[loaded]);
 
   useEffect(()=>{

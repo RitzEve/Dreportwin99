@@ -4,7 +4,9 @@
    thing. Dark mode follows the saved theme via the data-theme attribute. */
 
 :root {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --grain-opacity: 0.03;   /* whisper-faint film grain over the whole product; set to 0 to disable */
 
   --bg: #f9fafb;
   --surface: #ffffff;
@@ -19,7 +21,8 @@
   --accent-bg: #eff6ff;
   --danger: #dc2626;
   --success: #16a34a;
-  --shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  /* Tinted (cool slate) shadow instead of flat black — reads softer and more premium. */
+  --shadow: 0 12px 40px -12px rgba(15, 23, 42, 0.20);
 }
 
 :root[data-theme='dark'] {
@@ -34,7 +37,7 @@
   --accent: #3b82f6;
   --accent-press: #60a5fa;
   --accent-bg: rgba(59, 130, 246, 0.16);
-  --shadow: 0 12px 50px rgba(0, 0, 0, 0.55);
+  --shadow: 0 18px 50px -14px rgba(0, 0, 0, 0.62);
 }
 
 * { box-sizing: border-box; }
@@ -47,6 +50,25 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Whisper-faint film grain across the whole product — breaks up flat surfaces so
+   they read less "digital-sterile". Pure decoration: a fixed, click-through overlay
+   at a very low opacity (tune or disable via --grain-opacity on :root). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: var(--grain-opacity, 0.03);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* (grain is static, but keep it out of the way for users who minimise visual noise) */
+  body::before { opacity: calc(var(--grain-opacity, 0.03) * 0.5); }
 }
 
 /* ---- shared form controls ---- */

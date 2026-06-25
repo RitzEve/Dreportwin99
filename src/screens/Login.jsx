@@ -141,7 +141,7 @@ export default function Login({ onAuthed }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: isWide ? '1fr 1fr' : '1fr', background: 'var(--bg)' }}>
+    <div style={{ minHeight: '100dvh', display: 'grid', gridTemplateColumns: isWide ? '1fr 1fr' : '1fr', background: 'var(--bg)' }}>
       {/* Left — animated character scene (desktop only) */}
       {isWide && (
         <div style={styles.left}>
@@ -238,8 +238,8 @@ export default function Login({ onAuthed }) {
       <div style={styles.right}>
         <div style={{ width: '100%', maxWidth: 400 }}>
           <div style={{ textAlign: 'center', marginBottom: 34 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', margin: '0 0 8px' }}>Welcome back!</h1>
-            <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: 0 }}>Please enter your details</p>
+            <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.03em', margin: '0 0 8px' }}>Welcome back</h1>
+            <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: 0 }}>Sign in to continue</p>
           </div>
 
           <form onSubmit={submit}>
@@ -280,7 +280,7 @@ export default function Login({ onAuthed }) {
           <InstallPrompt />
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · v1.6.21
+            Secure access · authorised accounts only · v1.6.22
           </div>
         </div>
       </div>
@@ -304,7 +304,8 @@ function makeBlinker(setBlink) {
 const styles = {
   left: {
     position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-    background: 'linear-gradient(160deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%)',
+    // Soft top-left highlight over the gradient gives it depth instead of a flat, even fade.
+    background: 'radial-gradient(120% 80% at 18% 8%, rgba(255,255,255,0.18), transparent 55%), linear-gradient(160deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%)',
     padding: 24,
   },
   scene: { display: 'flex', alignItems: 'flex-end', justifyContent: 'center', transform: 'scale(0.82)', transformOrigin: 'center bottom' },

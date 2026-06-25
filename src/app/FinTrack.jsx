@@ -1373,7 +1373,7 @@ export default function App() {
   );
 
   return (
-    <div style={{display:"flex",minHeight:isMobile?"auto":620,fontFamily:"var(--font-sans)",position:"relative",overflow:"hidden",borderRadius:isMobile?0:12,border:isMobile?"none":`1px solid ${C.border}`}}>
+    <div style={{display:"flex",minHeight:isMobile?"auto":620,fontFamily:"var(--font-sans)",fontVariantNumeric:"tabular-nums",position:"relative",overflow:"hidden",borderRadius:isMobile?0:12,border:isMobile?"none":`1px solid ${C.border}`}}>
       <style>{`
         .ft-scope input, .ft-scope select, .ft-modal input, .ft-modal select {
           border-radius: 8px;

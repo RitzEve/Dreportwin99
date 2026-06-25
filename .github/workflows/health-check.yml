@@ -1,0 +1,243 @@
+name: Daily health check & auto-fix
+
+# ── Triggers — all three the owner asked for ────────────────────────────────
+#   • schedule            → runs daily in GitHub's cloud (works even when your PC is off)
+#   • workflow_dispatch   → manual button in the Actions tab + API trigger
+#                           (gh workflow run health-check.yml  — or the REST API)
+#   • repository_dispatch → webhook trigger: POST to the GitHub API with
+#                           {"event_type":"health-check"} (see the README note below)
+on:
+  schedule:
+    - cron: '7 1 * * *'   # 01:07 UTC every day. NOTE: GitHub cron is always UTC.
+                          # 01:07 UTC = 09:07 in UTC+8. Edit this line to change the time.
+  workflow_dispatch: {}
+  repository_dispatch:
+    types: [health-check]
+
+# Least-privilege permissions: push fixes to master, and open an alert issue.
+permissions:
+  contents: write
+  issues: write
+
+# Never let two runs overlap (avoids two fixes racing each other).
+concurrency:
+  group: health-check
+  cancel-in-progress: false
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1) HEALTH CHECK + REPORT
+  #    Needs NO secrets — works the moment this workflow is merged.
+  # ──────────────────────────────────────────────────────────────────────────
+  healthcheck:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.verdict.outputs.status }}
+      build: ${{ steps.checks.outputs.build_status }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (compile gate)
+        id: build
+        run: npm run build
+        continue-on-error: true
+
+      - name: Live site, version.json & Supabase checks
+        id: checks
+        env:
+          LIVE_URL: https://dreportwin99.netlify.app
+        run: |
+          set -uo pipefail
+          fail=0
+
+          LOCAL_VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
+
+          # --- Live site (retry up to 3x to ignore transient blips) ---
+          site_code=000
+          for i in 1 2 3; do
+            site_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$LIVE_URL" || echo 000)
+            [ "$site_code" = "200" ] && break
+            sleep 5
+          done
+          if [ "$site_code" = "200" ]; then site_status="PASS"; else site_status="FAIL"; fail=1; fi
+
+          # --- version.json (deployed build version) ---
+          ver_json=$(curl -s --max-time 25 "$LIVE_URL/version.json" || echo "")
+          DEPLOYED_VER=$(printf '%s' "$ver_json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).version||'')}catch(e){console.log('')}})" 2>/dev/null || echo "")
+          if [ -n "$DEPLOYED_VER" ]; then
+            if [ "$DEPLOYED_VER" = "$LOCAL_VER" ]; then ver_status="PASS"; else ver_status="WARN"; fi
+          else
+            ver_status="FAIL"; fail=1
+          fi
+
+          # --- Supabase reachability (strictly read-only) ---
+          SB_URL=$(grep -oE "https://[a-z0-9]+\.supabase\.co" src/lib/supabaseClient.js | head -1)
+          SB_KEY=$(grep -oE "eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+" src/lib/supabaseClient.js | head -1)
+          sb_code=000
+          if [ -n "$SB_URL" ] && [ -n "$SB_KEY" ]; then
+            sb_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" "$SB_URL/rest/v1/" || echo 000)
+          fi
+          if [ "$sb_code" != "000" ]; then sb_status="PASS"; else sb_status="FAIL"; fail=1; fi
+
+          # --- Build outcome from the previous step ---
+          if [ "${{ steps.build.outcome }}" = "success" ]; then build_status="PASS"; else build_status="FAIL"; fail=1; fi
+
+          {
+            echo "build_status=$build_status"
+            echo "site_status=$site_status"
+            echo "site_code=$site_code"
+            echo "ver_status=$ver_status"
+            echo "local_ver=$LOCAL_VER"
+            echo "deployed_ver=$DEPLOYED_VER"
+            echo "sb_status=$sb_status"
+            echo "sb_code=$sb_code"
+            echo "fail=$fail"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write report to run summary
+        run: |
+          {
+            echo "# DRWin health check — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "| Check | Result | Detail |"
+            echo "|---|---|---|"
+            echo "| Build (\`npm run build\`) | ${{ steps.checks.outputs.build_status }} | compile gate |"
+            echo "| Live site | ${{ steps.checks.outputs.site_status }} | HTTP ${{ steps.checks.outputs.site_code }} — https://dreportwin99.netlify.app |"
+            echo "| Deployed version | ${{ steps.checks.outputs.ver_status }} | local ${{ steps.checks.outputs.local_ver }} vs deployed ${{ steps.checks.outputs.deployed_ver }} |"
+            echo "| Supabase | ${{ steps.checks.outputs.sb_status }} | REST probe HTTP ${{ steps.checks.outputs.sb_code }} |"
+            echo ""
+            if [ "${{ steps.checks.outputs.fail }}" = "0" ]; then
+              echo "**Verdict: HEALTHY ✅**"
+            else
+              echo "**Verdict: ISSUES FOUND ⚠️** — the auto-fix job runs next if the build failed and ANTHROPIC_API_KEY is set."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verdict output
+        id: verdict
+        run: |
+          if [ "${{ steps.checks.outputs.fail }}" = "0" ]; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open alert issue on failure (deduped)
+        if: steps.verdict.outputs.status == 'fail'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh issue list --label health-check --state open --json number --jq 'length' 2>/dev/null || echo 0)
+          if [ "$existing" = "0" ]; then
+            gh label create health-check --color B60205 --description "Automated health-check alerts" 2>/dev/null || true
+            gh issue create \
+              --title "Health check failed — $(date -u '+%Y-%m-%d %H:%M UTC')" \
+              --label health-check \
+              --body "The automated health check found a problem.
+
+          - Build: ${{ steps.checks.outputs.build_status }}
+          - Live site: ${{ steps.checks.outputs.site_status }} (HTTP ${{ steps.checks.outputs.site_code }})
+          - Deployed version: ${{ steps.checks.outputs.ver_status }} (local ${{ steps.checks.outputs.local_ver }} vs deployed ${{ steps.checks.outputs.deployed_ver }})
+          - Supabase: ${{ steps.checks.outputs.sb_status }} (HTTP ${{ steps.checks.outputs.sb_code }})
+
+          See the workflow run summary for the full report. If ANTHROPIC_API_KEY is configured, the auto-fix job attempts a repair when the build is broken. This issue auto-dedupes (no duplicate will be opened while it stays open)."
+          else
+            echo "An open 'health-check' issue already exists — not creating a duplicate."
+          fi
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2) AUTO-FIX & SHIP
+  #    Runs ONLY when the build broke AND the ANTHROPIC_API_KEY secret is set.
+  #    Without the secret it cleanly skips (the health check above still alerts).
+  # ──────────────────────────────────────────────────────────────────────────
+  autofix:
+    needs: healthcheck
+    if: needs.healthcheck.outputs.build == 'FAIL'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is the AI key configured?
+        id: gate
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY secret is not set — skipping auto-fix. Add it in Settings → Secrets and variables → Actions to enable automatic repairs."
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        if: steps.gate.outputs.enabled == 'true'
+        run: npm ci
+
+      - name: Claude — diagnose & fix (edits files only)
+        if: steps.gate.outputs.enabled == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          prompt: |
+            The continuous-integration build for this repository (RitzEve/Dreportwin99 — the "DRWin" multi-company financial portal: a Vite + React 18 plain-JavaScript app, no TypeScript, no Tailwind) is currently FAILING. You are running inside a fresh checkout on a Linux CI runner. Dependencies are already installed.
+
+            Your job: find the cause and fix it with the SMALLEST safe change, and leave the working tree ready for the workflow to ship. Steps:
+            1. Run `npm run build` and read the error — it names the file and line. Also run `git log -5 --oneline` and inspect the files those recent commits touched; a fresh build break is almost always from the latest commit.
+            2. Apply the minimal fix that makes the build succeed. Do NOT refactor, rename, or change any unrelated code or app behavior.
+            3. Re-run `npm run build` and confirm it finishes with NO errors.
+            4. Bump the PATCH version: edit the "version" field in package.json AND the matching footer line in src/screens/Login.jsx (it reads: Secure access · authorised accounts only · vX.Y.Z) to the SAME new patch version.
+            5. STOP. Do NOT run git commit, git push, git checkout, git reset, or create any branch or pull request — the surrounding workflow commits and ships your edits. Just leave the edited files in the working tree.
+
+            Hard rules (never violate):
+            - Fix only what is needed to make `npm run build` pass; keep the change minimal and scoped to the breakage.
+            - If you cannot make the build pass with a small, safe change, REVERT all your edits so the working tree is clean, and explain clearly in your final message why a human is needed.
+            - Never edit anything under supabase/ to "fix" the database, never add/echo/commit secrets, never weaken security or Row-Level Security, never delete data or files unrelated to the build error.
+          claude_args: |
+            --allowedTools Edit,Read,Write,Bash
+            --max-turns 40
+
+      - name: Build gate + ship to master
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -e
+          # HARD GATE: never ship a tree that does not build.
+          npm run build
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Commit any edits the AI left uncommitted.
+          if [ -n "$(git status --porcelain)" ]; then
+            VER=$(node -p "require('./package.json').version")
+            git add -A
+            git commit -m "v$VER - auto-fix: CI health-check repair"
+          fi
+
+          # Push only if there are new commits ahead of origin/master (works whether
+          # the AI committed or the step above did).
+          if [ -n "$(git log origin/master..HEAD --oneline)" ]; then
+            git push origin HEAD:master
+            echo "✅ Shipped to master — Netlify will auto-deploy." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ℹ️ No fix was produced (tree clean) — nothing shipped. A human should review." >> "$GITHUB_STEP_SUMMARY"
+          fi

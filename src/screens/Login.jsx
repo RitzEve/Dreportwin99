@@ -280,7 +280,7 @@ export default function Login({ onAuthed }) {
           <InstallPrompt />
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · v1.6.22
+            Secure access · authorised accounts only · v1.6.23
           </div>
         </div>
       </div>
@@ -304,8 +304,8 @@ function makeBlinker(setBlink) {
 const styles = {
   left: {
     position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-    // Soft top-left highlight over the gradient gives it depth instead of a flat, even fade.
-    background: 'radial-gradient(120% 80% at 18% 8%, rgba(255,255,255,0.18), transparent 55%), linear-gradient(160deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%)',
+    // DRWin brand: gold glow over a near-black base — the gold-shield-on-black identity.
+    background: 'radial-gradient(120% 85% at 78% 12%, rgba(227,179,65,0.30), transparent 55%), radial-gradient(110% 80% at 12% 92%, rgba(166,124,0,0.20), transparent 52%), linear-gradient(155deg, #14130f 0%, #211d12 52%, #100f0c 100%)',
     padding: 24,
   },
   scene: { display: 'flex', alignItems: 'flex-end', justifyContent: 'center', transform: 'scale(0.82)', transformOrigin: 'center bottom' },

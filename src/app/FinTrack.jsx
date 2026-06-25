@@ -208,11 +208,12 @@ const C = {
   muted: dark ? "#9ca3af" : "#6b7280",
   border: dark ? "#1f2937" : "#d6dae0",
   borderStrong: dark ? "#374151" : "#c3c8d0",
-  accent: dark ? "#3b82f6" : "#2563eb",
-  accentBg: dark ? "rgba(59,130,246,0.16)" : "#eff6ff",
+  accent: dark ? "#e3b341" : "#a67c00",          // DRWin brand gold (paired with the near-black base)
+  accentBg: dark ? "rgba(227,179,65,0.16)" : "#fbf4dc",
+  onAccent: "#1a1206",                            // dark ink for text/icons sitting ON a gold accent fill
 };
 
-const editBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #2563eb",borderRadius:6,background:dark?"#1e3a5f":"#2563eb14",color:dark?"#85b7eb":"#2563eb",display:"inline-flex",alignItems:"center",gap:4};
+const editBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:`1px solid ${C.accent}`,borderRadius:6,background:dark?"rgba(227,179,65,0.14)":"#fbf4dc",color:C.accent,display:"inline-flex",alignItems:"center",gap:4};
 const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
 const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",gap:4};
 const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",gap:4};
@@ -1217,7 +1218,7 @@ export default function App() {
   );
 
   const toggleBtn = (active,onClick,label) => (
-    <button onClick={onClick} style={{cursor:"pointer",padding:"6px 14px",fontSize:13,fontWeight:500,border:`1px solid ${active?C.accent:C.border}`,borderRadius:8,background:active?C.accent:C.surface2,color:active?"#fff":C.text}}>{label}</button>
+    <button onClick={onClick} style={{cursor:"pointer",padding:"6px 14px",fontSize:13,fontWeight:500,border:`1px solid ${active?C.accent:C.border}`,borderRadius:8,background:active?C.accent:C.surface2,color:active?C.onAccent:C.text}}>{label}</button>
   );
 
   const dashScopeLabel = dashView==="today" ? `Today — ${today}`
@@ -1429,7 +1430,7 @@ export default function App() {
               {pwSuccess&&<div style={{fontSize:12,color:"#16a34a",marginTop:10,display:"flex",alignItems:"center",gap:6}}><i className="ti ti-circle-check" aria-hidden="true"/>{pwSuccess}</div>}
               <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}}>
                 <button onClick={closePasswordModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
-                <button onClick={handleChangePassword} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:"#fff",border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Update password</button>
+                <button onClick={handleChangePassword} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Update password</button>
               </div>
             </div>
           </div>
@@ -1455,7 +1456,7 @@ export default function App() {
               {newMemberError&&<div style={{fontSize:12,color:"#dc2626",marginTop:10}}>{newMemberError}</div>}
               <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}}>
                 <button onClick={closeMemberModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
-                <button onClick={handleAddMember} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:"#fff",border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Add member</button>
+                <button onClick={handleAddMember} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Add member</button>
               </div>
             </div>
           </div>
@@ -1483,7 +1484,7 @@ export default function App() {
               {bankError&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>{bankError}</div>}
               <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6}}>
                 <button onClick={closeBankModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
-                <button onClick={handleAddBank} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:"#fff",border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Add bank</button>
+                <button onClick={handleAddBank} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Add bank</button>
               </div>
             </div>
           </div>
@@ -1644,7 +1645,7 @@ export default function App() {
               {formError&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>{formError}</div>}
               <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6,...(isMobile?{position:"sticky",bottom:0,background:C.bg,paddingTop:12,paddingBottom:"calc(6px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.border}`,margin:"6px -20px 0",paddingLeft:20,paddingRight:20}:null)}}>
                 <button onClick={closeEntryModal} style={{cursor:"pointer",padding:"11px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,flex:isMobile?1:"none",minHeight:isMobile?46:"auto"}}>Cancel</button>
-                <button onClick={handleAddTx} style={{padding:"11px 22px",cursor:"pointer",fontWeight:500,background:C.accent,color:"#fff",border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,flex:isMobile?1:"none",minHeight:isMobile?46:"auto"}}><i className="ti ti-check" aria-hidden="true"/> Add entry</button>
+                <button onClick={handleAddTx} style={{padding:"11px 22px",cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,flex:isMobile?1:"none",minHeight:isMobile?46:"auto"}}><i className="ti ti-check" aria-hidden="true"/> Add entry</button>
               </div>
             </div>
           </div>
@@ -1662,7 +1663,7 @@ export default function App() {
                 {SESSION.companyLogo ? (
                   <img src={SESSION.companyLogo} alt={SESSION.companyName} title={SESSION.companyName} style={{width:40,height:40,objectFit:"contain",borderRadius:8,flexShrink:0}}/>
                 ) : (
-                  <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#3b82f6,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:17,flexShrink:0,boxShadow:"0 1px 2px rgba(0,0,0,0.1)"}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#26241d,#100f0c)",display:"flex",alignItems:"center",justifyContent:"center",color:"#e3b341",fontWeight:700,fontSize:17,flexShrink:0,boxShadow:"0 1px 2px rgba(0,0,0,0.1)"}}>
                     {(SESSION.companyName||"?").trim().charAt(0).toUpperCase()}
                   </div>
                 )}
@@ -1729,7 +1730,7 @@ export default function App() {
           {/* Logged-in operator */}
           <div style={{padding:"10px 8px",borderTop:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",gap:10,padding:sidebarExpanded?"8px 10px":0,justifyContent:sidebarExpanded?"flex-start":"center",borderRadius:10,background:sidebarExpanded?C.surface2:"transparent"}}>
-              <div style={{width:32,height:32,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:C.accent,color:C.onAccent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>
                 {(SESSION.operatorId||"?").replace(/[^A-Za-z0-9]/g,"").slice(-2).toUpperCase()}
               </div>
               {sidebarExpanded&&(
@@ -1774,7 +1775,7 @@ export default function App() {
             )}
             <div style={{position:"relative"}} ref={opMenuRef}>
               <button onClick={()=>setShowOperatorMenu(o=>!o)} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 10px 6px 6px",color:C.text}}>
-                <div style={{width:26,height:26,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0}}>
+                <div style={{width:26,height:26,borderRadius:"50%",background:C.accent,color:C.onAccent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flexShrink:0}}>
                   {(SESSION.operatorId||"?").replace(/[^A-Za-z0-9]/g,"").slice(-2).toUpperCase()}
                 </div>
                 <span style={{fontSize:13,fontWeight:500}}>{SESSION.operatorId}</span>
@@ -1920,7 +1921,7 @@ export default function App() {
           <div>
             <div style={sectionStyle}>
               <SectionTitle icon="ti-building-bank" right={
-                <button onClick={()=>{ setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(true); }} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:"#fff",border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                <button onClick={()=>{ setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(true); }} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
                   <i className="ti ti-plus" aria-hidden="true"/> Add bank
                 </button>
               }>Bank accounts</SectionTitle>
@@ -1985,7 +1986,7 @@ export default function App() {
           <div style={sectionStyle}>
             <SectionTitle icon="ti-users" right={
               <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                <button onClick={()=>{ setNewMember({name:"",phone:"",id:""}); setNewMemberError(""); setShowMemberModal(true); }} style={{cursor:"pointer",fontSize:13,fontWeight:500,padding:"7px 16px",border:"none",borderRadius:8,background:C.accent,color:"#fff",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-user-plus" aria-hidden="true"/> Add member</button>
+                <button onClick={()=>{ setNewMember({name:"",phone:"",id:""}); setNewMemberError(""); setShowMemberModal(true); }} style={{cursor:"pointer",fontSize:13,fontWeight:500,padding:"7px 16px",border:"none",borderRadius:8,background:C.accent,color:C.onAccent,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-user-plus" aria-hidden="true"/> Add member</button>
                 <button onClick={()=>exportMembersCSV()} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
                 <button onClick={()=>exportMembersExcel()} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
                 <button onClick={()=>exportMembersPDF()} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>

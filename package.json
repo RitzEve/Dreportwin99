@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.30",
+  "version": "1.6.31",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "The Members page now lists the newest member first, with a Sort menu — by name, recent activity, or number of transactions.",
-    "Every new-entry pop-up now shows the selected bank's current balance, so you can see the funds before recording.",
-    "Tap the bell in the top bar any time to see the new version number, how to update, and what changed."
+    "Dates now read in a clearer day-month-year style everywhere, e.g. 26-Jun-26, with short month names (Jun, Jul, Aug).",
+    "Times and log timestamps now include seconds, and the top-bar clock ticks live every second.",
+    "The Members page lists the newest member first, with a Sort menu; every entry pop-up shows the selected bank's balance."
   ],
   "scripts": {
     "dev": "vite",

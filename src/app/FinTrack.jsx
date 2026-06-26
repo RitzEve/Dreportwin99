@@ -64,9 +64,18 @@ const TYPE_SHORTCUTS = {d:"Regular Deposit",w:"Regular Withdrawal",u:"Unclaimed 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
 const fmt = n => { const v = Number(n)||0; return (v<0?"-$":"$")+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); };
+// Dates are STORED as ISO `YYYY-MM-DD` so they keep sorting/filtering/month-grouping
+// correctly. fmtDate is DISPLAY-only: it turns that into DD-MMM-YY with a short month
+// name, e.g. 2026-06-26 -> "26-Jun-26". Empty / non-ISO values pass straight through.
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtDate = iso => {
+  if(!iso || typeof iso!=="string") return iso||"";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}-${MONTHS_SHORT[Number(m[2])-1]}-${m[1].slice(2)}` : iso;
+};
 const monthLabel = ym => {
   const [y,m] = ym.split("-");
-  return new Date(Number(y),Number(m)-1,1).toLocaleString("en-US",{month:"long",year:"numeric"});
+  return new Date(Number(y),Number(m)-1,1).toLocaleString("en-US",{month:"short",year:"numeric"});
 };
 const dateNDaysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split("T")[0]; };
 const yesterday = dateNDaysAgo(1);
@@ -74,7 +83,9 @@ const weekAgo = dateNDaysAgo(6);
 // --- Time-zone aware "now" helpers. Each company stamps its transaction
 // date/time in its own zone (SESSION.timezone), not the browser's. ---
 const dateInTz = tz => { try { return new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); } catch(e){ return new Date().toISOString().split("T")[0]; } };
-const timeInTz = tz => { try { return new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date()); } catch(e){ return new Date().toTimeString().slice(0,5); } };
+// Includes seconds (HH:MM:SS) — drives both the live top-bar clock and the timestamp
+// stamped onto every saved log record.
+const timeInTz = tz => { try { return new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).format(new Date()); } catch(e){ return new Date().toTimeString().slice(0,8); } };
 const dateNDaysAgoInTz = (n,tz) => { const d=new Date(dateInTz(tz)+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()-n); return d.toISOString().split("T")[0]; };
 // Short, friendly city name from an IANA zone, e.g. "Australia/Sydney" -> "Sydney".
 const tzCity = tz => String(tz||"").split("/").pop().replace(/_/g," ");
@@ -151,12 +162,12 @@ const ftHelpersDefined = true;
 const _removedDupA = null;
 const exportCSV = (rows,name) => {
   const header = TX_COLS.join(",");
-  const lines = rows.map(r=>TX_COLS.map(c=>csvEscape(r[c])).join(","));
+  const lines = rows.map(r=>TX_COLS.map(c=>csvEscape(c==="date"?fmtDate(r.date):r[c])).join(","));
   downloadBlob([header,...lines].join("\n"),`${name}.csv`,"text/csv;charset=utf-8;");
 };
 const exportExcel = (rows,name) => {
   const head = "<tr>"+TX_COLS.map(c=>`<th>${c}</th>`).join("")+"</tr>";
-  const body = rows.map(r=>"<tr>"+TX_COLS.map(c=>`<td>${String(r[c]??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
+  const body = rows.map(r=>"<tr>"+TX_COLS.map(c=>`<td>${String((c==="date"?fmtDate(r.date):r[c])??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1">${head}${body}</table></body></html>`;
   downloadBlob(html,`${name}.xls`,"application/vnd.ms-excel");
 };
@@ -164,7 +175,7 @@ const exportPDF = (rows,title) => {
   const w = window.open("","_blank");
   if(!w) return;
   const head = "<tr>"+["Date","Time","Type","Amount","ID","Member/Ref","Bank","Operator","Receipt","Notes"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
-  const body = rows.map(r=>"<tr>"+[r.date,r.time,r.type,amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,r.bank,r.operator||"",r.receipt||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
+  const body = rows.map(r=>"<tr>"+[fmtDate(r.date),r.time,r.type,amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,r.bank,r.operator||"",r.receipt||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
   w.document.write(`<html><head><title>${title}</title><style>body{font-family:sans-serif;padding:20px}h2{font-weight:500}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0}</style></head><body><h2>${title}</h2><table>${head}${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 };
@@ -276,7 +287,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
           {data.map((t,idx)=>(
             <tr key={t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
               <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{startIndex+idx+1}</td>
-              <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{t.date} {t.time}</td>
+              <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{fmtDate(t.date)} {t.time}</td>
               <td style={{padding:"9px 10px"}}>
                 <TxBadge type={t.type}/>
                 {t.isNew&&<span style={{marginLeft:4,background:"#16a34a26",color:"#16a34a",fontSize:10,padding:"1px 6px",borderRadius:4,border:"1px solid #16a34a55"}}>New</span>}
@@ -290,7 +301,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
                 if(t.actualPaid && t.bankId==null) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#0d9488"}}><i className="ti ti-cash" aria-hidden="true"/>Actual paid</span>;
                 if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
-                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${t.claimedFromDate}`:""}</span>;
+                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                 const holder = (b&&b.holder) || t.bankHolder || "";
                 return (<span>
                   <span style={{display:"block"}}>{holder || t.bank}</span>
@@ -409,6 +420,14 @@ function Confirm({message,onConfirm,onCancel}) {
   );
 }
 
+// Top-bar clock, kept as its own component so its 1-second tick re-renders only this
+// little span — not the whole (large) FinTrack tree. Shows HH:MM:SS in the company zone.
+function LiveClock({tz,color}){
+  const [now,setNow] = useState(()=>timeInTz(tz));
+  useEffect(()=>{ setNow(timeInTz(tz)); const id=setInterval(()=>setNow(timeInTz(tz)),1000); return ()=>clearInterval(id); },[tz]);
+  return <span style={{fontWeight:600,color}}>{now}</span>;
+}
+
 function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
   const [search,setSearch] = useState("");
   const [sortKey,setSortKey] = useState("date");
@@ -497,7 +516,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                   {rows.map((t,idx)=>(
                     <tr key={t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
                       <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",...(isMobile?{position:"sticky",left:0,zIndex:1,background:idx%2?C.surface:C.bg}:null)}}>{idx+1}</td>
-                      <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{t.date} {t.time}</td>
+                      <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{fmtDate(t.date)} {t.time}</td>
                       <td style={{padding:"9px 10px"}}><TxBadge type={t.type}/>{t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}</td>
                       <td style={{padding:"9px 10px",color:C.text,textDecoration:t.deleted?"line-through":"none"}}>{t.memberName}</td>
                       <td style={{padding:"9px 10px",color:C.muted,textDecoration:t.deleted?"line-through":"none"}}>{t.memberId||"—"}</td>
@@ -507,7 +526,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
                         if(t.actualPaid && t.bankId==null) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#0d9488"}}><i className="ti ti-cash" aria-hidden="true"/>Actual paid</span>;
                 if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
-                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${t.claimedFromDate}`:""}</span>;
+                if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                         const holder = (b&&b.holder) || t.bankHolder || "";
                         return (<span>
                           <span style={{display:"block"}}>{holder || t.bank}</span>
@@ -573,8 +592,6 @@ export default function App() {
   const weekAgo = dateNDaysAgoInTz(6,tz);
   const thisMonth = today.slice(0,7);
   // Live clock for the top bar, ticking in the company's time zone.
-  const [clockNow,setClockNow] = useState(()=>timeInTz(tz));
-  useEffect(()=>{ setClockNow(timeInTz(tz)); const id=setInterval(()=>setClockNow(timeInTz(tz)),20000); return ()=>clearInterval(id); },[tz]);
   const [page,setPage] = useState("dashboard");
   const [memberPage,setMemberPage] = useState(1);
   const [memberPageSize,setMemberPageSize] = useState(50);
@@ -868,7 +885,7 @@ export default function App() {
       const list = transactions.filter(t=>t.date.slice(0,7)===ym&&!t.deleted);
       const dep = list.filter(t=>["Regular Deposit","Unclaimed Credit"].includes(t.type)).reduce((a,b)=>a+b.amount,0);
       const wd = list.filter(t=>["Regular Withdrawal","Rental","Store","Mistake"].includes(t.type)).reduce((a,b)=>a+b.amount,0);
-      return {ym,label:monthLabel(ym).replace(/ \d+$/,m=>m.slice(0,3)),dep,wd};
+      return {ym,label:`${MONTHS_SHORT[Number(ym.slice(5,7))-1]} ${ym.slice(2,4)}`,dep,wd};
     });
   },[transactions,availableMonths]);
 
@@ -1019,13 +1036,13 @@ export default function App() {
     if(form.type==="Regular Deposit" && form.fromUnclaimed){
       const claimFrom = form.claimDate || claimableDates[0] || txDate;   // which day's credit we draw from
       const availForDate = unclaimedByDate[claimFrom] || 0;
-      if(amt > availForDate + 1e-9){ setFormError(`Not enough unclaimed credit on ${claimFrom} to claim. Available that day: ${fmt(availForDate)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
+      if(amt > availForDate + 1e-9){ setFormError(`Not enough unclaimed credit on ${fmtDate(claimFrom)} to claim. Available that day: ${fmt(availForDate)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
       const pairId = `UC-${nextId}`;
       const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`;
       const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew,deleted:false,pairId,fromUnclaimed:true,claimedFromDate:claimFrom};
-      const ucLeg  = {id:nextId+1,date:claimFrom,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||`Claimed by deposit on ${txDate}`,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
+      const ucLeg  = {id:nextId+1,date:claimFrom,time,type:"Unclaimed Credit",amount:-amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes||`Claimed by deposit on ${fmtDate(txDate)}`,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,pairId,claimLeg:true};
       setTransactions(prev=>[ucLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
@@ -1192,20 +1209,20 @@ export default function App() {
   const M_COLS = ["id","name","phone","joined","transactions","totalDeposits","lastActivity"];
   const exportMembersCSV = () => {
     const rows = memberRows();
-    const lines = rows.map(r=>M_COLS.map(c=>csvEscape(r[c])).join(","));
+    const lines = rows.map(r=>M_COLS.map(c=>csvEscape(c==="joined"||c==="lastActivity"?fmtDate(r[c]):r[c])).join(","));
     downloadBlob([M_COLS.join(","),...lines].join("\n"),"fintrack_members.csv","text/csv;charset=utf-8;");
   };
   const exportMembersExcel = () => {
     const rows = memberRows();
     const head = "<tr>"+M_COLS.map(c=>`<th>${c}</th>`).join("")+"</tr>";
-    const body = rows.map(r=>"<tr>"+M_COLS.map(c=>`<td>${String(r[c]??"")}</td>`).join("")+"</tr>").join("");
+    const body = rows.map(r=>"<tr>"+M_COLS.map(c=>`<td>${String((c==="joined"||c==="lastActivity"?fmtDate(r[c]):r[c])??"")}</td>`).join("")+"</tr>").join("");
     downloadBlob(`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1">${head}${body}</table></body></html>`,"fintrack_members.xls","application/vnd.ms-excel");
   };
   const exportMembersPDF = () => {
     const rows = memberRows();
     const w = window.open("","_blank"); if(!w) return;
     const head = "<tr>"+["Member ID","Name","Phone","Joined","Transactions","Total deposits","Last activity"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
-    const body = rows.map(r=>"<tr>"+[r.id,r.name,r.phone,r.joined,r.transactions,fmt(r.totalDeposits),r.lastActivity].map(c=>`<td>${String(c)}</td>`).join("")+"</tr>").join("");
+    const body = rows.map(r=>"<tr>"+[r.id,r.name,r.phone,fmtDate(r.joined),r.transactions,fmt(r.totalDeposits),fmtDate(r.lastActivity)].map(c=>`<td>${String(c)}</td>`).join("")+"</tr>").join("");
     w.document.write(`<html><head><title>FinTrack — Members</title><style>body{font-family:sans-serif;padding:20px}h2{font-weight:500}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0}</style></head><body><h2>FinTrack — Members directory</h2><table>${head}${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
     w.document.close();
   };
@@ -1213,7 +1230,7 @@ export default function App() {
   const openMemberDetail = m => {
     const tx = transactions.filter(t=>t.memberId===m.id||t.memberName===m.name).sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time));
     const total = tx.filter(t=>t.type==="Regular Deposit"&&!t.deleted).reduce((a,b)=>a+b.amount,0);
-    setDetailModal({title:m.name,subtitle:`${m.id}${m.phone?" · "+m.phone:""} · Joined ${m.joined} · ${tx.length} transactions · Total deposits: ${fmt(total)}`,transactions:tx});
+    setDetailModal({title:m.name,subtitle:`${m.id}${m.phone?" · "+m.phone:""} · Joined ${fmtDate(m.joined)} · ${tx.length} transactions · Total deposits: ${fmt(total)}`,transactions:tx});
   };
   const openBankDetail = b => {
     const tx = transactions.filter(t=>txInBank(t,b)).sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time));
@@ -1291,10 +1308,10 @@ export default function App() {
     <button onClick={onClick} style={{cursor:"pointer",padding:"6px 14px",fontSize:13,fontWeight:500,border:`1px solid ${active?C.accent:C.border}`,borderRadius:8,background:active?C.accent:C.surface2,color:active?C.onAccent:C.text}}>{label}</button>
   );
 
-  const dashScopeLabel = dashView==="today" ? `Today — ${today}`
-    : dashView==="yesterday" ? `Yesterday — ${yesterday}`
-    : dashView==="week" ? `Last 7 days — ${weekAgo} to ${today}`
-    : dashView==="range" ? `${rangeFrom||"start"} to ${rangeTo||"end"}`
+  const dashScopeLabel = dashView==="today" ? `Today — ${fmtDate(today)}`
+    : dashView==="yesterday" ? `Yesterday — ${fmtDate(yesterday)}`
+    : dashView==="week" ? `Last 7 days — ${fmtDate(weekAgo)} to ${fmtDate(today)}`
+    : dashView==="range" ? `${rangeFrom?fmtDate(rangeFrom):"start"} to ${rangeTo?fmtDate(rangeTo):"end"}`
     : monthLabel(selMonth);
   const scopeName = dashView==="today" ? `today_${today}`
     : dashView==="yesterday" ? `yesterday_${yesterday}`
@@ -1652,7 +1669,7 @@ export default function App() {
                       : <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:12.5,color:C.muted,paddingLeft:2}}>
                           <span style={{fontWeight:500,color:C.text}}>Claim from</span>
                           <FluidDropdown width={230} value={form.claimDate} ariaLabel="Claim from which date"
-                            options={claimableDates.map(d=>({value:d,label:`${d} — ${fmt(unclaimedByDate[d])} left`}))}
+                            options={claimableDates.map(d=>({value:d,label:`${fmtDate(d)} — ${fmt(unclaimedByDate[d])} left`}))}
                             onChange={v=>setForm(f=>({...f,claimDate:v}))}/>
                           <span>· the deposit still counts as today</span>
                         </div>
@@ -1724,7 +1741,7 @@ export default function App() {
                   <input type="date" value={form.date} max={today} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
                   {form.date&&form.date!==today&&(
                     <div style={{fontSize:11.5,color:C.accent,marginTop:5,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-                      <span><i className="ti ti-calendar-event" aria-hidden="true" style={{marginRight:4}}/>This entry will be dated {form.date} instead of today.</span>
+                      <span><i className="ti ti-calendar-event" aria-hidden="true" style={{marginRight:4}}/>This entry will be dated {fmtDate(form.date)} instead of today.</span>
                       <button type="button" onClick={()=>setForm(f=>({...f,date:""}))} style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer",fontSize:11.5,textDecoration:"underline",padding:0}}>Reset to today</button>
                     </div>
                   )}
@@ -1847,7 +1864,7 @@ export default function App() {
             </button>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:C.muted,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 10px"}} title={`This company's time zone: ${tz}. Entries are stamped with this clock.`}>
               <i className="ti ti-clock-hour-4" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>
-              <span style={{fontWeight:600,color:C.text}}>{clockNow}</span>
+              <LiveClock tz={tz} color={C.text}/>
               <span style={{whiteSpace:"nowrap"}}>{tzCity(tz)} time</span>
             </div>
             {!isMobile && (
@@ -2143,9 +2160,9 @@ export default function App() {
                         <td style={{padding:"9px 10px",fontWeight:500,color:C.accent}}>{m.id}</td>
                         <td style={{padding:"9px 10px",fontWeight:500,color:C.text}}>{m.name}</td>
                         <td style={{padding:"9px 10px",color:C.muted}}>{m.phone||"—"}</td>
-                        <td style={{padding:"9px 10px",color:C.muted}}>{m.joined}</td>
+                        <td style={{padding:"9px 10px",color:C.muted}}>{fmtDate(m.joined)}</td>
                         <td style={{padding:"9px 10px",color:C.text}}>{mTx.length}</td>
-                        <td style={{padding:"9px 10px",color:C.muted}}>{m.lastActivity}</td>
+                        <td style={{padding:"9px 10px",color:C.muted}}>{fmtDate(m.lastActivity)}</td>
                         <td style={{padding:"9px 10px"}}>
                           {m.joined===today
                             ?<span style={{background:"#16a34a26",color:"#16a34a",fontSize:11,padding:"2px 8px",borderRadius:4,border:"1px solid #16a34a55"}}>New today</span>

@@ -15,6 +15,7 @@ import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import UpdateBell from '../components/UpdateBell.jsx';
 import useIsMobile from '../lib/useIsMobile.js';
 
 /*
@@ -53,6 +54,7 @@ export default function Provider({ ctx, onLogout }) {
           </div>
         </div>
         <div style={styles.userBox}>
+          <UpdateBell />
           <ThemeToggle />
           <span className="badge badge-provider"><i className="ti ti-shield-lock" aria-hidden="true" /> Provider</span>
           <AccountMenu user={user} roleLabel="Provider" onLogout={onLogout} />

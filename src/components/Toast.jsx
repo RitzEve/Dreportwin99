@@ -11,22 +11,18 @@ import { useEffect, useRef, useState } from 'react';
  * Anywhere in the app (portal screens OR the FinTrack artifact) can fire one:
  *     window.showToast("Action Done !", "success");
  *
- * Three types only (no "warning"):
- *   success  → green,  1s   "Action Done !"            (entry saved)
- *   error    → red,    1s   "Error , Please Try Again" (entry rejected)
- *   update   → blue,   5s   new-version notice         (auto, see below)
+ * Two types (no "warning"):
+ *   success  → green, 1s   "Action Done !"            (entry saved)
+ *   error    → red,   1s   "Error , Please Try Again" (entry rejected)
  *
- * The "update" toast fires automatically: this component remembers the version
- * the running tab was BUILT as (__APP_VERSION__, injected by vite.config.js) and
- * every minute fetches /version.json (emitted into each deploy). If the deployed
- * version is newer than the running tab, it shows the "new version available"
- * toast with the latest version number baked into the message.
+ * New-version notices are NOT shown here anymore — they live in the header
+ * notification bell (src/components/UpdateBell.jsx), which polls /version.json
+ * and lights up when a newer deploy is available.
  */
 
 const TYPE_CFG = {
   success: { accent: 'var(--success)', icon: 'ti-circle-check', duration: 1000, position: 'bottom-right' },
   error:   { accent: 'var(--danger)',  icon: 'ti-alert-circle', duration: 1000, position: 'bottom-right' },
-  update:  { accent: 'var(--accent)',  icon: 'ti-rocket',       duration: 30000, position: 'top' },
 };
 
 let _idSeq = 1;
@@ -42,8 +38,8 @@ export default function ToastHost() {
 
   // Expose the global trigger.
   useEffect(() => {
-    const show = (message, type = 'update', opts = {}) => {
-      const cfg = TYPE_CFG[type] || TYPE_CFG.update;
+    const show = (message, type = 'success', opts = {}) => {
+      const cfg = TYPE_CFG[type] || TYPE_CFG.success;
       const id = _idSeq++;
       const position = opts.position || cfg.position;
       const duration = opts.duration != null ? opts.duration : cfg.duration;
@@ -52,35 +48,6 @@ export default function ToastHost() {
     };
     window.showToast = show;
     return () => { if (window.showToast === show) delete window.showToast; };
-  }, []);
-
-  // New-version checker → fires the "update" toast on stale tabs after a deploy.
-  useEffect(() => {
-    const BUILD = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : null;
-    if (!BUILD) return undefined;
-    const notified = new Set();
-    let stopped = false;
-    const check = async () => {
-      if (stopped) return;
-      try {
-        const r = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
-        if (!r.ok) return;
-        const data = await r.json();
-        const latest = data && data.version;
-        if (latest && latest !== BUILD && !notified.has(latest)) {
-          notified.add(latest);
-          window.showToast?.(
-            `New Version V${latest} is ready. To update: log out, fully close this tab or app, then open it again. The login screen should show V${latest}.`,
-            'update',
-          );
-        }
-      } catch { /* offline or dev (no version.json) — ignore */ }
-    };
-    const t0 = setTimeout(check, 4000);                 // shortly after load
-    const iv = setInterval(check, 60000);               // then every minute
-    const onFocus = () => check();                      // and whenever the tab regains focus
-    window.addEventListener('focus', onFocus);
-    return () => { stopped = true; clearTimeout(t0); clearInterval(iv); window.removeEventListener('focus', onFocus); };
   }, []);
 
   return (

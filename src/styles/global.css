@@ -221,6 +221,27 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 @keyframes toast-in-top    { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toast-out-top   { from { opacity: 1; transform: translateY(0); }     to { opacity: 0; transform: translateY(-24px); } }
 
+/* ---- UpdateBell (src/components/UpdateBell.jsx) ----
+   The bell gently swings and its red dot pulses while a new version is unseen. */
+@keyframes bell-swing {
+  0%, 55%, 100% { transform: rotate(0deg); }
+  61% { transform: rotate(14deg); }
+  67% { transform: rotate(-11deg); }
+  73% { transform: rotate(8deg); }
+  79% { transform: rotate(-5deg); }
+  85% { transform: rotate(2deg); }
+}
+@keyframes bell-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.35); opacity: 0.65; }
+}
+@keyframes bell-panel-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.ub-bell-icon { animation: bell-swing 2.6s ease-in-out infinite; }
+.ub-bell-dot  { animation: bell-dot 1.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ub-bell-icon, .ub-bell-dot { animation: none !important; }
+}
+
 /* =====================================================================
    MOBILE BASE RULES  (the app's "make it suit a phone" foundation)
    Everything here is gated to small screens so the desktop look is

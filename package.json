@@ -1,9 +1,15 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.27",
+  "version": "1.6.28",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
+  "whatsNew": [
+    "New notification bell in the top bar of every page — it rings and shows a red dot when an update is ready.",
+    "The old pop-up update banner is gone; tap the bell to see updates instead.",
+    "The bell shows the new version number, simple steps to update, and what changed.",
+    "Bank active/inactive switches, edits and deletes now sync across all your devices."
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",

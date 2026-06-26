@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import FluidDropdown from "../components/FluidDropdown.jsx";
+import UpdateBell from "../components/UpdateBell.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData } from "../lib/mergeData.js";
 
@@ -1787,6 +1788,7 @@ export default function App() {
           <h2 style={{margin:0,fontSize:18,fontWeight:500,color:C.text}}>{nav.find(n=>n.id===page)?.label}</h2>
 
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",justifyContent:"flex-end"}}>
+            <UpdateBell />
             <button onClick={()=>window.FINTRACK_SET_THEME&&window.FINTRACK_SET_THEME(dark?"light":"dark")} title={dark?"Switch to light mode":"Switch to dark mode"} aria-label="Toggle theme"
               style={{position:"relative",width:56,height:30,flexShrink:0,borderRadius:999,border:`2px solid ${dark?"#2d2a4e":"#e8d5b7"}`,background:dark?"#1a1838":"#fef3c7",cursor:"pointer",padding:0,transition:"background 0.3s, border-color 0.3s"}}>
               <span style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left:dark?"calc(100% - 24px)":2,width:22,height:22,borderRadius:"50%",display:"grid",placeItems:"center",background:dark?"#e8e6f0":"#ff9500",color:dark?"#1a1838":"#ffffff",boxShadow:"0 1px 3px rgba(0,0,0,0.3)",transition:"left 0.3s, background 0.3s"}}>

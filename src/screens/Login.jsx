@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { login } from '../lib/auth.js';
 import InstallPrompt from '../components/InstallPrompt.jsx';
+import UpdateBell from '../components/UpdateBell.jsx';
 
 /*
  * Login — email/Name-ID + password, with a playful animated scene on the left.
@@ -142,6 +143,10 @@ export default function Login({ onAuthed }) {
 
   return (
     <div style={{ minHeight: '100dvh', display: 'grid', gridTemplateColumns: isWide ? '1fr 1fr' : '1fr', background: 'var(--bg)' }}>
+      {/* Notification bell — fixed top-right so it's on the login screen too */}
+      <div style={{ position: 'fixed', top: 'max(14px, env(safe-area-inset-top))', right: 14, zIndex: 50 }}>
+        <UpdateBell />
+      </div>
       {/* Left — animated character scene (desktop only) */}
       {isWide && (
         <div style={styles.left}>
@@ -280,7 +285,7 @@ export default function Login({ onAuthed }) {
           <InstallPrompt />
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · v1.6.27
+            Secure access · authorised accounts only · v1.6.28
           </div>
         </div>
       </div>

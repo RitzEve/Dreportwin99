@@ -41,8 +41,9 @@ export default function Root() {
     setScreen('console');
   }
 
-  // Pick the screen, then render it alongside the always-on ToastHost so toasts
-  // (entry success/error + new-version notice) work on every screen.
+  // Pick the screen, then render it alongside the always-on ToastHost so the
+  // entry success/error toasts work on every screen. (New-version notices now live
+  // in the header notification bell, src/components/UpdateBell.jsx.)
   let content;
   if (loading) content = <Splash />;
   else if (!ctx) content = <Login onAuthed={handleAuthed} />;

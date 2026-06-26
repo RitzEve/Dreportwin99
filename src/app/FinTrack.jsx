@@ -351,6 +351,15 @@ function BankTotals({banksLive}) {
 
 // Transaction log with a page-size dropdown (default 50) + simple pager.
 const PAGE_SIZES = [50,100,200,500,1000];
+// Member directory sort options (value -> label shown in the Sort dropdown).
+const MEMBER_SORTS = [
+  {value:"newest",  label:"Newest first"},
+  {value:"oldest",  label:"Oldest first"},
+  {value:"name",    label:"Name (A–Z)"},
+  {value:"nameDesc",label:"Name (Z–A)"},
+  {value:"tx",      label:"Most transactions"},
+  {value:"activity",label:"Recent activity"},
+];
 const pagerBtn = disabled => ({cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.4:1,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 9px",color:C.text,display:"inline-flex",alignItems:"center"});
 function TxLog({data, showDelete, onDelete, banks}) {
   const [pageSize,setPageSize] = useState(50);
@@ -570,7 +579,8 @@ export default function App() {
   const [memberPage,setMemberPage] = useState(1);
   const [memberPageSize,setMemberPageSize] = useState(50);
   const [memberSearch,setMemberSearch] = useState("");
-  useEffect(()=>{ setMemberPage(1); },[memberPageSize,memberSearch]);
+  const [memberSort,setMemberSort] = useState("newest"); // members directory order — newest member on top by default
+  useEffect(()=>{ setMemberPage(1); },[memberPageSize,memberSearch,memberSort]);
   // Sidebar behaviour: "expanded" | "collapsed" | "hover" (expand-on-hover) — default hover.
   const [sidebarMode,setSidebarMode] = useState(()=>{ try{ return localStorage.getItem("fintrack-sidebar-mode-v2")||"hover"; }catch(e){ return "hover"; } });
   useEffect(()=>{ try{ localStorage.setItem("fintrack-sidebar-mode-v2",sidebarMode); }catch(e){} },[sidebarMode]);
@@ -1224,12 +1234,50 @@ export default function App() {
     if(!q) return members;
     return members.filter(m=>(m.name||"").toLowerCase().includes(q)||(m.id||"").toLowerCase().includes(q)||(m.phone||"").toLowerCase().includes(q));
   },[members,memberSearch]);
-  const memberTotal = memberFiltered.length;
+  // Members are appended as they're added, so a member's index in `members` is its join
+  // order — the reliable "newest" signal (joined dates tie when several join the same day).
+  // Every sort reuses that index as a stable tiebreaker.
+  const memberOrderIndex = useMemo(()=>{ const m=new Map(); members.forEach((mem,i)=>m.set(mem.id,i)); return m; },[members]);
+  const memberSorted = useMemo(()=>{
+    const ix = m => (memberOrderIndex.get(m.id) ?? 0);
+    const arr = [...memberFiltered];
+    if(memberSort==="tx"){
+      const cnt = new Map();
+      for(const m of arr) cnt.set(m.id, transactions.filter(t=>(t.memberId===m.id||t.memberName===m.name)&&!t.deleted).length);
+      arr.sort((a,b)=> (cnt.get(b.id)-cnt.get(a.id)) || (ix(b)-ix(a)));
+    } else if(memberSort==="name"){
+      arr.sort((a,b)=> (a.name||"").localeCompare(b.name||"") || (ix(a)-ix(b)));
+    } else if(memberSort==="nameDesc"){
+      arr.sort((a,b)=> (b.name||"").localeCompare(a.name||"") || (ix(b)-ix(a)));
+    } else if(memberSort==="activity"){
+      arr.sort((a,b)=> String(b.lastActivity||"").localeCompare(String(a.lastActivity||"")) || (ix(b)-ix(a)));
+    } else if(memberSort==="oldest"){
+      arr.sort((a,b)=> ix(a)-ix(b));
+    } else { // "newest" (default) — most recently added member on top
+      arr.sort((a,b)=> ix(b)-ix(a));
+    }
+    return arr;
+  },[memberFiltered,memberSort,memberOrderIndex,transactions]);
+  const memberTotal = memberSorted.length;
   const memberPages = Math.max(1, Math.ceil(memberTotal/memberPageSize));
   const memberCurPage = Math.min(memberPage, memberPages);
   const memberStart = (memberCurPage-1)*memberPageSize;
-  const memberSlice = memberFiltered.slice(memberStart, memberStart+memberPageSize);
+  const memberSlice = memberSorted.slice(memberStart, memberStart+memberPageSize);
 
+  // Caption under a bank picker in the entry form: the picked bank's live balance, so the
+  // operator sees how much is in the account before recording a deposit/withdrawal/transfer.
+  const bankBalanceHint = (bankId) => {
+    if(bankId==null) return null;
+    const b = activeBanks.find(x=>x.id===bankId);
+    if(!b) return null;
+    return (
+      <div style={{marginTop:6,fontSize:12,display:"flex",alignItems:"center",gap:6,color:C.muted}}>
+        <i className="ti ti-wallet" aria-hidden="true" style={{fontSize:13,color:C.accent}}/>
+        <span>Current balance:</span>
+        <strong style={{color:b.balance<0?"#dc2626":C.text}}>{fmt(b.balance)}</strong>
+      </div>
+    );
+  };
   const labelStyle = {fontSize:12,color:C.muted,display:"block",marginBottom:4};  const SectionTitle = ({icon,children,right}) => (
     <div style={{display:"flex",flexDirection:isMobile?"column":"row",alignItems:isMobile?"stretch":"center",justifyContent:"space-between",gap:isMobile?10:0,margin:"0 0 12px"}}>
       <h3 style={{fontSize:15,fontWeight:500,margin:0,display:"flex",alignItems:"center",gap:8,color:C.text}}>
@@ -1534,13 +1582,15 @@ export default function App() {
                 <div><label style={labelStyle}>Bank account affected (optional)</label>
                   <FluidDropdown value={form.bankId??""} placeholder="— None —" ariaLabel="Bank account affected"
                     options={[{value:"",label:"— None —"},...activeBanks.map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
-                    onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/></div>
+                    onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/>
+                  {bankBalanceHint(form.bankId)}</div>
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
                   <input ref={amountRef} type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 {form.type==="Transfer"&&<div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Destination bank (optional)</label>
                   <FluidDropdown value={form.toBankId??""} placeholder="— None —" ariaLabel="Destination bank"
                     options={[{value:"",label:"— None —"},...activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
-                    onChange={v=>setForm(f=>({...f,toBankId:v===""?null:Number(v)}))}/></div>}
+                    onChange={v=>setForm(f=>({...f,toBankId:v===""?null:Number(v)}))}/>
+                  {bankBalanceHint(form.toBankId)}</div>}
                 <div style={{position:"relative",gridColumn:"1/-1"}} ref={suggestRef}>
                   <label style={labelStyle}>Member name / reference{(form.type!=="Regular Deposit"&&form.type!=="Regular Withdrawal")?" (optional)":""}</label>
                   <input type="text" placeholder="Type to search members..." value={form.memberName} onChange={e=>handleNameInput(e.target.value)} onKeyDown={e=>onSuggestKey(e,nameSuggestions)} style={{width:"100%",boxSizing:"border-box"}}/>
@@ -2038,12 +2088,21 @@ export default function App() {
               {memberSearch&&<button type="button" onClick={()=>setMemberSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
             </div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
-                <span>Show</span>
-                <FluidDropdown width={100} value={memberPageSize} ariaLabel="Rows per page"
-                  options={PAGE_SIZES.map(n=>({value:n,label:String(n)}))}
-                  onChange={v=>setMemberPageSize(Number(v))}/>
-                <span>per page</span>
+              <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+                  <i className="ti ti-arrows-sort" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>
+                  <span>Sort</span>
+                  <FluidDropdown width={170} value={memberSort} ariaLabel="Sort members"
+                    options={MEMBER_SORTS}
+                    onChange={v=>setMemberSort(v)}/>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+                  <span>Show</span>
+                  <FluidDropdown width={100} value={memberPageSize} ariaLabel="Rows per page"
+                    options={PAGE_SIZES.map(n=>({value:n,label:String(n)}))}
+                    onChange={v=>setMemberPageSize(Number(v))}/>
+                  <span>per page</span>
+                </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:C.muted}}>
                 <span>{memberTotal===0?0:memberStart+1}–{Math.min(memberStart+memberPageSize,memberTotal)} of {memberTotal}</span>

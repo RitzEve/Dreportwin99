@@ -222,24 +222,45 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 @keyframes toast-out-top   { from { opacity: 1; transform: translateY(0); }     to { opacity: 0; transform: translateY(-24px); } }
 
 /* ---- UpdateBell (src/components/UpdateBell.jsx) ----
-   The bell gently swings and its red dot pulses while a new version is unseen. */
+   Header notification bell: hover/press/focus states, a gold halo + swing while a
+   new version is unseen, and a glass popover. */
+.ub-bell-btn {
+  position: relative; width: 38px; height: 38px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  border-radius: 11px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--muted); cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s, transform .12s;
+}
+.ub-bell-btn:hover { border-color: var(--border-strong); color: var(--text); background: color-mix(in srgb, var(--text) 6%, var(--surface-2)); }
+.ub-bell-btn:active { transform: scale(.94); }
+.ub-bell-btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+.ub-bell-btn.is-ringing { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.ub-bell-btn.is-ringing:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+
+.ub-close { cursor: pointer; background: transparent; border: none; color: var(--muted); padding: 4px; border-radius: 8px; display: inline-flex; transition: background .15s, color .15s; }
+.ub-close:hover { background: var(--surface-2); color: var(--text); }
+.ub-close:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
 @keyframes bell-swing {
   0%, 55%, 100% { transform: rotate(0deg); }
-  61% { transform: rotate(14deg); }
-  67% { transform: rotate(-11deg); }
-  73% { transform: rotate(8deg); }
-  79% { transform: rotate(-5deg); }
-  85% { transform: rotate(2deg); }
+  61% { transform: rotate(13deg); }
+  67% { transform: rotate(-10deg); }
+  73% { transform: rotate(7deg); }
+  79% { transform: rotate(-4deg); }
+  85% { transform: rotate(1deg); }
 }
-@keyframes bell-dot {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50%      { transform: scale(1.35); opacity: 0.65; }
+@keyframes bell-dot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.6; } }
+@keyframes bell-halo {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 48%, transparent); }
+  70%  { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
 }
-@keyframes bell-panel-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.ub-bell-icon { animation: bell-swing 2.6s ease-in-out infinite; }
+@keyframes bell-panel-in { from { opacity: 0; transform: translateY(-8px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.ub-bell-icon { animation: bell-swing 2.6s ease-in-out infinite; transform-origin: 50% 3px; }
 .ub-bell-dot  { animation: bell-dot 1.5s ease-in-out infinite; }
+.ub-halo      { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: bell-halo 2s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .ub-bell-icon, .ub-bell-dot { animation: none !important; }
+  .ub-bell-icon, .ub-bell-dot, .ub-halo { animation: none !important; }
 }
 
 /* =====================================================================

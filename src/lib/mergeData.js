@@ -32,8 +32,10 @@ export function mergeData(remote, local) {
   for (const b of (remote.banks || [])) bankMap.set(b.id, b);
   for (const b of (local.banks || [])) {
     const prev = bankMap.get(b.id);
-    // newer updatedAt wins (legacy banks have none -> 0, so local keeps winning as before)
-    bankMap.set(b.id, !prev ? b : ((b.updatedAt || 0) >= (prev.updatedAt || 0) ? { ...prev, ...b } : { ...b, ...prev }));
+    // newer updatedAt wins, taken WHOLE — not field-merged — so a stale `deleted`/`active` flag
+    // from the losing side can't leak onto the winner. Legacy banks have no updatedAt (-> 0), so
+    // local keeps winning as before until a bank is first touched.
+    bankMap.set(b.id, !prev ? b : ((b.updatedAt || 0) >= (prev.updatedAt || 0) ? b : prev));
   }
   const banks = [...bankMap.values()];
   const nextId = Math.max(local.nextId || 0, remote.nextId || 0);

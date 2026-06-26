@@ -61,8 +61,10 @@ begin
     select case
              when c.t is null then i.t
              when i.t is null then c.t
-             when coalesce((i.t->>'updatedAt')::bigint,0) >= coalesce((c.t->>'updatedAt')::bigint,0) then c.t || i.t
-             else i.t || c.t
+             -- newer updatedAt wins, taken WHOLE (not c.t||i.t) so a stale deleted/active flag
+             -- on the losing side can't leak onto the winner.
+             when coalesce((i.t->>'updatedAt')::bigint,0) >= coalesce((c.t->>'updatedAt')::bigint,0) then i.t
+             else c.t
            end as t
     from (select value->>'id' k, value t from jsonb_array_elements(coalesce(v_current->'banks','[]'::jsonb))) c
     full outer join (select value->>'id' k, value t from jsonb_array_elements(coalesce(p_incoming->'banks','[]'::jsonb))) i

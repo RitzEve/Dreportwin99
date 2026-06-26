@@ -792,7 +792,7 @@ export default function App() {
 
   // Ordered by priority (active first, latest-activated on top). This single order
   // drives the Bank Accounts cards, the dashboard per-bank list, and the totals.
-  const banksLive = useMemo(()=>orderBanks(banks.map(b=>{
+  const banksLive = useMemo(()=>orderBanks(banks.filter(b=>!b.deleted).map(b=>{
     // Today's entry counts for this bank: deposits in, withdrawals out, transfers
     // (counted on both the source (Transfer Out) and destination (Transfer In) bank), and store
     // entries (whose bank-side leg is tagged fundLeg — money taken from the bank into the store).
@@ -1142,7 +1142,10 @@ export default function App() {
     if(!editBankForm.name.trim()||!editBankForm.holder.trim()||isNaN(editBankForm.balance)){setEditBankError("Bank name, holder, and opening balance are required.");return;}
     setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,openingBalance:Number(editBankForm.balance),updatedAt:Date.now()}:b)); setEditingBank(null);
   };
-  const handleDeleteBank = (id,name) => setConfirm({message:`Delete "${name}"? This cannot be undone.`,onConfirm:()=>{setBanks(prev=>prev.filter(b=>b.id!==id));setConfirm(null);}});
+  // Soft-delete: tag the bank deleted (with a fresh updatedAt) instead of dropping it, so the
+  // newest-wins merge carries the deletion to other devices. The UI filters deleted banks out
+  // (see banksLive); transaction logs still resolve a deleted bank's NAME from the full list.
+  const handleDeleteBank = (id,name) => setConfirm({message:`Delete "${name}"? This cannot be undone.`,onConfirm:()=>{setBanks(prev=>prev.map(b=>b.id===id?{...b,deleted:true,updatedAt:Date.now()}:b));setConfirm(null);}});
   // Toggle a bank between active and inactive. Inactive hides it from the
   // dashboard per-bank list and the entry-form dropdowns (history is kept).
   const handleToggleBankActive = id => setBanks(prev=>prev.map(b=>{
@@ -1884,7 +1887,7 @@ export default function App() {
             <div style={sectionStyle}>
               <SectionTitle icon="ti-plus">Record a transaction</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Choose an entry type to open the entry form.</div>
-              {banks.length===0&&<div style={{fontSize:13,color:"#d97706",marginBottom:14,padding:"10px 14px",background:dark?"#3a2a10":"#fdf3e0",borderRadius:8,border:`1px solid #d9770655`}}><i className="ti ti-alert-triangle" aria-hidden="true"/> Add a bank account on the Bank Accounts page before recording transactions.</div>}
+              {banksLive.length===0&&<div style={{fontSize:13,color:"#d97706",marginBottom:14,padding:"10px 14px",background:dark?"#3a2a10":"#fdf3e0",borderRadius:8,border:`1px solid #d9770655`}}><i className="ti ti-alert-triangle" aria-hidden="true"/> Add a bank account on the Bank Accounts page before recording transactions.</div>}
               <div style={{marginBottom:14,padding:"8px 12px",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8}}>
                 <button type="button" onClick={()=>{ const v=!showShortcuts; setShowShortcuts(v); try{ localStorage.setItem("ft_show_shortcuts",v?"1":"0"); }catch{} }} aria-expanded={showShortcuts}
                   style={{display:"flex",alignItems:"center",gap:6,width:"100%",background:"transparent",border:"none",cursor:"pointer",color:C.text,fontSize:12,fontWeight:600,padding:0,textAlign:"left",fontFamily:"inherit"}}>
@@ -1960,8 +1963,8 @@ export default function App() {
                 </button>
               }>Bank accounts</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a card to view its full transaction history.</div>
-              {banks.length>0&&<div style={{marginBottom:16}}><BankTotals banksLive={banksLive}/></div>}
-              {banks.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank accounts yet. Click "Add bank" to create one.</div>}
+              {banksLive.length>0&&<div style={{marginBottom:16}}><BankTotals banksLive={banksLive}/></div>}
+              {banksLive.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank accounts yet. Click "Add bank" to create one.</div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(220px, calc((100% - 48px) / 5)), 1fr))",gap:12}}>
                 {banksLive.map(b=>(
                   <GlowCard key={b.id} color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:editingBank===b.id?"default":"pointer"}}
@@ -2113,7 +2116,7 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
                 <div><label style={labelStyle}>Keyword</label><input type="text" placeholder="Name, ID, bank..." value={search.term} onChange={e=>setSearch(s=>({...s,term:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>Member</label><FluidDropdown value={search.member} placeholder="All members" ariaLabel="Filter by member" options={[{value:"",label:"All members"},...members.map(m=>({value:String(m.id),label:`${m.name} (${m.id})`}))]} onChange={v=>setSearch(s=>({...s,member:v}))}/></div>
-                <div><label style={labelStyle}>Bank</label><FluidDropdown value={search.bank} placeholder="All banks" ariaLabel="Filter by bank" options={[{value:"",label:"All banks"},...banks.map(b=>({value:String(b.id),label:b.holder?`${b.holder} — ${b.name}`:b.name}))]} onChange={v=>setSearch(s=>({...s,bank:v}))}/></div>
+                <div><label style={labelStyle}>Bank</label><FluidDropdown value={search.bank} placeholder="All banks" ariaLabel="Filter by bank" options={[{value:"",label:"All banks"},...banksLive.map(b=>({value:String(b.id),label:b.holder?`${b.holder} — ${b.name}`:b.name}))]} onChange={v=>setSearch(s=>({...s,bank:v}))}/></div>
                 <div><label style={labelStyle}>From date</label><input type="date" value={search.dateFrom} onChange={e=>setSearch(s=>({...s,dateFrom:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>To date</label><input type="date" value={search.dateTo} onChange={e=>setSearch(s=>({...s,dateTo:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>Entry type</label><FluidDropdown value={search.type} placeholder="All types" ariaLabel="Filter by type" options={[{value:"",label:"All types"},...ENTRY_TYPES.map(t=>({value:t,label:t,color:TYPE_COLORS[t]}))]} onChange={v=>setSearch(s=>({...s,type:v}))}/></div>

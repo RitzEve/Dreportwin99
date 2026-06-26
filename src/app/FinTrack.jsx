@@ -1133,14 +1133,14 @@ export default function App() {
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
     setBankError("");
-    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,openingBalance:Number(newBank.balance),activatedAt:Date.now()}]);
+    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,openingBalance:Number(newBank.balance),activatedAt:Date.now(),updatedAt:Date.now()}]);
     setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""});
     setShowBankModal(false);
   };
   const startEditBank = b => { setEditingBank(b.id); setEditBankForm({name:b.name,holder:b.holder,bsb:b.bsb||"",account:b.account||"",payid:b.payid||"",balance:String(b.openingBalance??0)}); setEditBankError(""); };
   const handleSaveBank = id => {
     if(!editBankForm.name.trim()||!editBankForm.holder.trim()||isNaN(editBankForm.balance)){setEditBankError("Bank name, holder, and opening balance are required.");return;}
-    setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,openingBalance:Number(editBankForm.balance)}:b)); setEditingBank(null);
+    setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,openingBalance:Number(editBankForm.balance),updatedAt:Date.now()}:b)); setEditingBank(null);
   };
   const handleDeleteBank = (id,name) => setConfirm({message:`Delete "${name}"? This cannot be undone.`,onConfirm:()=>{setBanks(prev=>prev.filter(b=>b.id!==id));setConfirm(null);}});
   // Toggle a bank between active and inactive. Inactive hides it from the
@@ -1148,7 +1148,8 @@ export default function App() {
   const handleToggleBankActive = id => setBanks(prev=>prev.map(b=>{
     if(b.id!==id) return b;
     const nowActive = b.active===false; // was inactive -> we're activating it now
-    return nowActive ? {...b,active:true,activatedAt:Date.now()} : {...b,active:false};
+    // updatedAt lets the cross-device merge see this toggle is the latest change to the bank
+    return nowActive ? {...b,active:true,activatedAt:Date.now(),updatedAt:Date.now()} : {...b,active:false,updatedAt:Date.now()};
   }));
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };

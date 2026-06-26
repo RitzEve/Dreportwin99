@@ -54,9 +54,16 @@ begin
       on c.k = i.k
   ) s;
 
-  -- banks: union by id, incoming wins.
+  -- banks: union by id; whichever side has the newer updatedAt wins. This lets an
+  -- active/inactive toggle (or any bank edit) made on one device reach the others
+  -- instead of being overwritten by another device's stale copy of the bank.
   select coalesce(jsonb_agg(t), '[]'::jsonb) into v_banks from (
-    select coalesce(c.t,'{}'::jsonb) || coalesce(i.t,'{}'::jsonb) as t
+    select case
+             when c.t is null then i.t
+             when i.t is null then c.t
+             when coalesce((i.t->>'updatedAt')::bigint,0) >= coalesce((c.t->>'updatedAt')::bigint,0) then c.t || i.t
+             else i.t || c.t
+           end as t
     from (select value->>'id' k, value t from jsonb_array_elements(coalesce(v_current->'banks','[]'::jsonb))) c
     full outer join (select value->>'id' k, value t from jsonb_array_elements(coalesce(p_incoming->'banks','[]'::jsonb))) i
       on c.k = i.k

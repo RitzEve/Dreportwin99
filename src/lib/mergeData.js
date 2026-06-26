@@ -5,7 +5,8 @@
  *
  * Transactions are matched by their unique `uid` (older rows fall back to `#id`); an
  * entry deleted on EITHER side stays deleted. Members union by id (newer lastActivity
- * wins); banks union by id (local wins); nextId takes the higher of the two.
+ * wins); banks union by id (newer `updatedAt` wins, so an active/inactive toggle or edit
+ * on one device reaches the others); nextId takes the higher of the two.
  *
  * Shared by src/app/FinTrack.jsx (the live merge-on-poll) and src/lib/storageBridge.js
  * (the fallback merge when the atomic server-side RPC isn't installed).
@@ -29,7 +30,11 @@ export function mergeData(remote, local) {
   const members = [...memMap.values()];
   const bankMap = new Map();
   for (const b of (remote.banks || [])) bankMap.set(b.id, b);
-  for (const b of (local.banks || [])) bankMap.set(b.id, b);   // local bank edits/toggles win
+  for (const b of (local.banks || [])) {
+    const prev = bankMap.get(b.id);
+    // newer updatedAt wins (legacy banks have none -> 0, so local keeps winning as before)
+    bankMap.set(b.id, !prev ? b : ((b.updatedAt || 0) >= (prev.updatedAt || 0) ? { ...prev, ...b } : { ...b, ...prev }));
+  }
   const banks = [...bankMap.values()];
   const nextId = Math.max(local.nextId || 0, remote.nextId || 0);
   return { transactions, banks, members, nextId };

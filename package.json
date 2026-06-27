@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.32",
+  "version": "1.6.33",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Withdrawals have a new \"Store + actual paid\" option: set how much comes from store credit and how much from the bank — the leftover automatically becomes unclaimed credit (records 4 linked entries).",
-    "Dates now read in a clearer day-month-year style everywhere, e.g. 26-Jun-26, and times/log timestamps include seconds.",
-    "Members list newest-first with a Sort menu, and every entry pop-up shows the selected bank's balance."
+    "The app is now named \"DRW\" — you'll see it as the browser title and under the app icon when you install it to your home screen.",
+    "Withdrawals have a \"Store + actual paid\" option: split how much comes from store credit and from the bank — the leftover becomes unclaimed credit.",
+    "Dates read in a clearer day-month-year style everywhere (e.g. 26-Jun-26) and times include seconds."
   ],
   "scripts": {
     "dev": "vite",

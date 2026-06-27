@@ -106,7 +106,7 @@ jobs:
       - name: Write report to run summary
         run: |
           {
-            echo "# DRWin health check — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "# DRW health check — $(date -u '+%Y-%m-%d %H:%M UTC')"
             echo ""
             echo "| Check | Result | Detail |"
             echo "|---|---|---|"
@@ -199,7 +199,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
           prompt: |
-            The continuous-integration build for this repository (RitzEve/Dreportwin99 — the "DRWin" multi-company financial portal: a Vite + React 18 plain-JavaScript app, no TypeScript, no Tailwind) is currently FAILING. You are running inside a fresh checkout on a Linux CI runner. Dependencies are already installed.
+            The continuous-integration build for this repository (RitzEve/Dreportwin99 — the "DRW" multi-company financial portal: a Vite + React 18 plain-JavaScript app, no TypeScript, no Tailwind) is currently FAILING. You are running inside a fresh checkout on a Linux CI runner. Dependencies are already installed.
 
             Your job: find the cause and fix it with the SMALLEST safe change, and leave the working tree ready for the workflow to ship. Steps:
             1. Run `npm run build` and read the error — it names the file and line. Also run `git log -5 --oneline` and inspect the files those recent commits touched; a fresh build break is almost always from the latest commit.

@@ -194,7 +194,7 @@ const C = {
   muted: dark ? "#9ca3af" : "#6b7280",
   border: dark ? "#1f2937" : "#d6dae0",
   borderStrong: dark ? "#374151" : "#c3c8d0",
-  accent: dark ? "#e3b341" : "#a67c00",          // DRWin brand gold (paired with the near-black base)
+  accent: dark ? "#e3b341" : "#a67c00",          // DRW brand gold (paired with the near-black base)
   accentBg: dark ? "rgba(227,179,65,0.16)" : "#fbf4dc",
   onAccent: "#1a1206",                            // dark ink for text/icons sitting ON a gold accent fill
 };

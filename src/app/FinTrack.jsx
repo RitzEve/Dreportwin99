@@ -86,6 +86,16 @@ const dateInTz = tz => { try { return new Intl.DateTimeFormat("en-CA",{timeZone:
 // Includes seconds (HH:MM:SS) — drives both the live top-bar clock and the timestamp
 // stamped onto every saved log record.
 const timeInTz = tz => { try { return new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).format(new Date()); } catch(e){ return new Date().toTimeString().slice(0,8); } };
+// Order-independent signature of a data blob. The server stores `data` as JSONB and returns
+// its keys in Postgres's own canonical order, which never matches the browser's JSON.stringify
+// order. Comparing raw strings therefore ALWAYS looked "changed", so the save effect re-sent
+// the same data forever (a save -> merge -> apply -> save loop that hammered the database).
+// Sorting keys before stringifying makes "did anything actually change?" reliable.
+const sortedStringify = (v) => {
+  if (Array.isArray(v)) return '[' + v.map(sortedStringify).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + sortedStringify(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+};
 const dateNDaysAgoInTz = (n,tz) => { const d=new Date(dateInTz(tz)+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()-n); return d.toISOString().split("T")[0]; };
 // Short, friendly city name from an IANA zone, e.g. "Australia/Sydney" -> "Sydney".
 const tzCity = tz => String(tz||"").split("/").pop().replace(/_/g," ");
@@ -692,7 +702,7 @@ export default function App() {
       const key = `fintrack-${SESSION.companyId}-v2`;
       try{
         const r = await window.storage.get(key);
-        if(r&&r.value){ applyData(JSON.parse(r.value)); lastSyncRef.current = r.value; lastMetaRef.current = r.updatedAt || null; }
+        if(r&&r.value){ applyData(JSON.parse(r.value)); lastSyncRef.current = sortedStringify(JSON.parse(r.value)); lastMetaRef.current = r.updatedAt || null; }
         try{ await window.storage.delete("fintrack-data"); }catch(e){}
       }catch(e){ /* first run, no saved data */ }
       setLoaded(true);
@@ -709,8 +719,10 @@ export default function App() {
   // returns. No pre-read here — that saved an entire extra blob download on every save.
   useEffect(()=>{
     if(!loaded) return;
-    const serialized = JSON.stringify({transactions,banks,members,nextId});
-    if(serialized === lastSyncRef.current) return; // nothing new to persist (incl. data we just pulled in)
+    const payload = {transactions,banks,members,nextId};
+    const serialized = JSON.stringify(payload); // what we send to the server
+    const sig = sortedStringify(payload);       // order-independent "has anything changed?" key
+    if(sig === lastSyncRef.current) return; // nothing semantically new (incl. data we just pulled in)
     let cancelled = false;
     (async()=>{
       try{
@@ -718,8 +730,12 @@ export default function App() {
         const res = await window.storage.set(key,serialized);
         if(cancelled || !res) return;
         const finalStr = (res && res.value) ? res.value : serialized;
-        lastSyncRef.current = finalStr;
-        if(finalStr !== serialized) applyData(JSON.parse(finalStr));
+        const finalSig = sortedStringify(JSON.parse(finalStr));
+        lastSyncRef.current = finalSig;
+        // Only adopt the server's copy when it's GENUINELY different (another device merged
+        // something in) — not when it's the same data with JSONB's keys reordered. This is the
+        // check that stops the runaway save -> merge -> apply -> save loop.
+        if(finalSig !== sig) applyData(JSON.parse(finalStr));
         // The write bumped the server's updated_at; let the next poll reconcile it (cheap).
       }catch(e){ /* save failed — will retry on the next change or poll */ }
     })();
@@ -747,7 +763,7 @@ export default function App() {
           if(r && r.value){
             const merged = mergeData(JSON.parse(r.value), dataRef.current);
             applyData(merged);
-            lastSyncRef.current = JSON.stringify(merged);
+            lastSyncRef.current = sortedStringify(merged);
             lastMetaRef.current = r.updatedAt || stamp;
           }
         }

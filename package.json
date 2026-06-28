@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.34",
+  "version": "1.6.35",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "Performance fix: stopped a background sync loop that was constantly writing to the database — the app now saves only when data actually changes, which sharply cuts server load and disk use.",
     "Bank cards have a new Block / Unblock button: a blocked bank is forced inactive and can't be made active again until you unblock it.",
-    "The app is now named \"DRW\" — you'll see it as the browser title and under the app icon when you install it to your home screen.",
-    "Withdrawals have a \"Store + actual paid\" option: split how much comes from store credit and from the bank — the leftover becomes unclaimed credit."
+    "The app is now named \"DRW\" — you'll see it as the browser title and under the app icon when you install it to your home screen."
   ],
   "scripts": {
     "dev": "vite",

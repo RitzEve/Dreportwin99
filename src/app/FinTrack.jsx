@@ -203,6 +203,10 @@ const editBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight
 const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
 const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",gap:4};
 const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",gap:4};
+// Block toggle: neutral when the bank is open (the "Block" action), red when it's blocked
+// (the "Unblock" action) — mirrors the danger styling so a blocked bank reads at a glance.
+const bankBlockBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",gap:4};
+const bankBlockedBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
 const sectionStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:20,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 const cardStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 
@@ -1213,9 +1217,17 @@ export default function App() {
   // dashboard per-bank list and the entry-form dropdowns (history is kept).
   const handleToggleBankActive = id => setBanks(prev=>prev.map(b=>{
     if(b.id!==id) return b;
+    if(b.blocked) return b; // a blocked bank can't be activated — it must be unblocked first
     const nowActive = b.active===false; // was inactive -> we're activating it now
     // updatedAt lets the cross-device merge see this toggle is the latest change to the bank
     return nowActive ? {...b,active:true,activatedAt:Date.now(),updatedAt:Date.now()} : {...b,active:false,updatedAt:Date.now()};
+  }));
+  // Block / Unblock a bank. Blocking force-deactivates it and stops it being made active
+  // again until it's unblocked (handleToggleBankActive refuses while blocked). updatedAt lets
+  // the cross-device merge carry the block state as the bank's latest change.
+  const handleToggleBankBlock = id => setBanks(prev=>prev.map(b=>{
+    if(b.id!==id) return b;
+    return b.blocked ? {...b,blocked:false,updatedAt:Date.now()} : {...b,blocked:true,active:false,updatedAt:Date.now()};
   }));
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
@@ -2118,6 +2130,7 @@ export default function App() {
                         <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,marginBottom:8}}>
                           <i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/>
                           <span title={b.holder||b.name} style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.holder||b.name}</span>
+                          {b.blocked&&<span style={{flexShrink:0,fontSize:10,fontWeight:600,color:dark?"#f09595":"#dc2626",background:dark?"#4a1515":"#dc262614",border:"1px solid #dc2626",borderRadius:4,padding:"1px 6px"}}>Blocked</span>}
                         </div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Bank: {b.name}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
@@ -2132,10 +2145,15 @@ export default function App() {
                             <button onClick={()=>startEditBank(b)} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
                             <button onClick={()=>handleDeleteBank(b.id,b.name)} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
                           </div>
-                          <button onClick={()=>handleToggleBankActive(b.id)}
-                            style={{...(b.active===false?bankInactiveBtnStyle:bankActiveBtnStyle),justifyContent:"center"}}
-                            title={b.active===false?"Inactive — click to show this bank in the dashboard & entry dropdowns":"Active — click to hide this bank from the dashboard & entry dropdowns"}>
+                          <button onClick={()=>handleToggleBankActive(b.id)} disabled={!!b.blocked}
+                            style={{...(b.active===false?bankInactiveBtnStyle:bankActiveBtnStyle),justifyContent:"center",...(b.blocked?{opacity:0.5,cursor:"not-allowed"}:null)}}
+                            title={b.blocked?"Blocked — unblock this bank before you can activate it":(b.active===false?"Inactive — click to show this bank in the dashboard & entry dropdowns":"Active — click to hide this bank from the dashboard & entry dropdowns")}>
                             <i className={`ti ti-${b.active===false?"circle-off":"circle-check"}`} aria-hidden="true"/> {b.active===false?"Inactive":"Active"}
+                          </button>
+                          <button onClick={()=>handleToggleBankBlock(b.id)}
+                            style={{...(b.blocked?bankBlockedBtnStyle:bankBlockBtnStyle),justifyContent:"center"}}
+                            title={b.blocked?"Blocked — click to unblock so it can be activated again":"Click to block this bank — it can't be activated until you unblock it"}>
+                            <i className={`ti ti-${b.blocked?"lock-open":"lock"}`} aria-hidden="true"/> {b.blocked?"Unblock":"Block"}
                           </button>
                         </div>
                       </>

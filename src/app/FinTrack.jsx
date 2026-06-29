@@ -434,15 +434,18 @@ function Confirm({message,onConfirm,onCancel}) {
   );
 }
 
-// Month calendar for the Off Days page. Presentational + module-level so it can read the
-// shared C palette / fmtDate; the page owns the selection state and passes it down. Monday-first.
-function MonthCalendar({ month, selected, onToggle, marks, today, isMobile }){
+// Month calendar for the Off Days page. Presentational + module-level so it can read the shared
+// C palette / fmtDate; the page owns selection state and passes it down. Monday-first. Each cell
+// shows a large day number plus the names of anyone off that day (events[iso] = [names]).
+function MonthCalendar({ month, selected, onToggle, events, today, isMobile }){
   const [y,m] = month.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
   const lead = (new Date(y, m-1, 1).getDay() + 6) % 7; // Monday-first leading blanks
   const pad = n => String(n).padStart(2,'0');
   const sel = new Set(selected);
   const wd = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const pillBg = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const maxNames = isMobile ? 2 : 3;
   const cells = [];
   for(let i=0;i<lead;i++) cells.push(null);
   for(let d=1; d<=daysInMonth; d++) cells.push(d);
@@ -455,22 +458,25 @@ function MonthCalendar({ month, selected, onToggle, marks, today, isMobile }){
         {cells.map((d,i)=>{
           if(d===null) return <div key={'b'+i} aria-hidden="true" />;
           const iso = `${y}-${pad(m)}-${pad(d)}`;
-          const isSel = sel.has(iso), isToday = iso===today, isPast = iso < today, mark = marks[iso]||0;
+          const isSel = sel.has(iso), isToday = iso===today, isPast = iso < today;
+          const names = events[iso] || [];
           return (
             <button key={iso} type="button" onClick={()=>onToggle(iso)} className="ft-cal-day" aria-pressed={isSel}
-              aria-label={`${fmtDate(iso)}${mark?` — ${mark} off`:''}`}
-              style={{position:'relative',aspectRatio:'1 / 1',minHeight:36,borderRadius:10,cursor:'pointer',
-                border:`1px solid ${isSel||isToday?C.accent:C.border}`,
-                background:isSel?C.accent:(isToday?C.accentBg:C.surface2),
-                color:isSel?C.onAccent:(isPast?C.muted:C.text),
-                fontWeight:isSel||isToday?700:500,fontSize:13,
-                display:'flex',alignItems:'center',justifyContent:'center',
-                boxShadow:isSel?`0 2px 8px ${dark?'rgba(0,0,0,0.45)':'rgba(166,124,0,0.28)'}`:'none',
+              aria-label={`${fmtDate(iso)}${names.length?` — off: ${names.join(', ')}`:''}`}
+              style={{position:'relative',minHeight:isMobile?56:74,borderRadius:10,cursor:'pointer',overflow:'hidden',textAlign:'left',
+                border:`${isSel?2:1}px solid ${isSel||isToday?C.accent:C.border}`,
+                background:isSel?C.accentBg:C.surface2,
+                display:'flex',flexDirection:'column',gap:2,padding:isMobile?'4px':'5px 6px',
                 transition:'background 0.12s, border-color 0.12s, transform 0.06s'}}>
-              {d}
-              {mark>0 && <span aria-hidden="true" style={{position:'absolute',bottom:4,left:0,right:0,display:'flex',justifyContent:'center',gap:2}}>
-                {Array.from({length:Math.min(mark,3)}).map((_,k)=>(<span key={k} style={{width:4,height:4,borderRadius:'50%',background:isSel?C.onAccent:C.accent}}/>))}
-              </span>}
+              <span style={{display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:isMobile?15:17,fontWeight:700,lineHeight:1,color:isSel||isToday?C.accent:(isPast?C.muted:C.text)}}>
+                {d}{isToday&&<span aria-hidden="true" style={{width:5,height:5,borderRadius:'50%',background:C.accent}}/>}
+              </span>
+              <span style={{display:'flex',flexDirection:'column',gap:1,minWidth:0}}>
+                {names.slice(0,maxNames).map((nm,k)=>(
+                  <span key={k} title={nm} style={{fontSize:isMobile?9:10,lineHeight:1.3,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',background:pillBg,borderRadius:3,padding:'0 3px'}}>{nm}</span>
+                ))}
+                {names.length>maxNames&&<span style={{fontSize:isMobile?9:10,lineHeight:1.3,color:C.muted,paddingLeft:3}}>+{names.length-maxNames} more</span>}
+              </span>
             </button>
           );
         })}
@@ -679,7 +685,10 @@ export default function App() {
   const [offSelDates,setOffSelDates] = useState([]);
   const [offCalMonth,setOffCalMonth] = useState(thisMonth);
   const [offError,setOffError] = useState("");
-  const [offFilter,setOffFilter] = useState("");
+  const [offLogSearch,setOffLogSearch] = useState("");
+  const [offLogSort,setOffLogSort] = useState("date");
+  const [shiftEditing,setShiftEditing] = useState(false);
+  const [shiftDraft,setShiftDraft] = useState({morning:"",night:""});
   const [confirm,setConfirm] = useState(null);
   const [detailModal,setDetailModal] = useState(null);
   const [dashView,setDashView] = useState("today");
@@ -1302,19 +1311,38 @@ export default function App() {
     return b.blocked ? {...b,blocked:false,updatedAt:Date.now()} : {...b,blocked:true,active:false,updatedAt:Date.now()};
   }));
 
-  // --- Off Days (employee leave): records live in the synced data blob as `offDays`. ---
+  // --- Off Days + shift roster: both live in the synced `offDays` array (shift rows carry kind:"shift"). ---
   const offLive = useMemo(()=>offDays.filter(o=>!o.deleted),[offDays]);
-  const offMarks = useMemo(()=>{ const mp={}; for(const o of offLive) mp[o.date]=(mp[o.date]||0)+1; return mp; },[offLive]);
-  const offEmployees = useMemo(()=>[...new Set(offLive.map(o=>o.employee))].sort((a,b)=>a.localeCompare(b)),[offLive]);
-  const offFilteredList = useMemo(()=> offFilter ? offLive.filter(o=>o.employee===offFilter) : offLive, [offLive,offFilter]);
-  const offUpcoming = useMemo(()=>offFilteredList.filter(o=>o.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee)),[offFilteredList,today]);
-  const offPast = useMemo(()=>offFilteredList.filter(o=>o.date<today).sort((a,b)=>b.date.localeCompare(a.date)||a.employee.localeCompare(b.employee)),[offFilteredList,today]);
+  const offRecords = useMemo(()=>offLive.filter(o=>o.kind!=='shift'),[offLive]);   // real days off
+  const shiftRecords = useMemo(()=>offLive.filter(o=>o.kind==='shift'),[offLive]); // month shift roster rows
+  const dayNames = useMemo(()=>{ const mp={}; for(const o of offRecords){ (mp[o.date]||(mp[o.date]=[])).push(o.employee); } return mp; },[offRecords]);
+  const offEmployees = useMemo(()=>[...new Set(offRecords.map(o=>o.employee))].sort((a,b)=>a.localeCompare(b)),[offRecords]);
+  const offMonths = useMemo(()=>{ const s=new Set(offRecords.map(o=>o.date.slice(0,7))); s.add(thisMonth); s.add(offCalMonth); return [...s].sort((a,b)=>b.localeCompare(a)); },[offRecords,offCalMonth]);
+  // Latest morning/night names for the displayed month (the row with the newest updatedAt wins).
+  const currentShifts = useMemo(()=>{ const pick=sh=>{ let best=null; for(const r of shiftRecords){ if(r.month===offCalMonth && r.shift===sh && (!best || (r.updatedAt||0)>(best.updatedAt||0))) best=r; } return best?(best.names||''):''; }; return {morning:pick('morning'), night:pick('night')}; },[shiftRecords,offCalMonth]);
+  // The selected month's log: search, then merge an employee's consecutive same-reason days into one run, then sort.
+  const offLog = useMemo(()=>{
+    const term = offLogSearch.trim().toLowerCase();
+    let recs = offRecords.filter(o=>o.date.slice(0,7)===offCalMonth);
+    if(term) recs = recs.filter(o=>o.employee.toLowerCase().includes(term)||(o.reason||'').toLowerCase().includes(term));
+    recs = recs.slice().sort((a,b)=>a.employee.localeCompare(b.employee)||a.date.localeCompare(b.date));
+    const nextDay = iso=>{ const d=new Date(iso+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+1); return d.toISOString().slice(0,10); };
+    const runs=[]; let cur=null;
+    for(const o of recs){
+      if(cur && cur.employee===o.employee && (cur.reason||'')===(o.reason||'') && nextDay(cur.dateTo)===o.date){
+        cur.dateTo=o.date; cur.dates.push(o.date); cur.uids.push(o.uid);
+      } else { cur={employee:o.employee,reason:o.reason||'',dateFrom:o.date,dateTo:o.date,dates:[o.date],uids:[o.uid],recordedBy:o.recordedBy||''}; runs.push(cur); }
+    }
+    runs.sort((a,b)=> offLogSort==='employee' ? (a.employee.localeCompare(b.employee)||a.dateFrom.localeCompare(b.dateFrom)) : (a.dateFrom.localeCompare(b.dateFrom)||a.employee.localeCompare(b.employee)));
+    return runs;
+  },[offRecords,offCalMonth,offLogSearch,offLogSort]);
   const toggleOffDate = (iso)=> setOffSelDates(prev=> prev.includes(iso) ? prev.filter(d=>d!==iso) : [...prev,iso].sort());
+  const gotoMonth = (ym)=>{ setOffCalMonth(ym); setShiftEditing(false); };
   const handleAddOffDays = () => {
     const emp = offForm.employee.trim();
     if(!emp){ setOffError("Enter the employee's name."); window.showToast?.("Error , Please Try Again","error"); return; }
     if(offSelDates.length===0){ setOffError("Pick at least one day on the calendar."); window.showToast?.("Error , Please Try Again","error"); return; }
-    const taken = new Set(offLive.filter(o=>o.employee.toLowerCase()===emp.toLowerCase()).map(o=>o.date));
+    const taken = new Set(offRecords.filter(o=>o.employee.toLowerCase()===emp.toLowerCase()).map(o=>o.date));
     const fresh = offSelDates.filter(d=>!taken.has(d));
     if(fresh.length===0){ setOffError(`${emp} is already booked off on the day(s) you picked.`); window.showToast?.("Error , Please Try Again","error"); return; }
     const recordedBy = SESSION.operatorName || SESSION.operatorId || "";
@@ -1324,7 +1352,22 @@ export default function App() {
     setOffSelDates([]); setOffForm({employee:"",reason:""}); setOffError("");
     window.showToast?.("Action Done !","success");
   };
-  const handleDeleteOffDay = (uid,employee,date) => setConfirm({message:`Remove ${employee}'s day off on ${fmtDate(date)}?`,onConfirm:()=>{ setOffDays(prev=>prev.map(o=>o.uid===uid?{...o,deleted:true}:o)); setConfirm(null); }});
+  const handleDeleteOffRun = (run) => setConfirm({message:`Remove ${run.employee}'s ${run.dates.length>1?`${run.dates.length} days off (${fmtDate(run.dateFrom)} – ${fmtDate(run.dateTo)})`:`day off on ${fmtDate(run.dateFrom)}`}?`,onConfirm:()=>{ const ids=new Set(run.uids); setOffDays(prev=>prev.map(o=>ids.has(o.uid)?{...o,deleted:true}:o)); setConfirm(null); }});
+  const startEditShifts = ()=>{ setShiftDraft({morning:currentShifts.morning,night:currentShifts.night}); setShiftEditing(true); };
+  const handleSaveShifts = ()=>{
+    const recordedBy = SESSION.operatorName || SESSION.operatorId || "";
+    const now = Date.now();
+    setOffDays(prev=>{
+      const superseded = prev.map(o=>(o.kind==='shift' && o.month===offCalMonth && !o.deleted) ? {...o,deleted:true} : o);
+      const add = [
+        {uid:mkUid(),kind:'shift',month:offCalMonth,shift:'morning',names:shiftDraft.morning.trim(),recordedBy,updatedAt:now,createdAt:now,deleted:false},
+        {uid:mkUid(),kind:'shift',month:offCalMonth,shift:'night',names:shiftDraft.night.trim(),recordedBy,updatedAt:now,createdAt:now,deleted:false},
+      ];
+      return [...add,...superseded];
+    });
+    setShiftEditing(false);
+    window.showToast?.("Action Done !","success");
+  };
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
   const handleSaveMember = id => {
@@ -2401,74 +2444,119 @@ export default function App() {
 
         {page==="offdays"&&(()=>{
           const navBtn = {cursor:"pointer",width:34,height:34,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:16};
-          const shiftMonth = (delta)=>{ const [yy,mm]=offCalMonth.split('-').map(Number); const dt=new Date(yy,mm-1+delta,1); setOffCalMonth(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`); };
-          const row = (o,past)=>(
-            <div key={o.uid} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 13px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2}}>
-              <div style={{flexShrink:0,width:44,textAlign:"center",lineHeight:1.1}}>
-                <div style={{fontSize:18,fontWeight:700,fontFamily:"var(--font-mono)",color:past?C.muted:C.accent}}>{o.date.slice(8,10)}</div>
-                <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.05em",textTransform:"uppercase",color:C.muted}}>{MONTHS_SHORT[Number(o.date.slice(5,7))-1]}</div>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontWeight:600,fontSize:14,color:C.text}}>{o.employee}</span>
-                  {o.date===today&&<span style={{fontSize:10,fontWeight:600,color:"#16a34a",background:"#16a34a22",border:"1px solid #16a34a55",borderRadius:4,padding:"1px 6px"}}>Off today</span>}
-                </div>
-                <div style={{fontSize:12,color:C.muted,marginTop:2}}>{o.reason||"No reason given"}{o.recordedBy?` · by ${o.recordedBy}`:""}</div>
-              </div>
-              <button onClick={()=>handleDeleteOffDay(o.uid,o.employee,o.date)} aria-label={`Remove ${o.employee}'s day off`} style={{...deleteBtnStyle,flexShrink:0}}><i className="ti ti-trash" aria-hidden="true"/></button>
+          const shiftMonthYm = (ym,delta)=>{ const [yy,mm]=ym.split('-').map(Number); const dt=new Date(yy,mm-1+delta,1); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; };
+          const taStyle = {width:"100%",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit",fontSize:13,padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text};
+          const shiftBox = (label,icon,color,names)=>(
+            <div style={{padding:"10px 12px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2}}>
+              <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color,marginBottom:4,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true"/> {label}</div>
+              <div style={{fontSize:13,color:names?C.text:C.muted,whiteSpace:"pre-wrap",lineHeight:1.4}}>{names||"No one assigned yet."}</div>
             </div>
           );
+          const runRow = (run)=>{
+            const single = run.dates.length===1, includesToday = run.dates.includes(today), past = run.dateTo < today;
+            return (
+              <div key={run.uids[0]} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 13px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2}}>
+                <div style={{flexShrink:0,minWidth:48,textAlign:"center",lineHeight:1.1}}>
+                  <div style={{fontSize:16,fontWeight:700,fontFamily:"var(--font-mono)",color:past?C.muted:C.accent}}>{run.dateFrom.slice(8,10)}{single?"":`–${run.dateTo.slice(8,10)}`}</div>
+                  <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.05em",textTransform:"uppercase",color:C.muted}}>{MONTHS_SHORT[Number(run.dateFrom.slice(5,7))-1]}</div>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontWeight:600,fontSize:14,color:C.text}}>{run.employee}</span>
+                    {!single&&<span style={{fontSize:10,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}55`,borderRadius:4,padding:"1px 6px"}}>{run.dates.length} days</span>}
+                    {includesToday&&<span style={{fontSize:10,fontWeight:600,color:"#16a34a",background:"#16a34a22",border:"1px solid #16a34a55",borderRadius:4,padding:"1px 6px"}}>Off today</span>}
+                  </div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>{single?"":`${fmtDate(run.dateFrom)} – ${fmtDate(run.dateTo)} · `}{run.reason||"No reason given"}{run.recordedBy?` · by ${run.recordedBy}`:""}</div>
+                </div>
+                <button onClick={()=>handleDeleteOffRun(run)} aria-label={`Remove ${run.employee}'s day off`} style={{...deleteBtnStyle,flexShrink:0}}><i className="ti ti-trash" aria-hidden="true"/></button>
+              </div>
+            );
+          };
           return (
           <div>
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-calendar-plus">Plan a day off</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Pick one or more days on the calendar, choose who's off, and save. Everyone on your team sees the same list.</div>
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(0,300px)",gap:18,alignItems:"start"}}>
+              <SectionTitle icon="ti-calendar-plus" right={
+                <FluidDropdown width={150} value={offCalMonth} ariaLabel="Month" options={offMonths.map(ym=>({value:ym,label:monthLabel(ym)}))} onChange={gotoMonth}/>
+              }>Plan a day off</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Pick days on the calendar and choose who's off. The shift roster on the right and the log below all follow the month shown here — everyone on your team sees the same lists.</div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(0,280px)",gap:18,alignItems:"start"}}>
+                {/* left: calendar + entry form */}
                 <div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <button onClick={()=>shiftMonth(-1)} aria-label="Previous month" style={navBtn}><i className="ti ti-chevron-left" aria-hidden="true"/></button>
+                    <button onClick={()=>gotoMonth(shiftMonthYm(offCalMonth,-1))} aria-label="Previous month" style={navBtn}><i className="ti ti-chevron-left" aria-hidden="true"/></button>
                     <div style={{fontWeight:600,fontSize:15,color:C.text}}>{monthLabel(offCalMonth)}</div>
-                    <button onClick={()=>shiftMonth(1)} aria-label="Next month" style={navBtn}><i className="ti ti-chevron-right" aria-hidden="true"/></button>
+                    <button onClick={()=>gotoMonth(shiftMonthYm(offCalMonth,1))} aria-label="Next month" style={navBtn}><i className="ti ti-chevron-right" aria-hidden="true"/></button>
                   </div>
-                  <MonthCalendar month={offCalMonth} selected={offSelDates} onToggle={toggleOffDate} marks={offMarks} today={today} isMobile={isMobile}/>
-                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:12,fontSize:11,color:C.muted,flexWrap:"wrap"}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,borderRadius:4,background:C.accent}}/>Selected</span>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,borderRadius:4,border:`1px solid ${C.accent}`,background:C.accentBg}}/>Today</span>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:4,height:4,borderRadius:"50%",background:C.accent}}/>Already booked</span>
+                  <MonthCalendar month={offCalMonth} selected={offSelDates} onToggle={toggleOffDate} events={dayNames} today={today} isMobile={isMobile}/>
+                  <div style={{display:"flex",alignItems:"center",gap:14,margin:"12px 0 16px",fontSize:11,color:C.muted,flexWrap:"wrap"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:13,height:13,borderRadius:4,border:`2px solid ${C.accent}`,background:C.accentBg}}/>Selected / today</span>
+                    <span>Names on a day = who's off then.</span>
+                  </div>
+                  <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:12}}>
+                    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
+                      <div><label style={labelStyle}>Employee</label>
+                        <input list="off-employees" type="text" placeholder="Who's off?" value={offForm.employee} onChange={e=>setOffForm(f=>({...f,employee:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+                        <datalist id="off-employees">{offEmployees.map(n=><option key={n} value={n}/>)}</datalist></div>
+                      <div><label style={labelStyle}>Reason <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                        <input type="text" placeholder="e.g. Annual leave, sick" value={offForm.reason} onChange={e=>setOffForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                    </div>
+                    <div><label style={labelStyle}>Selected days <span style={{color:C.muted,fontWeight:400}}>({offSelDates.length})</span></label>
+                      {offSelDates.length===0
+                        ? <div style={{fontSize:12,color:C.muted,padding:"10px 12px",border:`1px dashed ${C.border}`,borderRadius:10,textAlign:"center"}}>Tap days on the calendar to add them.</div>
+                        : <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{offSelDates.map(d=>(
+                            <span key={d} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:500,background:C.accentBg,color:C.text,border:`1px solid ${C.accent}55`,borderRadius:999,padding:"4px 6px 4px 10px"}}>{fmtDate(d)}<button onClick={()=>toggleOffDate(d)} aria-label={`Remove ${fmtDate(d)}`} style={{cursor:"pointer",border:"none",background:"transparent",color:C.muted,display:"flex",padding:0}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:14}}/></button></span>
+                          ))}</div>}
+                    </div>
+                    {offError&&<div style={{fontSize:12,color:"#dc2626"}}>{offError}</div>}
+                    <button onClick={handleAddOffDays} style={{cursor:"pointer",alignSelf:"flex-start",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:10,padding:"11px 18px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-calendar-plus" aria-hidden="true"/> Save day off{offSelDates.length>1?"s":""}</button>
                   </div>
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                  <div><label style={labelStyle}>Employee</label>
-                    <input list="off-employees" type="text" placeholder="Who's taking the day off?" value={offForm.employee} onChange={e=>setOffForm(f=>({...f,employee:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
-                    <datalist id="off-employees">{offEmployees.map(n=><option key={n} value={n}/>)}</datalist></div>
-                  <div><label style={labelStyle}>Reason <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
-                    <input type="text" placeholder="e.g. Annual leave, sick, personal" value={offForm.reason} onChange={e=>setOffForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                  <div><label style={labelStyle}>Selected days <span style={{color:C.muted,fontWeight:400}}>({offSelDates.length})</span></label>
-                    {offSelDates.length===0
-                      ? <div style={{fontSize:12,color:C.muted,padding:"10px 12px",border:`1px dashed ${C.border}`,borderRadius:10,textAlign:"center"}}>Tap days on the calendar to add them.</div>
-                      : <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{offSelDates.map(d=>(
-                          <span key={d} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:500,background:C.accentBg,color:C.text,border:`1px solid ${C.accent}55`,borderRadius:999,padding:"4px 6px 4px 10px"}}>{fmtDate(d)}<button onClick={()=>toggleOffDate(d)} aria-label={`Remove ${fmtDate(d)}`} style={{cursor:"pointer",border:"none",background:"transparent",color:C.muted,display:"flex",padding:0}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:14}}/></button></span>
-                        ))}</div>}
+                {/* right: shift roster for the month */}
+                <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,gap:8}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,display:"flex",alignItems:"center",gap:6,minWidth:0}}><i className="ti ti-clock-hour-4" aria-hidden="true" style={{color:C.accent,flexShrink:0}}/> <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Shifts · {monthLabel(offCalMonth)}</span></div>
+                    {!shiftEditing&&<button onClick={startEditShifts} style={{...editBtnStyle,flexShrink:0}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>}
                   </div>
-                  {offError&&<div style={{fontSize:12,color:"#dc2626"}}>{offError}</div>}
-                  <button onClick={handleAddOffDays} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:10,padding:"11px 18px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-calendar-plus" aria-hidden="true"/> Save day off{offSelDates.length>1?"s":""}</button>
+                  {shiftEditing ? (
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      <div><label style={labelStyle}><i className="ti ti-sun" aria-hidden="true" style={{color:"#d97706",marginRight:4}}/>Morning shift</label>
+                        <textarea rows={3} placeholder="Names on morning shift…" value={shiftDraft.morning} onChange={e=>setShiftDraft(s=>({...s,morning:e.target.value}))} style={taStyle}/></div>
+                      <div><label style={labelStyle}><i className="ti ti-moon" aria-hidden="true" style={{color:"#6366f1",marginRight:4}}/>Night shift</label>
+                        <textarea rows={3} placeholder="Names on night shift…" value={shiftDraft.night} onChange={e=>setShiftDraft(s=>({...s,night:e.target.value}))} style={taStyle}/></div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={handleSaveShifts} style={{cursor:"pointer",flex:1,fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Save shifts</button>
+                        <button onClick={()=>setShiftEditing(false)} style={{cursor:"pointer",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 14px"}}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {shiftBox("Morning","ti-sun","#d97706",currentShifts.morning)}
+                      {shiftBox("Night","ti-moon","#6366f1",currentShifts.night)}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-list-check" right={offEmployees.length>0 ? (
-                <FluidDropdown width={180} value={offFilter} placeholder="All employees" ariaLabel="Filter by employee" options={[{value:"",label:"All employees"},...offEmployees.map(n=>({value:n,label:n}))]} onChange={v=>setOffFilter(v)}/>
-              ) : null}>Days off log</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Upcoming first, then earlier{offFilter?` — ${offFilter}`:""}.</div>
-              <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",color:C.muted,margin:"4px 0 10px"}}>Upcoming &amp; today ({offUpcoming.length})</div>
-              {offUpcoming.length===0
-                ? <div style={{fontSize:13,color:C.muted,padding:"14px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10,marginBottom:18}}>No upcoming days off{offFilter?` for ${offFilter}`:""}. Plan one on the calendar above.</div>
-                : <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:18}}>{offUpcoming.map(o=>row(o,false))}</div>}
-              {offPast.length>0&&(<>
-                <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",color:C.muted,margin:"4px 0 10px"}}>Earlier ({offPast.length})</div>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>{offPast.map(o=>row(o,true))}</div>
-              </>)}
+              <SectionTitle icon="ti-list-check" right={
+                <FluidDropdown width={150} value={offCalMonth} ariaLabel="Log month" options={offMonths.map(ym=>({value:ym,label:monthLabel(ym)}))} onChange={gotoMonth}/>
+              }>Days off log</SectionTitle>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+                <div style={{position:"relative",flex:"1 1 200px",minWidth:160}}>
+                  <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+                  <input type="text" value={offLogSearch} onChange={e=>setOffLogSearch(e.target.value)} placeholder="Search name or reason…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  {offLogSearch&&<button type="button" onClick={()=>setOffLogSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+                  <span>Sort</span>
+                  <FluidDropdown width={150} value={offLogSort} ariaLabel="Sort log" options={[{value:"date",label:"By date"},{value:"employee",label:"By employee"}]} onChange={v=>setOffLogSort(v)}/>
+                </div>
+              </div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Showing <strong style={{color:C.text}}>{monthLabel(offCalMonth)}</strong> — {offLog.length} {offLog.length===1?"entry":"entries"}{offLogSearch?` matching “${offLogSearch}”`:""}.</div>
+              {offLog.length===0
+                ? <div style={{fontSize:13,color:C.muted,padding:"16px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No days off {offLogSearch?"match your search":`recorded for ${monthLabel(offCalMonth)}`}.</div>
+                : <div style={{display:"flex",flexDirection:"column",gap:8}}>{offLog.map(runRow)}</div>}
             </div>
           </div>
           );

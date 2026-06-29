@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.36",
+  "version": "1.6.37",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "New Off Days page (in the sidebar after Search): pick days on a calendar to plan staff time off, with a clear log of who's off and when — shared across your team.",
-    "Performance fix: stopped a background sync loop that was constantly writing to the database, sharply cutting server load and disk use.",
-    "Bank cards have a new Block / Unblock button, and the app is now named \"DRW\"."
+    "Off Days upgraded: the calendar shows each person's name on their day off (with bigger numbers), and there's a new Shifts panel beside it to set the month's morning/night roster.",
+    "The days-off log now shows one month at a time with search and sort, and groups a run of consecutive days into a single entry.",
+    "Pick a month from the dropdown (or the arrows) to view that month's calendar, shifts and log together."
   ],
   "scripts": {
     "dev": "vite",

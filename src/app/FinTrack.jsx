@@ -6,7 +6,7 @@ import { mergeData } from "../lib/mergeData.js";
 
 // Short labels for the mobile bottom tab bar (the desktop sidebar uses the full
 // nav labels, but "Bank Accounts" / "Transactions" are too wide for a phone tab).
-const MOBILE_TAB_LABEL = { dashboard:"Home", transactions:"Record", banks:"Banks", members:"Members", search:"Search" };
+const MOBILE_TAB_LABEL = { dashboard:"Home", transactions:"Record", banks:"Banks", members:"Members", search:"Search", offdays:"Off Days" };
 
 // ============================================================================
 // SESSION — when this goes online, your login frontend/backend injects the
@@ -434,6 +434,51 @@ function Confirm({message,onConfirm,onCancel}) {
   );
 }
 
+// Month calendar for the Off Days page. Presentational + module-level so it can read the
+// shared C palette / fmtDate; the page owns the selection state and passes it down. Monday-first.
+function MonthCalendar({ month, selected, onToggle, marks, today, isMobile }){
+  const [y,m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const lead = (new Date(y, m-1, 1).getDay() + 6) % 7; // Monday-first leading blanks
+  const pad = n => String(n).padStart(2,'0');
+  const sel = new Set(selected);
+  const wd = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const cells = [];
+  for(let i=0;i<lead;i++) cells.push(null);
+  for(let d=1; d<=daysInMonth; d++) cells.push(d);
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:6}}>
+        {wd.map(w=>(<div key={w} style={{textAlign:'center',fontSize:10.5,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:C.muted}}>{isMobile?w[0]:w}</div>))}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6}}>
+        {cells.map((d,i)=>{
+          if(d===null) return <div key={'b'+i} aria-hidden="true" />;
+          const iso = `${y}-${pad(m)}-${pad(d)}`;
+          const isSel = sel.has(iso), isToday = iso===today, isPast = iso < today, mark = marks[iso]||0;
+          return (
+            <button key={iso} type="button" onClick={()=>onToggle(iso)} className="ft-cal-day" aria-pressed={isSel}
+              aria-label={`${fmtDate(iso)}${mark?` — ${mark} off`:''}`}
+              style={{position:'relative',aspectRatio:'1 / 1',minHeight:36,borderRadius:10,cursor:'pointer',
+                border:`1px solid ${isSel||isToday?C.accent:C.border}`,
+                background:isSel?C.accent:(isToday?C.accentBg:C.surface2),
+                color:isSel?C.onAccent:(isPast?C.muted:C.text),
+                fontWeight:isSel||isToday?700:500,fontSize:13,
+                display:'flex',alignItems:'center',justifyContent:'center',
+                boxShadow:isSel?`0 2px 8px ${dark?'rgba(0,0,0,0.45)':'rgba(166,124,0,0.28)'}`:'none',
+                transition:'background 0.12s, border-color 0.12s, transform 0.06s'}}>
+              {d}
+              {mark>0 && <span aria-hidden="true" style={{position:'absolute',bottom:4,left:0,right:0,display:'flex',justifyContent:'center',gap:2}}>
+                {Array.from({length:Math.min(mark,3)}).map((_,k)=>(<span key={k} style={{width:4,height:4,borderRadius:'50%',background:isSel?C.onAccent:C.accent}}/>))}
+              </span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Top-bar clock, kept as its own component so its 1-second tick re-renders only this
 // little span — not the whole (large) FinTrack tree. Shows HH:MM:SS in the company zone.
 function LiveClock({tz,color}){
@@ -629,6 +674,12 @@ export default function App() {
   const [banks,setBanks] = useState(initBanks);
   const [members,setMembers] = useState(initMembers);
   const [nextId,setNextId] = useState(1);
+  const [offDays,setOffDays] = useState([]);
+  const [offForm,setOffForm] = useState({employee:"",reason:""});
+  const [offSelDates,setOffSelDates] = useState([]);
+  const [offCalMonth,setOffCalMonth] = useState(thisMonth);
+  const [offError,setOffError] = useState("");
+  const [offFilter,setOffFilter] = useState("");
   const [confirm,setConfirm] = useState(null);
   const [detailModal,setDetailModal] = useState(null);
   const [dashView,setDashView] = useState("today");
@@ -694,6 +745,7 @@ export default function App() {
       return {...b,openingBalance:(b.balance??0)-eff};
     }));
     if(d.members) setMembers(d.members);
+    if(d.offDays) setOffDays(d.offDays);
     if(d.nextId) setNextId(d.nextId);
   };
 
@@ -711,7 +763,7 @@ export default function App() {
 
   // Keep a ref to the latest state so the poller below can MERGE against it without
   // having to restart its timer every time something changes.
-  useEffect(()=>{ dataRef.current = {transactions,banks,members,nextId}; });
+  useEffect(()=>{ dataRef.current = {transactions,banks,members,nextId,offDays}; });
 
   // Save. The storage bridge MERGES our changes into the shared company record (the DB
   // does it atomically when migration-008 is installed, else the bridge merges client-
@@ -719,7 +771,7 @@ export default function App() {
   // returns. No pre-read here — that saved an entire extra blob download on every save.
   useEffect(()=>{
     if(!loaded) return;
-    const payload = {transactions,banks,members,nextId};
+    const payload = {transactions,banks,members,nextId,offDays};
     const serialized = JSON.stringify(payload); // what we send to the server
     const sig = sortedStringify(payload);       // order-independent "has anything changed?" key
     if(sig === lastSyncRef.current) return; // nothing semantically new (incl. data we just pulled in)
@@ -729,18 +781,22 @@ export default function App() {
         const key = `fintrack-${SESSION.companyId}-v2`;
         const res = await window.storage.set(key,serialized);
         if(cancelled || !res) return;
-        const finalStr = (res && res.value) ? res.value : serialized;
-        const finalSig = sortedStringify(JSON.parse(finalStr));
+        const serverObj = JSON.parse((res && res.value) ? res.value : serialized);
+        // If the server's merge doesn't know about offDays yet (migration-009 not applied),
+        // keep our local copy so they aren't lost AND the change-check settles instead of
+        // looping (the old function would echo back a blob with no offDays forever).
+        if(serverObj && serverObj.offDays === undefined) serverObj.offDays = payload.offDays;
+        const finalSig = sortedStringify(serverObj);
         lastSyncRef.current = finalSig;
         // Only adopt the server's copy when it's GENUINELY different (another device merged
         // something in) — not when it's the same data with JSONB's keys reordered. This is the
         // check that stops the runaway save -> merge -> apply -> save loop.
-        if(finalSig !== sig) applyData(JSON.parse(finalStr));
+        if(finalSig !== sig) applyData(serverObj);
         // The write bumped the server's updated_at; let the next poll reconcile it (cheap).
       }catch(e){ /* save failed — will retry on the next change or poll */ }
     })();
     return ()=>{ cancelled = true; };
-  },[transactions,banks,members,nextId,loaded]);
+  },[transactions,banks,members,nextId,offDays,loaded]);
 
   // Auto-refresh — pull other devices' changes WITHOUT wasting egress. Every 20s (only
   // while the tab is visible) we check the tiny server `updated_at` via getMeta(); we
@@ -1246,6 +1302,30 @@ export default function App() {
     return b.blocked ? {...b,blocked:false,updatedAt:Date.now()} : {...b,blocked:true,active:false,updatedAt:Date.now()};
   }));
 
+  // --- Off Days (employee leave): records live in the synced data blob as `offDays`. ---
+  const offLive = useMemo(()=>offDays.filter(o=>!o.deleted),[offDays]);
+  const offMarks = useMemo(()=>{ const mp={}; for(const o of offLive) mp[o.date]=(mp[o.date]||0)+1; return mp; },[offLive]);
+  const offEmployees = useMemo(()=>[...new Set(offLive.map(o=>o.employee))].sort((a,b)=>a.localeCompare(b)),[offLive]);
+  const offFilteredList = useMemo(()=> offFilter ? offLive.filter(o=>o.employee===offFilter) : offLive, [offLive,offFilter]);
+  const offUpcoming = useMemo(()=>offFilteredList.filter(o=>o.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee)),[offFilteredList,today]);
+  const offPast = useMemo(()=>offFilteredList.filter(o=>o.date<today).sort((a,b)=>b.date.localeCompare(a.date)||a.employee.localeCompare(b.employee)),[offFilteredList,today]);
+  const toggleOffDate = (iso)=> setOffSelDates(prev=> prev.includes(iso) ? prev.filter(d=>d!==iso) : [...prev,iso].sort());
+  const handleAddOffDays = () => {
+    const emp = offForm.employee.trim();
+    if(!emp){ setOffError("Enter the employee's name."); window.showToast?.("Error , Please Try Again","error"); return; }
+    if(offSelDates.length===0){ setOffError("Pick at least one day on the calendar."); window.showToast?.("Error , Please Try Again","error"); return; }
+    const taken = new Set(offLive.filter(o=>o.employee.toLowerCase()===emp.toLowerCase()).map(o=>o.date));
+    const fresh = offSelDates.filter(d=>!taken.has(d));
+    if(fresh.length===0){ setOffError(`${emp} is already booked off on the day(s) you picked.`); window.showToast?.("Error , Please Try Again","error"); return; }
+    const recordedBy = SESSION.operatorName || SESSION.operatorId || "";
+    const now = Date.now();
+    const recs = fresh.map(d=>({uid:mkUid(),employee:emp,date:d,reason:offForm.reason.trim(),recordedBy,createdAt:now,deleted:false}));
+    setOffDays(prev=>[...recs,...prev]);
+    setOffSelDates([]); setOffForm({employee:"",reason:""}); setOffError("");
+    window.showToast?.("Action Done !","success");
+  };
+  const handleDeleteOffDay = (uid,employee,date) => setConfirm({message:`Remove ${employee}'s day off on ${fmtDate(date)}?`,onConfirm:()=>{ setOffDays(prev=>prev.map(o=>o.uid===uid?{...o,deleted:true}:o)); setConfirm(null); }});
+
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
   const handleSaveMember = id => {
     if(!editMemberForm.id.trim()||!editMemberForm.name.trim()){setEditMemberError("ID and name are required.");return;}
@@ -1306,6 +1386,7 @@ export default function App() {
     {id:"banks",icon:"ti-building-bank",label:"Bank Accounts"},
     {id:"members",icon:"ti-users",label:"Members"},
     {id:"search",icon:"ti-search",label:"Search"},
+    {id:"offdays",icon:"ti-calendar-off",label:"Off Days"},
   ];
 
   // Members list: optional search (name / ID / phone) then pagination.
@@ -2317,6 +2398,81 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {page==="offdays"&&(()=>{
+          const navBtn = {cursor:"pointer",width:34,height:34,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:16};
+          const shiftMonth = (delta)=>{ const [yy,mm]=offCalMonth.split('-').map(Number); const dt=new Date(yy,mm-1+delta,1); setOffCalMonth(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`); };
+          const row = (o,past)=>(
+            <div key={o.uid} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 13px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2}}>
+              <div style={{flexShrink:0,width:44,textAlign:"center",lineHeight:1.1}}>
+                <div style={{fontSize:18,fontWeight:700,fontFamily:"var(--font-mono)",color:past?C.muted:C.accent}}>{o.date.slice(8,10)}</div>
+                <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.05em",textTransform:"uppercase",color:C.muted}}>{MONTHS_SHORT[Number(o.date.slice(5,7))-1]}</div>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontWeight:600,fontSize:14,color:C.text}}>{o.employee}</span>
+                  {o.date===today&&<span style={{fontSize:10,fontWeight:600,color:"#16a34a",background:"#16a34a22",border:"1px solid #16a34a55",borderRadius:4,padding:"1px 6px"}}>Off today</span>}
+                </div>
+                <div style={{fontSize:12,color:C.muted,marginTop:2}}>{o.reason||"No reason given"}{o.recordedBy?` · by ${o.recordedBy}`:""}</div>
+              </div>
+              <button onClick={()=>handleDeleteOffDay(o.uid,o.employee,o.date)} aria-label={`Remove ${o.employee}'s day off`} style={{...deleteBtnStyle,flexShrink:0}}><i className="ti ti-trash" aria-hidden="true"/></button>
+            </div>
+          );
+          return (
+          <div>
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-calendar-plus">Plan a day off</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Pick one or more days on the calendar, choose who's off, and save. Everyone on your team sees the same list.</div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(0,300px)",gap:18,alignItems:"start"}}>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <button onClick={()=>shiftMonth(-1)} aria-label="Previous month" style={navBtn}><i className="ti ti-chevron-left" aria-hidden="true"/></button>
+                    <div style={{fontWeight:600,fontSize:15,color:C.text}}>{monthLabel(offCalMonth)}</div>
+                    <button onClick={()=>shiftMonth(1)} aria-label="Next month" style={navBtn}><i className="ti ti-chevron-right" aria-hidden="true"/></button>
+                  </div>
+                  <MonthCalendar month={offCalMonth} selected={offSelDates} onToggle={toggleOffDate} marks={offMarks} today={today} isMobile={isMobile}/>
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:12,fontSize:11,color:C.muted,flexWrap:"wrap"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,borderRadius:4,background:C.accent}}/>Selected</span>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,borderRadius:4,border:`1px solid ${C.accent}`,background:C.accentBg}}/>Today</span>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:4,height:4,borderRadius:"50%",background:C.accent}}/>Already booked</span>
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <div><label style={labelStyle}>Employee</label>
+                    <input list="off-employees" type="text" placeholder="Who's taking the day off?" value={offForm.employee} onChange={e=>setOffForm(f=>({...f,employee:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+                    <datalist id="off-employees">{offEmployees.map(n=><option key={n} value={n}/>)}</datalist></div>
+                  <div><label style={labelStyle}>Reason <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                    <input type="text" placeholder="e.g. Annual leave, sick, personal" value={offForm.reason} onChange={e=>setOffForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                  <div><label style={labelStyle}>Selected days <span style={{color:C.muted,fontWeight:400}}>({offSelDates.length})</span></label>
+                    {offSelDates.length===0
+                      ? <div style={{fontSize:12,color:C.muted,padding:"10px 12px",border:`1px dashed ${C.border}`,borderRadius:10,textAlign:"center"}}>Tap days on the calendar to add them.</div>
+                      : <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{offSelDates.map(d=>(
+                          <span key={d} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:500,background:C.accentBg,color:C.text,border:`1px solid ${C.accent}55`,borderRadius:999,padding:"4px 6px 4px 10px"}}>{fmtDate(d)}<button onClick={()=>toggleOffDate(d)} aria-label={`Remove ${fmtDate(d)}`} style={{cursor:"pointer",border:"none",background:"transparent",color:C.muted,display:"flex",padding:0}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:14}}/></button></span>
+                        ))}</div>}
+                  </div>
+                  {offError&&<div style={{fontSize:12,color:"#dc2626"}}>{offError}</div>}
+                  <button onClick={handleAddOffDays} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:10,padding:"11px 18px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-calendar-plus" aria-hidden="true"/> Save day off{offSelDates.length>1?"s":""}</button>
+                </div>
+              </div>
+            </div>
+
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-list-check" right={offEmployees.length>0 ? (
+                <FluidDropdown width={180} value={offFilter} placeholder="All employees" ariaLabel="Filter by employee" options={[{value:"",label:"All employees"},...offEmployees.map(n=>({value:n,label:n}))]} onChange={v=>setOffFilter(v)}/>
+              ) : null}>Days off log</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Upcoming first, then earlier{offFilter?` — ${offFilter}`:""}.</div>
+              <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",color:C.muted,margin:"4px 0 10px"}}>Upcoming &amp; today ({offUpcoming.length})</div>
+              {offUpcoming.length===0
+                ? <div style={{fontSize:13,color:C.muted,padding:"14px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10,marginBottom:18}}>No upcoming days off{offFilter?` for ${offFilter}`:""}. Plan one on the calendar above.</div>
+                : <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:18}}>{offUpcoming.map(o=>row(o,false))}</div>}
+              {offPast.length>0&&(<>
+                <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",color:C.muted,margin:"4px 0 10px"}}>Earlier ({offPast.length})</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>{offPast.map(o=>row(o,true))}</div>
+              </>)}
+            </div>
+          </div>
+          );
+        })()}
       </main>
 
       {/* Mobile bottom tab bar — replaces the hover sidebar (no hover on touch).

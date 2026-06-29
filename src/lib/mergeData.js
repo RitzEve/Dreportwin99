@@ -6,7 +6,8 @@
  * Transactions are matched by their unique `uid` (older rows fall back to `#id`); an
  * entry deleted on EITHER side stays deleted. Members union by id (newer lastActivity
  * wins); banks union by id (newer `updatedAt` wins, so an active/inactive toggle or edit
- * on one device reaches the others); nextId takes the higher of the two.
+ * on one device reaches the others); off-days union by uid (delete-wins) like transactions;
+ * nextId takes the higher of the two.
  *
  * Shared by src/app/FinTrack.jsx (the live merge-on-poll) and src/lib/storageBridge.js
  * (the fallback merge when the atomic server-side RPC isn't installed).
@@ -38,6 +39,16 @@ export function mergeData(remote, local) {
     bankMap.set(b.id, !prev ? b : ((b.updatedAt || 0) >= (prev.updatedAt || 0) ? b : prev));
   }
   const banks = [...bankMap.values()];
+  // offDays: union by uid (older rows fall back to '#'||id); incoming fields win; deleted on
+  // either side stays deleted (mirrors transactions). Kept even when the server omits offDays
+  // (e.g. before migration-009 is applied), so the local copy is never silently dropped.
+  const odMap = new Map();
+  for (const o of (remote.offDays || [])) odMap.set(keyOf(o), o);
+  for (const o of (local.offDays || [])) {
+    const k = keyOf(o), prev = odMap.get(k);
+    odMap.set(k, prev ? { ...prev, ...o, deleted: !!(prev.deleted || o.deleted) } : o);
+  }
+  const offDays = [...odMap.values()];
   const nextId = Math.max(local.nextId || 0, remote.nextId || 0);
-  return { transactions, banks, members, nextId };
+  return { transactions, banks, members, offDays, nextId };
 }

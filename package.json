@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.37",
+  "version": "1.6.38",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Off Days upgraded: the calendar shows each person's name on their day off (with bigger numbers), and there's a new Shifts panel beside it to set the month's morning/night roster.",
-    "The days-off log now shows one month at a time with search and sort, and groups a run of consecutive days into a single entry.",
-    "Pick a month from the dropdown (or the arrows) to view that month's calendar, shifts and log together."
+    "The page is now \"Work Shifts / Off Day\", and each employee has their own colour so they're easy to tell apart on the calendar.",
+    "Shifts are a per-month roster you can add, edit and delete (Morning / Night) — view past months or set future months in advance.",
+    "Cleaner layout: calendar and shift roster side by side, with the plan-a-day-off form and the month's log below."
   ],
   "scripts": {
     "dev": "vite",

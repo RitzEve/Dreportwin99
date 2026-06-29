@@ -6,7 +6,7 @@ import { mergeData } from "../lib/mergeData.js";
 
 // Short labels for the mobile bottom tab bar (the desktop sidebar uses the full
 // nav labels, but "Bank Accounts" / "Transactions" are too wide for a phone tab).
-const MOBILE_TAB_LABEL = { dashboard:"Home", transactions:"Record", banks:"Banks", members:"Members", search:"Search", offdays:"Off Days" };
+const MOBILE_TAB_LABEL = { dashboard:"Home", transactions:"Record", banks:"Banks", members:"Members", search:"Search", offdays:"Shifts" };
 
 // ============================================================================
 // SESSION — when this goes online, your login frontend/backend injects the
@@ -434,9 +434,16 @@ function Confirm({message,onConfirm,onCancel}) {
   );
 }
 
+// Stable per-employee colour (same name -> same colour everywhere) so people are easy to tell
+// apart on the calendar. Hash the lowercased name into a fixed palette of distinct mid-tones.
+const EMP_COLORS = ['#2563eb','#16a34a','#d97706','#db2777','#7c3aed','#0891b2','#dc2626','#0d9488','#4f46e5','#ca8a04','#e11d48','#0284c7'];
+const empColor = (name) => { const s=(name||'').trim().toLowerCase(); let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return EMP_COLORS[h%EMP_COLORS.length]; };
+// Theme-readable variant of an employee colour for coloured text on the app background.
+const empText = (col) => `color-mix(in srgb, ${col} ${dark?'58%, #ffffff':'85%, #000000'})`;
+
 // Month calendar for the Off Days page. Presentational + module-level so it can read the shared
 // C palette / fmtDate; the page owns selection state and passes it down. Monday-first. Each cell
-// shows a large day number plus the names of anyone off that day (events[iso] = [names]).
+// shows a large day number plus the colour-coded names of anyone off that day (events[iso] = [names]).
 function MonthCalendar({ month, selected, onToggle, events, today, isMobile }){
   const [y,m] = month.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
@@ -444,7 +451,6 @@ function MonthCalendar({ month, selected, onToggle, events, today, isMobile }){
   const pad = n => String(n).padStart(2,'0');
   const sel = new Set(selected);
   const wd = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const pillBg = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
   const maxNames = isMobile ? 2 : 3;
   const cells = [];
   for(let i=0;i<lead;i++) cells.push(null);
@@ -472,9 +478,9 @@ function MonthCalendar({ month, selected, onToggle, events, today, isMobile }){
                 {d}{isToday&&<span aria-hidden="true" style={{width:5,height:5,borderRadius:'50%',background:C.accent}}/>}
               </span>
               <span style={{display:'flex',flexDirection:'column',gap:1,minWidth:0}}>
-                {names.slice(0,maxNames).map((nm,k)=>(
-                  <span key={k} title={nm} style={{fontSize:isMobile?9:10,lineHeight:1.3,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',background:pillBg,borderRadius:3,padding:'0 3px'}}>{nm}</span>
-                ))}
+                {names.slice(0,maxNames).map((nm,k)=>{ const col=empColor(nm); return (
+                  <span key={k} title={nm} style={{fontSize:isMobile?9:10,lineHeight:1.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',borderRadius:3,padding:'0 4px',borderLeft:`2px solid ${col}`,background:`color-mix(in srgb, ${col} 15%, transparent)`,color:empText(col)}}>{nm}</span>
+                ); })}
                 {names.length>maxNames&&<span style={{fontSize:isMobile?9:10,lineHeight:1.3,color:C.muted,paddingLeft:3}}>+{names.length-maxNames} more</span>}
               </span>
             </button>
@@ -687,8 +693,9 @@ export default function App() {
   const [offError,setOffError] = useState("");
   const [offLogSearch,setOffLogSearch] = useState("");
   const [offLogSort,setOffLogSort] = useState("date");
-  const [shiftEditing,setShiftEditing] = useState(false);
-  const [shiftDraft,setShiftDraft] = useState({morning:"",night:""});
+  const [shiftAdd,setShiftAdd] = useState({name:"",shift:"morning"});
+  const [shiftEditUid,setShiftEditUid] = useState(null);
+  const [shiftEditDraft,setShiftEditDraft] = useState({name:"",shift:"morning"});
   const [confirm,setConfirm] = useState(null);
   const [detailModal,setDetailModal] = useState(null);
   const [dashView,setDashView] = useState("today");
@@ -1316,10 +1323,12 @@ export default function App() {
   const offRecords = useMemo(()=>offLive.filter(o=>o.kind!=='shift'),[offLive]);   // real days off
   const shiftRecords = useMemo(()=>offLive.filter(o=>o.kind==='shift'),[offLive]); // month shift roster rows
   const dayNames = useMemo(()=>{ const mp={}; for(const o of offRecords){ (mp[o.date]||(mp[o.date]=[])).push(o.employee); } return mp; },[offRecords]);
-  const offEmployees = useMemo(()=>[...new Set(offRecords.map(o=>o.employee))].sort((a,b)=>a.localeCompare(b)),[offRecords]);
+  const offEmployees = useMemo(()=>[...new Set([...offRecords.map(o=>o.employee),...shiftRecords.filter(r=>r.employee).map(r=>r.employee)])].sort((a,b)=>a.localeCompare(b)),[offRecords,shiftRecords]);
   const offMonths = useMemo(()=>{ const s=new Set(offRecords.map(o=>o.date.slice(0,7))); s.add(thisMonth); s.add(offCalMonth); return [...s].sort((a,b)=>b.localeCompare(a)); },[offRecords,offCalMonth]);
   // Latest morning/night names for the displayed month (the row with the newest updatedAt wins).
-  const currentShifts = useMemo(()=>{ const pick=sh=>{ let best=null; for(const r of shiftRecords){ if(r.month===offCalMonth && r.shift===sh && (!best || (r.updatedAt||0)>(best.updatedAt||0))) best=r; } return best?(best.names||''):''; }; return {morning:pick('morning'), night:pick('night')}; },[shiftRecords,offCalMonth]);
+  const monthShiftRows = useMemo(()=>shiftRecords.filter(r=>r.month===offCalMonth && r.employee),[shiftRecords,offCalMonth]);
+  const shiftMorning = useMemo(()=>monthShiftRows.filter(r=>r.shift==='morning').sort((a,b)=>a.employee.localeCompare(b.employee)),[monthShiftRows]);
+  const shiftNight = useMemo(()=>monthShiftRows.filter(r=>r.shift==='night').sort((a,b)=>a.employee.localeCompare(b.employee)),[monthShiftRows]);
   // The selected month's log: search, then merge an employee's consecutive same-reason days into one run, then sort.
   const offLog = useMemo(()=>{
     const term = offLogSearch.trim().toLowerCase();
@@ -1337,7 +1346,7 @@ export default function App() {
     return runs;
   },[offRecords,offCalMonth,offLogSearch,offLogSort]);
   const toggleOffDate = (iso)=> setOffSelDates(prev=> prev.includes(iso) ? prev.filter(d=>d!==iso) : [...prev,iso].sort());
-  const gotoMonth = (ym)=>{ setOffCalMonth(ym); setShiftEditing(false); };
+  const gotoMonth = (ym)=>{ setOffCalMonth(ym); setShiftEditUid(null); };
   const handleAddOffDays = () => {
     const emp = offForm.employee.trim();
     if(!emp){ setOffError("Enter the employee's name."); window.showToast?.("Error , Please Try Again","error"); return; }
@@ -1353,21 +1362,25 @@ export default function App() {
     window.showToast?.("Action Done !","success");
   };
   const handleDeleteOffRun = (run) => setConfirm({message:`Remove ${run.employee}'s ${run.dates.length>1?`${run.dates.length} days off (${fmtDate(run.dateFrom)} – ${fmtDate(run.dateTo)})`:`day off on ${fmtDate(run.dateFrom)}`}?`,onConfirm:()=>{ const ids=new Set(run.uids); setOffDays(prev=>prev.map(o=>ids.has(o.uid)?{...o,deleted:true}:o)); setConfirm(null); }});
-  const startEditShifts = ()=>{ setShiftDraft({morning:currentShifts.morning,night:currentShifts.night}); setShiftEditing(true); };
-  const handleSaveShifts = ()=>{
+  const handleAddShift = ()=>{
+    const nm = shiftAdd.name.trim();
+    if(!nm){ window.showToast?.("Enter a name first","error"); return; }
+    if(monthShiftRows.some(r=>r.shift===shiftAdd.shift && r.employee.toLowerCase()===nm.toLowerCase())){ window.showToast?.("Already on that shift","error"); return; }
     const recordedBy = SESSION.operatorName || SESSION.operatorId || "";
     const now = Date.now();
-    setOffDays(prev=>{
-      const superseded = prev.map(o=>(o.kind==='shift' && o.month===offCalMonth && !o.deleted) ? {...o,deleted:true} : o);
-      const add = [
-        {uid:mkUid(),kind:'shift',month:offCalMonth,shift:'morning',names:shiftDraft.morning.trim(),recordedBy,updatedAt:now,createdAt:now,deleted:false},
-        {uid:mkUid(),kind:'shift',month:offCalMonth,shift:'night',names:shiftDraft.night.trim(),recordedBy,updatedAt:now,createdAt:now,deleted:false},
-      ];
-      return [...add,...superseded];
-    });
-    setShiftEditing(false);
+    setOffDays(prev=>[{uid:mkUid(),kind:'shift',month:offCalMonth,shift:shiftAdd.shift,employee:nm,recordedBy,updatedAt:now,createdAt:now,deleted:false},...prev]);
+    setShiftAdd(s=>({...s,name:""}));
     window.showToast?.("Action Done !","success");
   };
+  const startEditShift = (r)=>{ setShiftEditUid(r.uid); setShiftEditDraft({name:r.employee,shift:r.shift}); };
+  const saveEditShift = ()=>{
+    const nm = shiftEditDraft.name.trim(); if(!nm){ window.showToast?.("Enter a name first","error"); return; }
+    const now = Date.now();
+    setOffDays(prev=>prev.map(o=>o.uid===shiftEditUid?{...o,employee:nm,shift:shiftEditDraft.shift,updatedAt:now}:o));
+    setShiftEditUid(null);
+    window.showToast?.("Action Done !","success");
+  };
+  const deleteShift = (uid)=> setOffDays(prev=>prev.map(o=>o.uid===uid?{...o,deleted:true,updatedAt:Date.now()}:o));
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
   const handleSaveMember = id => {
@@ -1429,7 +1442,7 @@ export default function App() {
     {id:"banks",icon:"ti-building-bank",label:"Bank Accounts"},
     {id:"members",icon:"ti-users",label:"Members"},
     {id:"search",icon:"ti-search",label:"Search"},
-    {id:"offdays",icon:"ti-calendar-off",label:"Off Days"},
+    {id:"offdays",icon:"ti-calendar-off",label:"Work Shifts/Off Day"},
   ];
 
   // Members list: optional search (name / ID / phone) then pagination.
@@ -2445,11 +2458,38 @@ export default function App() {
         {page==="offdays"&&(()=>{
           const navBtn = {cursor:"pointer",width:34,height:34,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:16};
           const shiftMonthYm = (ym,delta)=>{ const [yy,mm]=ym.split('-').map(Number); const dt=new Date(yy,mm-1+delta,1); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; };
-          const taStyle = {width:"100%",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit",fontSize:13,padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text};
-          const shiftBox = (label,icon,color,names)=>(
-            <div style={{padding:"10px 12px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2}}>
-              <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color,marginBottom:4,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true"/> {label}</div>
-              <div style={{fontSize:13,color:names?C.text:C.muted,whiteSpace:"pre-wrap",lineHeight:1.4}}>{names||"No one assigned yet."}</div>
+          const shiftToggle = (val,set)=>(
+            <div style={{display:"inline-flex",borderRadius:8,border:`1px solid ${C.border}`,overflow:"hidden",flexShrink:0}}>
+              {[['morning','Morning','ti-sun','#d97706'],['night','Night','ti-moon','#6366f1']].map(([v,lab,ic,c])=>(
+                <button key={v} type="button" onClick={()=>set(v)} style={{cursor:"pointer",border:"none",padding:"6px 10px",fontSize:12,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,background:val===v?c:C.surface2,color:val===v?"#fff":C.muted}}><i className={`ti ${ic}`} aria-hidden="true"/>{lab}</button>
+              ))}
+            </div>
+          );
+          const shiftChip = (r)=> shiftEditUid===r.uid ? (
+            <div key={r.uid} style={{display:"flex",flexDirection:"column",gap:8,padding:8,borderRadius:8,border:`1px solid ${C.accent}`,background:C.surface2}}>
+              <input type="text" list="off-employees" value={shiftEditDraft.name} onChange={e=>setShiftEditDraft(s=>({...s,name:e.target.value}))} style={{width:"100%",boxSizing:"border-box",fontSize:13,padding:"6px 8px"}}/>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+                {shiftToggle(shiftEditDraft.shift,(v)=>setShiftEditDraft(s=>({...s,shift:v})))}
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={saveEditShift} style={{cursor:"pointer",fontSize:13,padding:"6px 12px",fontWeight:500,background:"#16a34a",color:"#fff",border:"none",borderRadius:6,display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-check" aria-hidden="true"/> Save</button>
+                  <button onClick={()=>setShiftEditUid(null)} style={{cursor:"pointer",fontSize:13,padding:"6px 12px",fontWeight:500,background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6}}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div key={r.uid} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface2}}>
+              <span aria-hidden="true" style={{width:10,height:10,borderRadius:"50%",background:empColor(r.employee),flexShrink:0}}/>
+              <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.employee}</span>
+              <button onClick={()=>startEditShift(r)} aria-label={`Edit ${r.employee}`} style={{cursor:"pointer",border:"none",background:"transparent",color:C.muted,padding:3,display:"flex"}}><i className="ti ti-edit" aria-hidden="true" style={{fontSize:15}}/></button>
+              <button onClick={()=>deleteShift(r.uid)} aria-label={`Remove ${r.employee}`} style={{cursor:"pointer",border:"none",background:"transparent",color:"#dc2626",padding:3,display:"flex"}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/></button>
+            </div>
+          );
+          const shiftGroup = (label,icon,color,rows)=>(
+            <div>
+              <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color,marginBottom:7,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true"/> {label} <span style={{color:C.muted,fontWeight:500}}>· {rows.length}</span></div>
+              {rows.length===0
+                ? <div style={{fontSize:12,color:C.muted,padding:"8px 10px",border:`1px dashed ${C.border}`,borderRadius:8}}>No one on this shift yet.</div>
+                : <div style={{display:"flex",flexDirection:"column",gap:6}}>{rows.map(shiftChip)}</div>}
             </div>
           );
           const runRow = (run)=>{
@@ -2463,6 +2503,7 @@ export default function App() {
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     <span style={{fontWeight:600,fontSize:14,color:C.text}}>{run.employee}</span>
+                    <span aria-hidden="true" title={run.employee} style={{width:9,height:9,borderRadius:"50%",background:empColor(run.employee),flexShrink:0,display:"inline-block"}}/>
                     {!single&&<span style={{fontSize:10,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}55`,borderRadius:4,padding:"1px 6px"}}>{run.dates.length} days</span>}
                     {includesToday&&<span style={{fontSize:10,fontWeight:600,color:"#16a34a",background:"#16a34a22",border:"1px solid #16a34a55",borderRadius:4,padding:"1px 6px"}}>Off today</span>}
                   </div>
@@ -2474,13 +2515,14 @@ export default function App() {
           };
           return (
           <div>
+            <datalist id="off-employees">{offEmployees.map(n=><option key={n} value={n}/>)}</datalist>
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-calendar-plus" right={
+              <SectionTitle icon="ti-calendar-month" right={
                 <FluidDropdown width={150} value={offCalMonth} ariaLabel="Month" options={offMonths.map(ym=>({value:ym,label:monthLabel(ym)}))} onChange={gotoMonth}/>
-              }>Plan a day off</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Pick days on the calendar and choose who's off. The shift roster on the right and the log below all follow the month shown here — everyone on your team sees the same lists.</div>
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(0,280px)",gap:18,alignItems:"start"}}>
-                {/* left: calendar + entry form */}
+              }>Work Shifts / Off Day</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:16}}>The calendar, shift roster and log below all follow the month shown here — pick a month to view it or plan ahead. Everyone on your team sees the same lists.</div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(0,300px)",gap:18,alignItems:"start"}}>
+                {/* left: calendar */}
                 <div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <button onClick={()=>gotoMonth(shiftMonthYm(offCalMonth,-1))} aria-label="Previous month" style={navBtn}><i className="ti ti-chevron-left" aria-hidden="true"/></button>
@@ -2488,53 +2530,48 @@ export default function App() {
                     <button onClick={()=>gotoMonth(shiftMonthYm(offCalMonth,1))} aria-label="Next month" style={navBtn}><i className="ti ti-chevron-right" aria-hidden="true"/></button>
                   </div>
                   <MonthCalendar month={offCalMonth} selected={offSelDates} onToggle={toggleOffDate} events={dayNames} today={today} isMobile={isMobile}/>
-                  <div style={{display:"flex",alignItems:"center",gap:14,margin:"12px 0 16px",fontSize:11,color:C.muted,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:12,fontSize:11,color:C.muted,flexWrap:"wrap"}}>
                     <span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:13,height:13,borderRadius:4,border:`2px solid ${C.accent}`,background:C.accentBg}}/>Selected / today</span>
-                    <span>Names on a day = who's off then.</span>
-                  </div>
-                  <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:12}}>
-                    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
-                      <div><label style={labelStyle}>Employee</label>
-                        <input list="off-employees" type="text" placeholder="Who's off?" value={offForm.employee} onChange={e=>setOffForm(f=>({...f,employee:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
-                        <datalist id="off-employees">{offEmployees.map(n=><option key={n} value={n}/>)}</datalist></div>
-                      <div><label style={labelStyle}>Reason <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
-                        <input type="text" placeholder="e.g. Annual leave, sick" value={offForm.reason} onChange={e=>setOffForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                    </div>
-                    <div><label style={labelStyle}>Selected days <span style={{color:C.muted,fontWeight:400}}>({offSelDates.length})</span></label>
-                      {offSelDates.length===0
-                        ? <div style={{fontSize:12,color:C.muted,padding:"10px 12px",border:`1px dashed ${C.border}`,borderRadius:10,textAlign:"center"}}>Tap days on the calendar to add them.</div>
-                        : <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{offSelDates.map(d=>(
-                            <span key={d} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:500,background:C.accentBg,color:C.text,border:`1px solid ${C.accent}55`,borderRadius:999,padding:"4px 6px 4px 10px"}}>{fmtDate(d)}<button onClick={()=>toggleOffDate(d)} aria-label={`Remove ${fmtDate(d)}`} style={{cursor:"pointer",border:"none",background:"transparent",color:C.muted,display:"flex",padding:0}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:14}}/></button></span>
-                          ))}</div>}
-                    </div>
-                    {offError&&<div style={{fontSize:12,color:"#dc2626"}}>{offError}</div>}
-                    <button onClick={handleAddOffDays} style={{cursor:"pointer",alignSelf:"flex-start",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:10,padding:"11px 18px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-calendar-plus" aria-hidden="true"/> Save day off{offSelDates.length>1?"s":""}</button>
+                    <span>Each colour is one person.</span>
                   </div>
                 </div>
-                {/* right: shift roster for the month */}
+                {/* right: shift roster (add / edit / delete) */}
                 <div>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,gap:8}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,display:"flex",alignItems:"center",gap:6,minWidth:0}}><i className="ti ti-clock-hour-4" aria-hidden="true" style={{color:C.accent,flexShrink:0}}/> <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Shifts · {monthLabel(offCalMonth)}</span></div>
-                    {!shiftEditing&&<button onClick={startEditShifts} style={{...editBtnStyle,flexShrink:0}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>}
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,display:"flex",alignItems:"center",gap:6,marginBottom:10}}><i className="ti ti-users-group" aria-hidden="true" style={{color:C.accent,flexShrink:0}}/> <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Shift roster · {monthLabel(offCalMonth)}</span></div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8,padding:10,borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2,marginBottom:14}}>
+                    <input type="text" list="off-employees" placeholder="Add employee name…" value={shiftAdd.name} onChange={e=>setShiftAdd(s=>({...s,name:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter')handleAddShift();}} style={{width:"100%",boxSizing:"border-box",fontSize:13,padding:"7px 9px"}}/>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+                      {shiftToggle(shiftAdd.shift,(v)=>setShiftAdd(s=>({...s,shift:v})))}
+                      <button onClick={handleAddShift} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"7px 14px",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-plus" aria-hidden="true"/> Add</button>
+                    </div>
                   </div>
-                  {shiftEditing ? (
-                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                      <div><label style={labelStyle}><i className="ti ti-sun" aria-hidden="true" style={{color:"#d97706",marginRight:4}}/>Morning shift</label>
-                        <textarea rows={3} placeholder="Names on morning shift…" value={shiftDraft.morning} onChange={e=>setShiftDraft(s=>({...s,morning:e.target.value}))} style={taStyle}/></div>
-                      <div><label style={labelStyle}><i className="ti ti-moon" aria-hidden="true" style={{color:"#6366f1",marginRight:4}}/>Night shift</label>
-                        <textarea rows={3} placeholder="Names on night shift…" value={shiftDraft.night} onChange={e=>setShiftDraft(s=>({...s,night:e.target.value}))} style={taStyle}/></div>
-                      <div style={{display:"flex",gap:8}}>
-                        <button onClick={handleSaveShifts} style={{cursor:"pointer",flex:1,fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> Save shifts</button>
-                        <button onClick={()=>setShiftEditing(false)} style={{cursor:"pointer",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 14px"}}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                      {shiftBox("Morning","ti-sun","#d97706",currentShifts.morning)}
-                      {shiftBox("Night","ti-moon","#6366f1",currentShifts.night)}
-                    </div>
-                  )}
+                  <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                    {shiftGroup("Morning","ti-sun","#d97706",shiftMorning)}
+                    {shiftGroup("Night","ti-moon","#6366f1",shiftNight)}
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-calendar-plus">Plan a day off</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Tap days on the calendar above, choose who's off, and save.</div>
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
+                  <div><label style={labelStyle}>Employee</label>
+                    <input list="off-employees" type="text" placeholder="Who's off?" value={offForm.employee} onChange={e=>setOffForm(f=>({...f,employee:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                  <div><label style={labelStyle}>Reason <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                    <input type="text" placeholder="e.g. Annual leave, sick" value={offForm.reason} onChange={e=>setOffForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                </div>
+                <div><label style={labelStyle}>Selected days <span style={{color:C.muted,fontWeight:400}}>({offSelDates.length})</span></label>
+                  {offSelDates.length===0
+                    ? <div style={{fontSize:12,color:C.muted,padding:"10px 12px",border:`1px dashed ${C.border}`,borderRadius:10,textAlign:"center"}}>Tap days on the calendar above to add them.</div>
+                    : <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{offSelDates.map(d=>(
+                        <span key={d} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:500,background:C.accentBg,color:C.text,border:`1px solid ${C.accent}55`,borderRadius:999,padding:"4px 6px 4px 10px"}}>{fmtDate(d)}<button onClick={()=>toggleOffDate(d)} aria-label={`Remove ${fmtDate(d)}`} style={{cursor:"pointer",border:"none",background:"transparent",color:C.muted,display:"flex",padding:0}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:14}}/></button></span>
+                      ))}</div>}
+                </div>
+                {offError&&<div style={{fontSize:12,color:"#dc2626"}}>{offError}</div>}
+                <button onClick={handleAddOffDays} style={{cursor:"pointer",alignSelf:"flex-start",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:10,padding:"11px 18px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-calendar-plus" aria-hidden="true"/> Save day off{offSelDates.length>1?"s":""}</button>
               </div>
             </div>
 

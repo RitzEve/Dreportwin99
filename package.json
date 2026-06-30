@@ -1,12 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.0.1",
+  "version": "2.0.2",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "New version numbering, starting at V2.0.1. The last two numbers roll over at 9 — after V2.0.9 comes V2.1.0, and after V2.9.9 comes V3.0.0.",
-    "Nothing about how the app works has changed — this is only how versions are numbered from now on."
+    "New: a \"How to use\" guide. Open it from your account menu, or the \"?\" button in the top bar.",
+    "It explains the app step by step with pictures, and shows only the parts for your role (staff, manager or master).",
+    "Read it in English, 中文 (Chinese) or ភាសាខ្មែរ (Khmer) — it picks your device language automatically, and remembers your choice."
   ],
   "scripts": {
     "dev": "vite",

@@ -17,6 +17,7 @@ import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import UpdateBell from '../components/UpdateBell.jsx';
+import Guide from './Guide.jsx';
 import useIsMobile from '../lib/useIsMobile.js';
 
 /*
@@ -30,6 +31,7 @@ export default function Provider({ ctx, onLogout }) {
   const isMobile = useIsMobile();
   const [companies, setCompanies] = useState(null); // null = loading
   const [query, setQuery] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
 
   async function refresh() {
     setCompanies(await listCompaniesWithMasters());
@@ -56,11 +58,15 @@ export default function Provider({ ctx, onLogout }) {
         </div>
         <div style={styles.userBox}>
           <UpdateBell />
+          <button className="ub-bell-btn" onClick={() => setGuideOpen(true)} title="Help / How to use" aria-label="Help / How to use">
+            <i className="ti ti-help" aria-hidden="true" style={{ fontSize: 18 }} />
+          </button>
           <ThemeToggle />
           <span className="badge badge-provider"><i className="ti ti-shield-lock" aria-hidden="true" /> Provider</span>
-          <AccountMenu user={user} roleLabel="Provider" onLogout={onLogout} />
+          <AccountMenu user={user} roleLabel="Provider" onLogout={onLogout} onOpenGuide={() => setGuideOpen(true)} />
         </div>
       </header>
+      <Guide open={guideOpen} role={user.role} onClose={() => setGuideOpen(false)} />
 
       <main style={{ ...styles.main, padding: isMobile ? 14 : 24 }}>
         <div style={{ ...styles.grid, gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 340px) minmax(0, 1fr)' }}>

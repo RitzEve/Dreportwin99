@@ -317,3 +317,161 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
    .safe-* helpers are added to fixed bars (e.g. the mobile bottom tab bar). */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 .safe-top    { padding-top: env(safe-area-inset-top); }
+
+/* =====================================================================
+   HOW-TO GUIDE  (src/screens/Guide.jsx)
+   A full-screen, role-aware, trilingual onboarding overlay. Everything
+   here is scoped under .guide-* so it never touches the rest of the app.
+   The .guide-font stack lists Noto Khmer + Noto SC before the Latin
+   default, so the browser auto-picks the font that covers each script —
+   one stack renders English, 中文 and ភាសាខ្មែរ correctly. The Noto
+   web fonts are lazy-loaded the first time the guide opens.
+   ===================================================================== */
+
+.guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  animation: guide-fade 0.22s ease;
+}
+@keyframes guide-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.guide-font {
+  font-family: 'Noto Sans', 'Noto Sans Khmer', 'Noto Sans SC', var(--font-sans);
+}
+/* Khmer glyphs sit tall; give all guide text a touch more line height so
+   Khmer never clips and Chinese stays comfortable. */
+.guide-scroll { line-height: 1.7; }
+
+.guide-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--header);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.guide-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.guide-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 20px 80px;
+}
+
+/* Segmented control reused for both the role toggle and the language switch. */
+.guide-seg {
+  display: inline-flex;
+  gap: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+}
+.guide-seg button {
+  cursor: pointer;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-family: inherit;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.guide-seg button:hover:not(.is-active) { color: var(--text); }
+.guide-seg button.is-active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.guide-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px;
+  margin-top: 18px;
+  box-shadow: var(--shadow);
+}
+.guide-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.guide-section-num {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 22px;
+  align-items: start;
+  margin-top: 14px;
+}
+.guide-steps { margin: 0; padding: 0; list-style: none; counter-reset: gstep; }
+.guide-steps li {
+  position: relative;
+  padding: 7px 0 7px 38px;
+  counter-increment: gstep;
+}
+.guide-steps li::before {
+  content: counter(gstep);
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+}
+.guide-figure {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+.guide-figure svg { width: 100%; height: auto; display: block; }
+
+/* Numbered hotspot pin used inside the SVG mockups (kept consistent with the
+   step numbers beside them). */
+.guide-pin-bg { fill: var(--accent); }
+.guide-pin-tx { fill: var(--on-accent); font-weight: 700; }
+
+@media (max-width: 720px) {
+  .guide-grid { grid-template-columns: 1fr; }
+  .guide-inner { padding: 20px 14px 80px; }
+  .guide-section { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-overlay { animation: none; }
+}

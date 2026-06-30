@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { changeOwnPassword } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
+import Guide from '../screens/Guide.jsx';
 import useIsMobile from '../lib/useIsMobile.js';
 
 /*
@@ -12,6 +13,7 @@ import useIsMobile from '../lib/useIsMobile.js';
  */
 export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = true }) {
   const [Comp, setComp] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -57,7 +59,12 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
           <span style={styles.dot}>·</span>
           {ctx?.user.operatorId} ({ctx?.user.role})
         </span>
+        <button className="ub-bell-btn" style={{ marginLeft: 'auto' }} onClick={() => setGuideOpen(true)}
+          title="Help / How to use" aria-label="Help / How to use">
+          <i className="ti ti-help" aria-hidden="true" style={{ fontSize: 18 }} />
+        </button>
       </div>
+      <Guide open={guideOpen} role={ctx?.user?.role} onClose={() => setGuideOpen(false)} />
       <div style={{ ...styles.appArea, padding: isMobile ? 0 : '16px' }}>
         {Comp ? <Comp /> : (
           <div style={styles.loadingWrap}>

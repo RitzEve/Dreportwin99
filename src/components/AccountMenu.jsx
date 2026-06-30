@@ -7,7 +7,7 @@ import { useEsc } from '../lib/useEsc.js';
  * Popup contains: Change password, Log out. (Theme is switched via the slider in
  * the page header; the in-app FinTrack screen has its own matching toggle.)
  */
-export default function AccountMenu({ user, roleLabel, onLogout }) {
+export default function AccountMenu({ user, roleLabel, onLogout, onOpenGuide }) {
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const ref = useRef(null);
@@ -37,6 +37,11 @@ export default function AccountMenu({ user, roleLabel, onLogout }) {
             <div style={S.sub}>{user.email}</div>
           </div>
 
+          {onOpenGuide && (
+            <button style={S.item} onClick={() => { setOpen(false); onOpenGuide(); }}>
+              <i className="ti ti-book-2" aria-hidden="true" style={{ color: 'var(--accent)' }} /> Help / How to use
+            </button>
+          )}
           <button style={S.item} onClick={() => { setOpen(false); setPwOpen(true); }}>
             <i className="ti ti-key" aria-hidden="true" style={{ color: 'var(--accent)' }} /> Change password
           </button>

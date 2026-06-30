@@ -19,6 +19,7 @@ import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import UpdateBell from '../components/UpdateBell.jsx';
+import Guide from './Guide.jsx';
 import useIsMobile from '../lib/useIsMobile.js';
 
 /*
@@ -37,6 +38,7 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
   const { company, user } = ctx;
   const isMobile = useIsMobile();
   const [team, setTeam] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const roleClass = user.role === ROLES.MASTER ? 'badge-master' : 'badge-manager';
 
   async function refresh() { setTeam(await listTeam(company.id)); }
@@ -58,14 +60,18 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
         </div>
         <div style={styles.userBox}>
           <UpdateBell />
+          <button className="ub-bell-btn" onClick={() => setGuideOpen(true)} title="Help / How to use" aria-label="Help / How to use">
+            <i className="ti ti-help" aria-hidden="true" style={{ fontSize: 18 }} />
+          </button>
           <ThemeToggle />
           <span className={`badge ${roleClass}`}>
             <i className={`ti ti-${user.role === ROLES.MASTER ? 'shield-check' : 'user-star'}`} aria-hidden="true" />
             {ROLE_LABEL[user.role]}
           </span>
-          <AccountMenu user={user} roleLabel={ROLE_LABEL[user.role]} onLogout={onLogout} />
+          <AccountMenu user={user} roleLabel={ROLE_LABEL[user.role]} onLogout={onLogout} onOpenGuide={() => setGuideOpen(true)} />
         </div>
       </header>
+      <Guide open={guideOpen} role={user.role} onClose={() => setGuideOpen(false)} />
 
       <main style={{ ...styles.main, padding: isMobile ? 14 : 24 }}>
         <section style={styles.launchCard} onClick={onOpenApp} role="button" tabIndex={0}

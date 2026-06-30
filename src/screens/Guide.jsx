@@ -35,11 +35,32 @@ const SECTIONS = [
   { id: 'layout',      icon: 'ti-layout-navbar',    roles: ['staff', 'manager', 'master'] },
   { id: 'openapp',     icon: 'ti-wallet',           roles: ['manager', 'master'] },
   { id: 'transaction', icon: 'ti-cash',             roles: ['staff', 'manager', 'master'] },
+  { id: 'txoptions',   icon: 'ti-checkbox',         roles: ['staff', 'manager', 'master'] },
   { id: 'members',     icon: 'ti-users',            roles: ['staff', 'manager', 'master'] },
   { id: 'banks',       icon: 'ti-building-bank',    roles: ['staff', 'manager', 'master'] },
   { id: 'shifts',      icon: 'ti-calendar-event',   roles: ['staff', 'manager', 'master'] },
   { id: 'team',        icon: 'ti-users-group',      roles: ['manager', 'master'] },
   { id: 'roles',       icon: 'ti-shield-check',     roles: ['master'] },
+];
+
+// ---- Tick-box tutorial config (the "Deposit & withdrawal options" section). ----
+// Colours + icons mirror the tags the app actually shows in the transaction log,
+// so the guide and the app read as one thing. The chart rows are language-neutral
+// (a sign + a token key); the words come from the per-language `tok` / `rowLabels`.
+const TK_ORDER = ['unclaimedDep', 'redeposit', 'storeWd', 'actualPaid', 'storePaid'];
+const TK_UI = { unclaimedDep: 'Unclaimed Credit', redeposit: 'Redeposit', storeWd: 'Store withdraw', actualPaid: 'Actual paid amount', storePaid: 'Store + actual paid' };
+const TK_COLOR = { unclaimedDep: '#d97706', redeposit: '#2563eb', storeWd: '#d97706', actualPaid: '#0d9488', storePaid: '#7c3aed' };
+const TK_ICON = { unclaimedDep: 'ti-coin', redeposit: 'ti-refresh', storeWd: 'ti-building-store', actualPaid: 'ti-cash', storePaid: 'ti-arrows-split-2' };
+// Each chart row: 5 cells = [Deposits, Withdrawals, Bank, Store, Unclaimed].
+// A cell is [sign, tokenKey] or null (no change).
+const CHART_ROWS = [
+  { key: 'plainDep',     cells: [['+', 'amt'], null, ['+', 'amt'], null, null] },
+  { key: 'plainWd',      cells: [null, ['+', 'amt'], ['-', 'amt'], null, null] },
+  { key: 'unclaimedDep', cells: [['+', 'amt'], null, null, null, ['-', 'amt']] },
+  { key: 'redeposit',    cells: [['+', 'amt'], ['+', 'amt'], null, null, null] },
+  { key: 'storeWd',      cells: [null, ['+', 'amt'], null, ['-', 'store'], ['+', 'left']] },
+  { key: 'actualPaid',   cells: [null, ['+', 'amt'], ['-', 'paid'], null, ['+', 'left']] },
+  { key: 'storePaid',    cells: [null, ['+', 'amt'], ['-', 'paid'], ['-', 'store'], ['+', 'left']] },
 ];
 
 // ---- Lazy font loader: pull Noto (Latin + Simplified Chinese + Khmer) only the
@@ -133,14 +154,18 @@ export default function Guide({ open, role, onClose }) {
                   <h2 style={{ margin: 0, fontSize: 19 }}>{i + 1}. {c.title}</h2>
                 </div>
                 <p style={{ color: 'var(--muted)', margin: '4px 0 0' }}>{c.intro}</p>
-                <div className="guide-grid">
-                  <ol className="guide-steps">
-                    {c.steps.map((step, j) => <li key={j}>{step}</li>)}
-                  </ol>
-                  <figure className="guide-figure" style={{ margin: 0 }}>
-                    <Mockup id={s.id} />
-                  </figure>
-                </div>
+                {s.id === 'txoptions' ? (
+                  <TxOptions c={c} />
+                ) : (
+                  <div className="guide-grid">
+                    <ol className="guide-steps">
+                      {c.steps.map((step, j) => <li key={j}>{step}</li>)}
+                    </ol>
+                    <figure className="guide-figure" style={{ margin: 0 }}>
+                      <Mockup id={s.id} />
+                    </figure>
+                  </div>
+                )}
               </section>
             );
           })}
@@ -360,6 +385,60 @@ function Mockup({ id }) {
   }
 }
 
+/* Custom body for the "Deposit & withdrawal options" section: a key-idea callout,
+   the comparison chart, and one explainer card per tick-box (math + worked example). */
+function TxOptions({ c }) {
+  return (
+    <>
+      <div className="guide-callout">
+        <i className="ti ti-bulb" aria-hidden="true" />
+        <span>{c.note}</span>
+      </div>
+
+      <div className="guide-chart-wrap table-scroll">
+        <table className="guide-chart">
+          <thead>
+            <tr>
+              <th>{c.rowsHeader}</th>
+              {c.colHeaders.map((h, i) => <th key={i}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {CHART_ROWS.map((row) => (
+              <tr key={row.key}>
+                <td>{c.rowLabels[row.key]}</td>
+                {row.cells.map((cell, i) => {
+                  if (!cell) return <td key={i} className="c-none">—</td>;
+                  const [sign, tokKey] = cell;
+                  return (
+                    <td key={i} className={sign === '+' ? 'c-up' : 'c-down'}>
+                      {sign === '+' ? '+' : '−'} {c.tok[tokKey]}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {TK_ORDER.map((key) => {
+        const it = c.items[key];
+        return (
+          <div key={key} className="guide-tk" style={{ '--tk': TK_COLOR[key] }}>
+            <div className="guide-tk-head">
+              <span className="guide-tk-name"><i className={`ti ${TK_ICON[key]}`} aria-hidden="true" /> {TK_UI[key]}</span>
+            </div>
+            <p className="guide-tk-for">{it.for}</p>
+            <div className="guide-tk-formula">{it.formula}</div>
+            <p className="guide-tk-ex">{it.example}</p>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 /* =====================================================================
    CONTENT — English, 简体中文, ភាសាខ្មែរ.
    Khmer is a best-effort translation; worth a native-speaker pass.
@@ -431,6 +510,50 @@ const T = {
           'Enter the amount and the bank or store it touches, plus a note if useful.',
           'Press Enter to save. The record appears in the history straight away.',
         ],
+      },
+      txoptions: {
+        title: 'Deposit & withdrawal options (the tick-boxes)',
+        intro: "Most entries are a plain deposit or withdrawal. For special cases you can tick a box. The box never changes how big the withdrawal is — it only changes WHERE the money comes from, and anything left over is saved as the member's Unclaimed credit.",
+        note: 'Rule of thumb: Total Withdrawals always shows the full amount. The tick-box only splits where it is funded from — a bank, store credit, or kept as Unclaimed credit. Left-over = amount − store − bank paid.',
+        rowsHeader: 'Entry / option',
+        colHeaders: ['Deposits total', 'Withdrawals total', 'Bank balance', 'Store credit', 'Unclaimed credit'],
+        rowLabels: {
+          plainDep: 'Plain deposit',
+          plainWd: 'Plain withdrawal',
+          unclaimedDep: 'Deposit · from Unclaimed',
+          redeposit: 'Redeposit',
+          storeWd: 'Store withdraw',
+          actualPaid: 'Actual paid amount',
+          storePaid: 'Store + actual paid',
+        },
+        tok: { amt: 'amount', store: 'store', paid: 'paid', left: 'left-over' },
+        items: {
+          unclaimedDep: {
+            for: 'A deposit paid from credit the member is already owed, instead of new cash. (Tick it on a Regular Deposit.)',
+            formula: 'Deposit = Unclaimed credit used   ·   no bank, no new money',
+            example: "A member is owed $50 from before. Deposit $50 from unclaimed → Deposits +$50 and that day's Unclaimed credit −$50. No bank changes.",
+          },
+          redeposit: {
+            for: 'The member takes money out and puts the same amount straight back. (Tick it on a Regular Withdrawal.)',
+            formula: 'Out = In = amount   ·   every bank balance unchanged',
+            example: 'Redeposit $100 → Total Withdrawals +$100 AND Total Deposits +$100, but no bank balance moves, even if a bank is selected.',
+          },
+          storeWd: {
+            for: 'A withdrawal paid from store credit instead of a bank. (Tick it on a Regular Withdrawal.)',
+            formula: 'Withdrawal = store + left-over   ·   left-over → Unclaimed',
+            example: 'Withdraw $80, store amount $60 → Withdrawals +$80, Store credit −$60, and the $20 left-over becomes Unclaimed credit. No bank is touched.',
+          },
+          actualPaid: {
+            for: 'The bank pays only part of the withdrawal; the rest is owed. (Tick it on a Regular Withdrawal.)',
+            formula: 'Withdrawal = bank paid + left-over   ·   left-over → Unclaimed',
+            example: 'Withdraw $100, bank pays $70 → Withdrawals +$100, the bank −$70, and the $30 left-over becomes Unclaimed credit.',
+          },
+          storePaid: {
+            for: 'A withdrawal split across store credit AND the bank; the rest is owed. (Tick it on a Regular Withdrawal.)',
+            formula: 'Withdrawal = store + bank paid + left-over   ·   left-over → Unclaimed',
+            example: 'Withdraw $100, store $60, bank pays $30 → Withdrawals +$100, Store −$60, bank −$30, and the $10 left-over becomes Unclaimed credit.',
+          },
+        },
       },
       members: {
         title: 'The members directory',
@@ -545,6 +668,50 @@ const T = {
           '点击“确认”保存，记录会立即出现在历史中。',
         ],
       },
+      txoptions: {
+        title: '存款与取款的选项（勾选框）',
+        intro: '大多数记录就是普通的存款或取款。遇到特殊情况时，你可以勾选一个方框。勾选框从不改变取款的金额，它只改变这笔钱从哪里出——剩下未被覆盖的部分会作为该会员的“未领取额度”保存。',
+        note: '要点：取款总额始终显示完整金额。勾选框只决定这笔钱从哪里出——银行、商店额度，或记为未领取额度。剩余 = 金额 − 商店 − 银行支付。',
+        rowsHeader: '记录 / 选项',
+        colHeaders: ['存款总额', '取款总额', '银行余额', '商店额度', '未领取额度'],
+        rowLabels: {
+          plainDep: '普通存款',
+          plainWd: '普通取款',
+          unclaimedDep: '存款 · 来自未领取',
+          redeposit: '再存入',
+          storeWd: '商店取款',
+          actualPaid: '实付金额',
+          storePaid: '商店 + 实付',
+        },
+        tok: { amt: '金额', store: '商店', paid: '支付', left: '剩余' },
+        items: {
+          unclaimedDep: {
+            for: '用会员已被欠下的额度来做一笔存款，而不是新的现金。（在“普通存款”上勾选。）',
+            formula: '存款 = 使用的未领取额度   ·   不动银行，不产生新钱',
+            example: '某会员之前被欠 $50。从未领取额度存入 $50 → 存款 +$50，当天的未领取额度 −$50。银行不变。',
+          },
+          redeposit: {
+            for: '会员把钱取出后又立即把同样的金额放回。（在“普通取款”上勾选。）',
+            formula: '取出 = 存入 = 金额   ·   所有银行余额不变',
+            example: '再存入 $100 → 取款总额 +$100，同时存款总额 +$100，但即使选了银行，任何银行余额都不变动。',
+          },
+          storeWd: {
+            for: '用商店额度而不是银行来支付的取款。（在“普通取款”上勾选。）',
+            formula: '取款 = 商店 + 剩余   ·   剩余 → 未领取',
+            example: '取款 $80，商店金额 $60 → 取款 +$80，商店额度 −$60，剩余的 $20 变成未领取额度。不动银行。',
+          },
+          actualPaid: {
+            for: '银行只支付取款的一部分，其余的算作欠款。（在“普通取款”上勾选。）',
+            formula: '取款 = 银行支付 + 剩余   ·   剩余 → 未领取',
+            example: '取款 $100，银行支付 $70 → 取款 +$100，银行 −$70，剩余的 $30 变成未领取额度。',
+          },
+          storePaid: {
+            for: '取款由商店额度和银行共同分担，其余的算作欠款。（在“普通取款”上勾选。）',
+            formula: '取款 = 商店 + 银行支付 + 剩余   ·   剩余 → 未领取',
+            example: '取款 $100，商店 $60，银行支付 $30 → 取款 +$100，商店 −$60，银行 −$30，剩余的 $10 变成未领取额度。',
+          },
+        },
+      },
       members: {
         title: '会员名录',
         intro: '你为之交易的每个人都是会员。名录把他们的资料和历史集中在一处。',
@@ -657,6 +824,50 @@ const T = {
           'បញ្ចូលចំនួនទឹកប្រាក់ និងធនាគារ ឬឥណទានហាងដែលពាក់ព័ន្ធ ព្រមទាំងចំណាំបើចាំបាច់។',
           'ចុច «បញ្ជាក់» ដើម្បីរក្សាទុក។ កំណត់ត្រានឹងបង្ហាញក្នុងប្រវត្តិភ្លាមៗ។',
         ],
+      },
+      txoptions: {
+        title: 'ជម្រើសដាក់ប្រាក់ និងដកប្រាក់ (ប្រអប់ធីក)',
+        intro: 'កំណត់ត្រាភាគច្រើនគ្រាន់តែជាការដាក់ប្រាក់ ឬដកប្រាក់ធម្មតា។ សម្រាប់ករណីពិសេស អ្នកអាចធីកប្រអប់មួយ។ ប្រអប់នេះមិនផ្លាស់ប្ដូរទំហំនៃការដកប្រាក់ឡើយ — វាគ្រាន់តែផ្លាស់ប្ដូរថាលុយចេញពីណា ហើយផ្នែកដែលនៅសល់ត្រូវរក្សាទុកជា «ឥណទានមិនទាន់ដក» របស់សមាជិក។',
+        note: 'គោលការណ៍៖ ការដកសរុបតែងតែបង្ហាញចំនួនពេញ។ ប្រអប់ធីកគ្រាន់តែបែងចែកថាលុយចេញពីណា — ធនាគារ ឥណទានហាង ឬរក្សាជាឥណទានមិនទាន់ដក។ នៅសល់ = ចំនួន − ហាង − ធនាគារបង់។',
+        rowsHeader: 'កំណត់ត្រា / ជម្រើស',
+        colHeaders: ['ដាក់ប្រាក់សរុប', 'ដកប្រាក់សរុប', 'សមតុល្យធនាគារ', 'ឥណទានហាង', 'ឥណទានមិនទាន់ដក'],
+        rowLabels: {
+          plainDep: 'ដាក់ប្រាក់ធម្មតា',
+          plainWd: 'ដកប្រាក់ធម្មតា',
+          unclaimedDep: 'ដាក់ប្រាក់ · ពីមិនទាន់ដក',
+          redeposit: 'ដាក់ប្រាក់ឡើងវិញ',
+          storeWd: 'ដកពីហាង',
+          actualPaid: 'ចំនួនបង់ពិត',
+          storePaid: 'ហាង + បង់ពិត',
+        },
+        tok: { amt: 'ចំនួន', store: 'ហាង', paid: 'បង់', left: 'នៅសល់' },
+        items: {
+          unclaimedDep: {
+            for: 'ការដាក់ប្រាក់ដែលបង់ពីឥណទានដែលសមាជិកត្រូវបានជំពាក់រួចហើយ ជំនួសឱ្យសាច់ប្រាក់ថ្មី។ (ធីកនៅលើ «ដាក់ប្រាក់ធម្មតា»។)',
+            formula: 'ដាក់ប្រាក់ = ឥណទានមិនទាន់ដកដែលប្រើ   ·   មិនប៉ះធនាគារ មិនមានលុយថ្មី',
+            example: 'សមាជិកម្នាក់ត្រូវបានជំពាក់ $50 ពីមុន។ ដាក់ប្រាក់ $50 ពីឥណទានមិនទាន់ដក → ដាក់ប្រាក់ +$50 ហើយឥណទានមិនទាន់ដកថ្ងៃនោះ −$50។ ធនាគារមិនប្រែប្រួល។',
+          },
+          redeposit: {
+            for: 'សមាជិកដកប្រាក់ចេញ ហើយដាក់ចំនួនដដែលត្រឡប់វិញភ្លាមៗ។ (ធីកនៅលើ «ដកប្រាក់ធម្មតា»។)',
+            formula: 'ចេញ = ចូល = ចំនួន   ·   សមតុល្យធនាគារទាំងអស់មិនប្រែ',
+            example: 'ដាក់ប្រាក់ឡើងវិញ $100 → ដកប្រាក់សរុប +$100 និងដាក់ប្រាក់សរុប +$100 ប៉ុន្តែគ្មានសមតុល្យធនាគារណាផ្លាស់ប្ដូរ ទោះបីជ្រើសធនាគារក៏ដោយ។',
+          },
+          storeWd: {
+            for: 'ការដកប្រាក់ដែលបង់ពីឥណទានហាង ជំនួសឱ្យធនាគារ។ (ធីកនៅលើ «ដកប្រាក់ធម្មតា»។)',
+            formula: 'ដកប្រាក់ = ហាង + នៅសល់   ·   នៅសល់ → មិនទាន់ដក',
+            example: 'ដក $80 ចំនួនហាង $60 → ដកប្រាក់ +$80 ឥណទានហាង −$60 ហើយ $20 ដែលនៅសល់ក្លាយជាឥណទានមិនទាន់ដក។ មិនប៉ះធនាគារ។',
+          },
+          actualPaid: {
+            for: 'ធនាគារបង់តែផ្នែកមួយនៃការដក ឯផ្នែកដែលនៅសល់ត្រូវជំពាក់។ (ធីកនៅលើ «ដកប្រាក់ធម្មតា»។)',
+            formula: 'ដកប្រាក់ = ធនាគារបង់ + នៅសល់   ·   នៅសល់ → មិនទាន់ដក',
+            example: 'ដក $100 ធនាគារបង់ $70 → ដកប្រាក់ +$100 ធនាគារ −$70 ហើយ $30 ដែលនៅសល់ក្លាយជាឥណទានមិនទាន់ដក។',
+          },
+          storePaid: {
+            for: 'ការដកប្រាក់បែងចែករវាងឥណទានហាង និងធនាគារ ឯផ្នែកដែលនៅសល់ត្រូវជំពាក់។ (ធីកនៅលើ «ដកប្រាក់ធម្មតា»។)',
+            formula: 'ដកប្រាក់ = ហាង + ធនាគារបង់ + នៅសល់   ·   នៅសល់ → មិនទាន់ដក',
+            example: 'ដក $100 ហាង $60 ធនាគារបង់ $30 → ដកប្រាក់ +$100 ហាង −$60 ធនាគារ −$30 ហើយ $10 ដែលនៅសល់ក្លាយជាឥណទានមិនទាន់ដក។',
+          },
+        },
       },
       members: {
         title: 'បញ្ជីឈ្មោះសមាជិក',

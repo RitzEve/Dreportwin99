@@ -475,3 +475,78 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 @media (prefers-reduced-motion: reduce) {
   .guide-overlay { animation: none; }
 }
+
+/* ---- Tutorial extras: the "key idea" callout, the comparison chart, and the
+        per-tick-box explainer cards (the Deposit & withdrawal options section). ---- */
+
+.guide-callout {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  background: var(--accent-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+.guide-callout i { color: var(--accent); font-size: 19px; flex-shrink: 0; margin-top: 1px; }
+
+.guide-chart-wrap { margin-top: 18px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.guide-chart { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 540px; }
+.guide-chart th, .guide-chart td { padding: 9px 12px; text-align: center; white-space: nowrap; }
+.guide-chart thead th {
+  background: var(--header);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.guide-chart tbody tr + tr td { border-top: 1px solid var(--border); }
+.guide-chart td:first-child, .guide-chart th:first-child {
+  text-align: left;
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+}
+.guide-chart thead th:first-child { background: var(--header); }
+.guide-chart .c-up { color: var(--success); font-weight: 600; }
+.guide-chart .c-down { color: var(--danger); font-weight: 600; }
+.guide-chart .c-none { color: var(--muted); opacity: 0.6; }
+
+.guide-tk {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--tk, var(--accent));
+  border-radius: 12px;
+  padding: 15px 17px;
+  margin-top: 14px;
+  background: var(--surface-2);
+}
+.guide-tk-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.guide-tk-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--tk, var(--accent));
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.guide-tk-for { margin: 8px 0 0; color: var(--text); }
+.guide-tk-formula {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+}
+.guide-tk-ex {
+  margin-top: 9px;
+  font-size: 13px;
+  color: var(--muted);
+  border-left: 2px solid var(--border-strong);
+  padding-left: 11px;
+}
+.guide-tk-ex b { color: var(--text); }

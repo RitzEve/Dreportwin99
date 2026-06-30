@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.0.2",
+  "version": "2.0.3",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "New: a \"How to use\" guide. Open it from your account menu, or the \"?\" button in the top bar.",
-    "It explains the app step by step with pictures, and shows only the parts for your role (staff, manager or master).",
-    "Read it in English, 中文 (Chinese) or ភាសាខ្មែរ (Khmer) — it picks your device language automatically, and remembers your choice."
+    "The How-to guide now explains the deposit & withdrawal tick-boxes: Redeposit, Store withdraw, Actual paid amount, Store + actual paid, and deposit from Unclaimed credit.",
+    "It includes a clear chart of what each one does to your totals, banks, store credit and unclaimed credit, plus a worked money example for each.",
+    "As always, available in English, 中文 (Chinese) and ភាសាខ្មែរ (Khmer)."
   ],
   "scripts": {
     "dev": "vite",

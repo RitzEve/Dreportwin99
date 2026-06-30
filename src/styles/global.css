@@ -129,6 +129,17 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 .btn-danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
 .btn-sm { padding: 6px 12px; font-size: 12.5px; border-radius: 7px; }
 
+/* ---- keyboard focus ring (consistent + on-brand) ----
+   A single gold focus indicator for everything interactive. :focus-visible fires
+   only for keyboard / assistive-tech users (never on a mouse click), so pointer
+   users see no change. :where() keeps specificity at 0, so the bespoke focus
+   styles above (.ub-bell-btn, .ft-cal-day, input:focus) still win where defined.
+   Outline follows the element's own border-radius in modern browsers. */
+:where(a, button, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ---- misc ---- */
 
 .error-text { color: var(--danger); font-size: 13px; margin-top: 4px; }

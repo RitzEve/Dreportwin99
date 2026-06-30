@@ -223,14 +223,14 @@ const C = {
   onAccent: "#1a1206",                            // dark ink for text/icons sitting ON a gold accent fill
 };
 
-const editBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:`1px solid ${C.accent}`,borderRadius:6,background:dark?"rgba(227,179,65,0.14)":"#fbf4dc",color:C.accent,display:"inline-flex",alignItems:"center",gap:4};
-const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
-const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",gap:4};
-const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",gap:4};
+const editBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:12,fontWeight:500,border:`1px solid ${C.accent}`,borderRadius:6,background:dark?"rgba(227,179,65,0.14)":"#fbf4dc",color:C.accent,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
+const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
+const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
+const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
 // Block toggle: neutral when the bank is open (the "Block" action), red when it's blocked
 // (the "Unblock" action) — mirrors the danger styling so a blocked bank reads at a glance.
-const bankBlockBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",gap:4};
-const bankBlockedBtnStyle = {cursor:"pointer",padding:"4px 10px",fontSize:11,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",gap:4};
+const bankBlockBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
+const bankBlockedBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
 const sectionStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:20,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 const cardStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 
@@ -354,6 +354,9 @@ function StatCard({label,count,amount,color,onClick,note}) {
   const viewHint = <span style={{display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap",...((isPaleColor(accent)&&!dark)?goldChip:{color:accent})}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
   return (
     <GlowCard color={color||C.borderStrong} onClick={onClick}
+      role={onClick?"button":undefined} tabIndex={onClick?0:undefined}
+      onKeyDown={onClick?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); onClick(); } }):undefined}
+      aria-label={onClick?`${label}: ${fmt(amount)} — view entries`:undefined}
       style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.borderStrong}`,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)",cursor:onClick?"pointer":"default"}}
       title={onClick?"Click to view these entries for the selected date":undefined}>
       <div style={{fontSize:11.5,color:C.muted,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={label}>{label}</div>

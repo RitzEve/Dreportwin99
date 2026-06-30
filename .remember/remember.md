@@ -1,15 +1,14 @@
 # Handoff
 
 ## State
-Multi-company-portal (Vite/React, repo RitzEve/Dreportwin99, branch master) is LIVE at https://dreportwin99.netlify.app. Shipped through **v1.3.1** this session: theme-aware collapsible sidebar w/ Sidebar-control menu (Expanded/Collapsed/Expand-on-hover, default hover), whole-app gray/white/blue theme, animated login, Flux loader, sun/moon ThemeToggle in FinTrack + Console + Provider headers, widened tx-history DetailModal. All built green + pushed + deployed.
+Shipped **v1.6.40** (live). v1.6.39 added a credit/debit + balance summary strip (`SumTile`) to stat-card popups (`DetailModal`) and the Search page; v1.6.40 fixed the popup not showing it (the `<DetailModal/>` render site ~FinTrack.jsx:1757 wasn't forwarding the `summary` prop). Build green, pushed `05e2122`, Netlify auto-deploys. Memory + MEMORY.md updated to v1.6.40.
 
 ## Next
-No active work — awaiting next user request.
+1. No active work — await next user request.
+2. Standing: **supabase-health-recheck** scheduled ~1 Jul (egress already confirmed dropped to ~0.5–1 GB/day on 29–30 Jun, fix held); **weekly-drw-backup-email** Mondays.
 
 ## Context
-- Workflow: edit `src/app/FinTrack.jsx` (or screens) → `npm run build` (gate) → bump version in package.json + Login.jsx footer → `git commit` (NO Co-Authored-By trailer) → `git push origin master` (auto-deploys ~1min). git push occasionally fails once with auth error — just retry.
-- PowerShell: never put double-quotes inside `git commit -m '...'`.
-- User is a coding rookie — explain plainly, do the work for them, give Ctrl+Shift+R verify steps.
-- App is plain JS + inline styles + Tabler `ti-*` icons — NOT Tailwind/shadcn/TS. User keeps pasting shadcn components; recreate the LOOK in this stack, never add Tailwind/framer-motion. VERIFY Tabler icon names exist (ti-layout-sidebar-left was fake → invisible; cost a fix).
-- Pending USER-run SQL (features degrade gracefully until then): migration-003 (email edit), 004 (timezone col), 005 (master tz), 006 (company logo). 
-- Full detailed log: memory file multi-company-portal.md.
+- Workflow: edit → `npm run build` (gate) → commit (**NO Co-Authored-By trailer**) → push → Netlify. Use `git -C "<path>"` (repo is the subdir; cwd is its parent). NO double-quotes inside PowerShell `git commit -m '...'`.
+- Lesson from v1.6.40: when adding a prop to a component, add it at EVERY render site.
+- User is a coding rookie — explain plainly, do setup for them. service_role key never in frontend; user runs Supabase migrations themselves in the SQL editor.
+- Feature design (approved): credit=money-in / debit=money-out by `ftTxDelta` sign, skip deleted+fundLeg; balance lines on Store card only; period = selected scope (not cumulative).

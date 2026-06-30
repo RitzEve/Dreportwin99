@@ -1754,7 +1754,7 @@ export default function App() {
       `}</style>
       <div className="ft-scope" style={{display:"flex",width:"100%",minWidth:0}}>
       {confirm&&<Confirm message={confirm.message} onConfirm={confirm.onConfirm} onCancel={()=>setConfirm(null)}/>}
-      {detailModal&&<DetailModal title={detailModal.title} subtitle={detailModal.subtitle} transactions={detailModal.transactions} banks={banks} yesterday={detailModal.yesterday} onClose={()=>setDetailModal(null)}/>}
+      {detailModal&&<DetailModal title={detailModal.title} subtitle={detailModal.subtitle} transactions={detailModal.transactions} banks={banks} yesterday={detailModal.yesterday} summary={detailModal.summary} onClose={()=>setDetailModal(null)}/>}
 
       {showPasswordModal&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1001,padding:"24px 16px"}} onClick={closePasswordModal}>

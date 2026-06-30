@@ -1,13 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.39",
+  "version": "1.6.40",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Click any stat card to see a money-in vs money-out summary for the period you picked — how many credits and debits, and their totals.",
-    "The Store card also shows your current store balance and the closing balance as of the selected date.",
-    "The Search page shows the same summary (plus store balance) above the results whenever you filter by date."
+    "Fix: the credit/debit + balance summary now shows on the stat-card popups too — last update it only appeared on the Search page.",
+    "Open any stat card to see Credit in, Debit out and Net; the Store card also shows your current and selected-date closing balance."
   ],
   "scripts": {
     "dev": "vite",

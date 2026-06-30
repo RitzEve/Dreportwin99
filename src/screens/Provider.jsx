@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import FluidDropdown from '../components/FluidDropdown.jsx';
+import { useEsc } from '../lib/useEsc.js';
 import {
   listCompaniesWithMasters,
   provisionCompany,
@@ -420,6 +421,7 @@ function DeleteCompanyModal({ company, onClose, onDeleted }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  useEsc(true, onClose); // Escape closes the delete-company modal
 
   async function confirmDelete(e) {
     e.preventDefault();

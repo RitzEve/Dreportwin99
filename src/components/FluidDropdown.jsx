@@ -53,19 +53,23 @@ export default function FluidDropdown({
 
   useEffect(() => {
     if (!open) return undefined;
+    // Flag this dropdown as open globally so a parent modal's Escape handler yields:
+    // Escape closes the open dropdown first, then the modal on the next press.
+    if (typeof window !== 'undefined') window.__fluidOpenCount = (window.__fluidOpenCount || 0) + 1;
     const reposition = () => place();
     const onDown = (e) => {
       if (wrapRef.current && wrapRef.current.contains(e.target)) return;
       if (panelRef.current && panelRef.current.contains(e.target)) return;
       setOpen(false);
     };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
     window.addEventListener('scroll', reposition, true);
     window.addEventListener('resize', reposition);
     document.addEventListener('mousedown', onDown);
     document.addEventListener('touchstart', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
+      if (typeof window !== 'undefined') window.__fluidOpenCount = Math.max(0, (window.__fluidOpenCount || 1) - 1);
       window.removeEventListener('scroll', reposition, true);
       window.removeEventListener('resize', reposition);
       document.removeEventListener('mousedown', onDown);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { changeOwnPassword } from '../lib/auth.js';
+import { useEsc } from '../lib/useEsc.js';
 
 /*
  * AccountMenu — the top-right member button used on the Provider & Console pages.
@@ -17,6 +18,8 @@ export default function AccountMenu({ user, roleLabel, onLogout }) {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  useEsc(open, () => setOpen(false)); // Escape closes the open account menu
 
   return (
     <div style={{ position: 'relative' }} ref={ref}>
@@ -55,6 +58,7 @@ function ChangePasswordModal({ user, onClose }) {
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [busy, setBusy] = useState(false);
+  useEsc(true, onClose); // Escape closes the change-password modal
 
   async function submit(e) {
     e.preventDefault();

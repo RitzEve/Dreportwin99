@@ -1448,6 +1448,25 @@ export default function App() {
   const handleDeleteMember = (id,name) => setConfirm({message:`Delete member "${name}"? Their transaction history will be kept.`,onConfirm:()=>{setMembers(prev=>prev.filter(m=>m.id!==id));setConfirm(null);}});
 
   const closeMemberModal = () => { setNewMember({name:"",phone:"",id:""}); setNewMemberError(""); setShowMemberModal(false); };
+
+  // Press Escape to close the top-most open popup (one per press) — mirrors each
+  // modal's backdrop click / Cancel. Highest layer first, so a Confirm shown over
+  // another popup closes before the popup beneath it. Yields to an open FluidDropdown
+  // (it sets window.__fluidOpenCount) so Escape closes that first.
+  useEffect(()=>{
+    const onKey = (e)=>{
+      if(e.key!=="Escape" && e.key!=="Esc") return;
+      if((typeof window!=="undefined" ? (window.__fluidOpenCount||0) : 0) > 0) return;
+      if(confirm){ setConfirm(null); return; }
+      if(showPasswordModal){ closePasswordModal(); return; }
+      if(showEntryModal){ closeEntryModal(); return; }
+      if(showBankModal){ closeBankModal(); return; }
+      if(showMemberModal){ closeMemberModal(); return; }
+      if(detailModal){ setDetailModal(null); return; }
+    };
+    document.addEventListener("keydown", onKey);
+    return ()=>document.removeEventListener("keydown", onKey);
+  },[confirm,showPasswordModal,showEntryModal,showBankModal,showMemberModal,detailModal]);
   const handleAddMember = () => {
     if(!newMember.name.trim()){setNewMemberError("Member name is required.");return;}
     const assignedId = newMember.id.trim() || `M${String(nextId).padStart(3,"0")}`;

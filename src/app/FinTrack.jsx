@@ -126,6 +126,20 @@ function ftTxDelta(t){
   if(t.type==="Transfer Out") return -t.amount;
   return 0;
 }
+// Split a set of transaction legs into money-in (credit) and money-out (debit) by
+// each leg's balance effect (ftTxDelta). Skips deleted legs and the fundLeg "mirror"
+// (the bank side of a Store/Mistake/actual-paid entry) so the same money isn't
+// counted twice. Returns the count + summed magnitude for each side and the net.
+function ftCreditDebit(rows){
+  let cN=0,cSum=0,dN=0,dSum=0;
+  for(const t of (rows||[])){
+    if(t.deleted || t.fundLeg) continue;
+    const d = ftTxDelta(t);
+    if(d>1e-9){ cN++; cSum+=d; }
+    else if(d<-1e-9){ dN++; dSum+=-d; }
+  }
+  return {credits:{n:cN,sum:cSum}, debits:{n:dN,sum:dSum}, net:cSum-dSum};
+}
 // A transaction belongs to a bank by the bank's UNIQUE id (t.bankId). Two banks
 // can share the same institution name (e.g. two "Ubank" accounts with different
 // holders), so matching by name alone wrongly mixes their balances/history.
@@ -352,6 +366,19 @@ function StatCard({label,count,amount,color,onClick,note}) {
   );
 }
 
+// Small labelled figure tile used in the stat-popup + search summary strips.
+function SumTile({label,value,color,icon}) {
+  return (
+    <div style={{background:C.surface2,border:`1px solid ${C.border}`,borderLeft:`3px solid ${color}`,borderRadius:10,padding:"9px 12px",minWidth:0}}>
+      <div style={{fontSize:11,color:C.muted,marginBottom:3,display:"flex",alignItems:"center",gap:5}}>
+        <i className={`ti ${icon}`} aria-hidden="true" style={{color,fontSize:13,flexShrink:0}}/>
+        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+      </div>
+      <div style={{fontSize:16,fontWeight:600,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</div>
+    </div>
+  );
+}
+
 // Totals across all bank accounts: all / active-only / inactive-only.
 function BankTotals({banksLive}) {
   const sum = arr => arr.reduce((s,b)=>s+(b.balance||0),0);
@@ -499,7 +526,7 @@ function LiveClock({tz,color}){
   return <span style={{fontWeight:600,color}}>{now}</span>;
 }
 
-function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
+function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summary}) {
   const [search,setSearch] = useState("");
   const [sortKey,setSortKey] = useState("date");
   const [sortDir,setSortDir] = useState("desc");
@@ -532,6 +559,17 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday}) {
           </button>
         </div>
         <div style={{padding:"16px",overflowY:"auto",background:C.bg}}>
+          {summary&&(
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
+              {summary.store&&(<>
+                <SumTile icon="ti-wallet" color={C.accent} label="Current store balance" value={fmt(summary.store.current)}/>
+                <SumTile icon="ti-history" color={STORE_COLOR} label={`Closing · ${summary.asOfLabel}`} value={fmt(summary.store.closing)}/>
+              </>)}
+              <SumTile icon="ti-arrow-down-left" color="#16a34a" label={`Credit in · ${summary.credits.n} ${summary.credits.n===1?"entry":"entries"}`} value={fmt(summary.credits.sum)}/>
+              <SumTile icon="ti-arrow-up-right" color="#dc2626" label={`Debit out · ${summary.debits.n} ${summary.debits.n===1?"entry":"entries"}`} value={fmt(summary.debits.sum)}/>
+              <SumTile icon="ti-sum" color={summary.net>=0?"#16a34a":"#dc2626"} label="Net (in − out)" value={fmt(summary.net)}/>
+            </div>
+          )}
           {typeof yesterday==="number"&&(
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"9px 12px",borderRadius:8,background:C.surface2,border:`1px solid ${C.border}`,fontSize:12.5}}>
               <i className="ti ti-history" aria-hidden="true" style={{color:C.accent,fontSize:16,flexShrink:0}}/>
@@ -970,6 +1008,17 @@ export default function App() {
   const storeCredit = useMemo(()=>storeAllTime.reduce((s,t)=>s+(t.amount||0),0),[storeAllTime]);
   // Store total as of the end of yesterday (date <= yesterday) — the "yesterday close".
   const storeYesterday = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Store"&&!t.fundLeg&&t.date<=yesterday).reduce((s,t)=>s+(t.amount||0),0),[transactions,yesterday]);
+  // Running store balance as of the END of a given day (date <= d). Mirrors storeYesterday.
+  const storeBalanceAsOf = (d)=> storeAllTime.filter(t=>!d||t.date<=d).reduce((s,t)=>s+(t.amount||0),0);
+  // The "as of" day for the current dashboard scope — the date whose CLOSING store
+  // balance a stat popup shows (the end of the selected period). A past month uses its
+  // last day; the current/future month and the live views use today.
+  const scopeAsOf = useMemo(()=>{
+    if(dashView==="yesterday") return yesterday;
+    if(dashView==="range") return rangeTo||today;
+    if(dashView==="month"){ const end=`${selMonth}-31`; return end<today?end:today; }
+    return today; // today / week
+  },[dashView,selMonth,rangeTo,today,yesterday]);
 
   const monthlyComparison = useMemo(()=>{
     const months = availableMonths.slice(0,6).reverse();
@@ -994,6 +1043,12 @@ export default function App() {
       return matchTerm&&matchFrom&&matchTo&&matchType&&matchBank&&matchMember;
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   },[transactions,search,banks]);
+  // Money in/out + store balance for whatever the Search filters currently show.
+  // "As of" the To date (or From, or today) drives the store closing balance.
+  const searchSummary = useMemo(()=>{
+    const asOf = search.dateTo||search.dateFrom||today;
+    return {...ftCreditDebit(filteredTx), current:storeCredit, closing:storeBalanceAsOf(asOf), asOf};
+  },[filteredTx,storeCredit,storeAllTime,search.dateTo,search.dateFrom,today]);
 
   const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
@@ -1521,14 +1576,19 @@ export default function App() {
 
   // Click a dashboard stat card → open the detail popup listing that stat's
   // transactions for the currently selected date scope (today / yesterday / etc.).
-  const openStatDetail = (label, rows, totalOverride, scopeOverride, yesterdayAmount) => {
+  const openStatDetail = (label, rows, totalOverride, scopeOverride, opts={}) => {
     const list = rows.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
     const total = totalOverride!==undefined ? totalOverride : rows.reduce((s,t)=>s+(t.amount||0),0);
+    const summary = {
+      ...ftCreditDebit(rows),
+      asOfLabel: fmtDate(scopeAsOf),
+      store: opts.store ? {current:storeCredit, closing:storeBalanceAsOf(scopeAsOf)} : undefined,
+    };
     setDetailModal({
       title: label,
       subtitle: `${scopeOverride||dashScopeLabel} · ${rows.length} ${rows.length===1?"entry":"entries"} · Total: ${fmt(total)}`,
       transactions: list,
-      yesterday: yesterdayAmount,
+      summary,
     });
   };
 
@@ -1543,7 +1603,7 @@ export default function App() {
     {label:"Unclaimed credits", count:stats.unclaimed.length, amount:stats.sum(stats.unclaimed), color:"#d97706", onClick:()=>openStatDetail("Unclaimed credits", stats.unclaimed)},
     {label:"Mistakes", count:stats.mistakes.length, amount:stats.sum(stats.mistakes), color:"#7c3aed", onClick:()=>openStatDetail("Mistakes", stats.mistakes)},
     {label:"Rentals", count:stats.rentals.length, amount:stats.sum(stats.rentals), color:"#0891b2", onClick:()=>openStatDetail("Rentals", stats.rentals)},
-    {label:"Store entries", count:stats.store.length, amount:stats.sum(storeAllTime), color:"#FFDE63", note:`Running store credit · yest. ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", stats.store, undefined, undefined, storeYesterday)},
+    {label:"Store entries", count:stats.store.length, amount:stats.sum(storeAllTime), color:"#FFDE63", note:`Running store credit · yest. ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", stats.store, undefined, undefined, {store:true})},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
   ];
@@ -2448,6 +2508,15 @@ export default function App() {
                   {search.member&&<strong style={{marginLeft:6}}>{members.find(m=>m.id===search.member)?.name}</strong>}
                   {search.member&&search.bank&&<span style={{margin:"0 6px",color:C.muted}}>+</span>}
                   {search.bank&&<strong style={{marginLeft:search.member?0:6}}>{search.bank}</strong>}
+                </div>
+              )}
+              {(search.dateFrom||search.dateTo)&&filteredTx.length>0&&(
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
+                  <SumTile icon="ti-wallet" color={C.accent} label="Current store balance" value={fmt(searchSummary.current)}/>
+                  <SumTile icon="ti-history" color={STORE_COLOR} label={`Store closing · ${fmtDate(searchSummary.asOf)}`} value={fmt(searchSummary.closing)}/>
+                  <SumTile icon="ti-arrow-down-left" color="#16a34a" label={`Credit in · ${searchSummary.credits.n} ${searchSummary.credits.n===1?"entry":"entries"}`} value={fmt(searchSummary.credits.sum)}/>
+                  <SumTile icon="ti-arrow-up-right" color="#dc2626" label={`Debit out · ${searchSummary.debits.n} ${searchSummary.debits.n===1?"entry":"entries"}`} value={fmt(searchSummary.debits.sum)}/>
+                  <SumTile icon="ti-sum" color={searchSummary.net>=0?"#16a34a":"#dc2626"} label="Net (in − out)" value={fmt(searchSummary.net)}/>
                 </div>
               )}
               <TxLog data={filteredTx} showDelete={true} onDelete={handleDeleteTx} banks={banks}/>

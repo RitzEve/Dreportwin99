@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "1.6.38",
+  "version": "1.6.39",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "The page is now \"Work Shifts / Off Day\", and each employee has their own colour so they're easy to tell apart on the calendar.",
-    "Shifts are a per-month roster you can add, edit and delete (Morning / Night) — view past months or set future months in advance.",
-    "Cleaner layout: calendar and shift roster side by side, with the plan-a-day-off form and the month's log below."
+    "Click any stat card to see a money-in vs money-out summary for the period you picked — how many credits and debits, and their totals.",
+    "The Store card also shows your current store balance and the closing balance as of the selected date.",
+    "The Search page shows the same summary (plus store balance) above the results whenever you filter by date."
   ],
   "scripts": {
     "dev": "vite",

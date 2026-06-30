@@ -72,7 +72,7 @@ export default function UpdateBell() {
         className={`ub-bell-btn${ringing ? ' is-ringing' : ''}`}
         aria-label={hasUpdate ? `Update available: version ${latest}` : 'Notifications'}
         aria-haspopup="dialog" aria-expanded={open}
-        title={hasUpdate ? `New version v${latest} available` : "Notifications — you're up to date"}>
+        title={hasUpdate ? `New version V${latest} available` : "Notifications — you're up to date"}>
         {ringing && <span className="ub-halo" aria-hidden="true" />}
         <i className={`ti ti-bell${ringing ? '-ringing ub-bell-icon' : ''}`} aria-hidden="true" style={{ fontSize: 19, lineHeight: 1 }} />
         {hasUpdate && (
@@ -126,7 +126,7 @@ function Panel({ hasUpdate, latest, build, notes, onClose }) {
         {/* version line */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: (hasUpdate || notes.length) ? 16 : 0 }}>
           <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>{hasUpdate ? 'New version' : 'Current version'}</span>
-          <span style={chip(hasUpdate)}>v{hasUpdate ? latest : (build || '—')}</span>
+          <span style={chip(hasUpdate)}>V{hasUpdate ? latest : (build || '—')}</span>
         </div>
 
         {/* how to update — numbered steps */}
@@ -136,7 +136,7 @@ function Panel({ hasUpdate, latest, build, notes, onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>{num(1)}<span style={{ fontSize: 12.5, lineHeight: 1.5 }}>Log out (if you're signed in).</span></div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>{num(2)}<span style={{ fontSize: 12.5, lineHeight: 1.5 }}>Fully close this tab — or the app, if you added it to your home screen.</span></div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>{num(3)}<span style={{ fontSize: 12.5, lineHeight: 1.5 }}>Open it again. You should see <strong style={{ fontFamily: 'var(--font-mono)' }}>v{latest}</strong> on the login screen.</span></div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>{num(3)}<span style={{ fontSize: 12.5, lineHeight: 1.5 }}>Open it again. You should see <strong style={{ fontFamily: 'var(--font-mono)' }}>V{latest}</strong> on the login screen.</span></div>
             </div>
           </div>
         )}

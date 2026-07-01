@@ -702,7 +702,11 @@ export default function App() {
   // component re-mounts on every login, so company name, operator, and the data
   // key below all track whichever company just signed in.
   const SESSION = readSession();
-  const TEAM = readTeam();
+  // Normalise once here so every consumer below (cards, dropdowns, sorts, name
+  // matching) can trust name/operatorId are non-empty strings — a single malformed
+  // account row (e.g. a legacy profile with no name) must not be able to crash the
+  // whole app the way an unguarded `.name.localeCompare(...)` would.
+  const TEAM = readTeam().filter(Boolean).map(t=>({ id:t.id, operatorId:t.operatorId||t.id||"", name:t.name||"Unnamed", role:t.role }));
   // Only master/manager can rearrange the shift roster — staff see it read-only.
   const canEditRoster = SESSION.role==="master" || SESSION.role==="manager";
   // This company's time zone (set per company by the provider). All "now" dates

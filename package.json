@@ -1,10 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.0.5",
+  "version": "2.0.6",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "Fixed a bug from V2.0.5 that could show a blank screen after logging in.",
     "Work Shifts / Off Day: the shift roster is now drag-and-drop — pick a team member's card and drop it onto Morning, Noon or Night (tap the card instead on phones). No more typing names.",
     "Added a Noon shift alongside Morning and Night.",
     "New \"Off-day counts\" section shows how many days off each team member has taken this month and this year.",

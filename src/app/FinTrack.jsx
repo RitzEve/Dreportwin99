@@ -748,6 +748,7 @@ export default function App() {
   const [offLogSearch,setOffLogSearch] = useState("");
   const [offLogSort,setOffLogSort] = useState("date");
   const [dragOperatorId,setDragOperatorId] = useState(null); // operatorId currently being dragged (desktop DnD)
+  const [dragFromUid,setDragFromUid] = useState(null);       // set when dragging an already-placed card (vs. from the pool)
   const [dragOverShift,setDragOverShift] = useState(null);   // shift bucket currently hovered while dragging
   const [mobileAssignFor,setMobileAssignFor] = useState(null); // operatorId with the tap-to-assign menu open (touch)
   const [confirm,setConfirm] = useState(null);

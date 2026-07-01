@@ -1,11 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.0.9",
+  "version": "2.1.0",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Search page: the keyword box now also searches by amount and by notes — on top of name, ID and bank."
+    "Search page: typing an amount now matches that exact amount only (e.g. 1500 no longer also finds 1500.50). Commas are fine — 1,500 works too.",
+    "The keyword box still also searches by notes, plus name, ID and bank."
   ],
   "scripts": {
     "dev": "vite",

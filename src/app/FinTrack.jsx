@@ -1049,10 +1049,15 @@ export default function App() {
 
   const filteredTx = useMemo(()=>{
     const selBank = banks.find(bk=>String(bk.id)===String(search.bank)); // search.bank holds a bank id
+    const term = (search.term||"").toLowerCase();
+    // If the keyword is a number (commas/spaces allowed, e.g. "1,500"), match the
+    // amount EXACTLY — compared on magnitude, since amounts show by size and the sign
+    // comes from the entry type. A non-numeric keyword leaves amtQuery null (text only).
+    const numTerm = term.replace(/[,\s]/g,"");
+    const amtQuery = numTerm!=="" && !isNaN(Number(numTerm)) ? Math.abs(Number(numTerm)) : null;
     return transactions.filter(t=>{
-      const term = (search.term||"").toLowerCase();
-      // Keyword matches name / ID / bank / notes (text) OR the raw amount (e.g. "500").
-      const matchTerm = !term || [t.memberId,t.memberName,t.bank,t.notes].some(v=>String(v||"").toLowerCase().includes(term)) || String(t.amount||"").includes(term);
+      // Keyword matches name / ID / bank / notes (text, substring) OR the exact amount.
+      const matchTerm = !term || [t.memberId,t.memberName,t.bank,t.notes].some(v=>String(v||"").toLowerCase().includes(term)) || (amtQuery!==null && Math.abs(Number(t.amount)||0)===amtQuery);
       const matchFrom = !search.dateFrom||t.date>=search.dateFrom;
       const matchTo = !search.dateTo||t.date<=search.dateTo;
       const matchType = !search.type||t.type===search.type;

@@ -3,6 +3,7 @@ import FluidDropdown from "../components/FluidDropdown.jsx";
 import UpdateBell from "../components/UpdateBell.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData } from "../lib/mergeData.js";
+import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 
 // Short labels for the mobile bottom tab bar (the desktop sidebar uses the full
 // nav labels, but "Bank Accounts" / "Transactions" are too wide for a phone tab).
@@ -706,7 +707,7 @@ export default function App() {
   // matching) can trust name/operatorId are non-empty strings — a single malformed
   // account row (e.g. a legacy profile with no name) must not be able to crash the
   // whole app the way an unguarded `.name.localeCompare(...)` would.
-  const TEAM = readTeam().filter(Boolean).map(t=>({ id:t.id, operatorId:t.operatorId||t.id||"", name:t.name||"Unnamed", role:t.role }));
+  const TEAM = readTeam().filter(Boolean).map(t=>({ id:t.id, operatorId:t.operatorId||t.id||"", name:t.name||"Unnamed", role:t.role, nationality:t.nationality||"" }));
   // Only master/manager can rearrange the shift roster — staff see it read-only.
   const canEditRoster = SESSION.role==="master" || SESSION.role==="manager";
   // This company's time zone (set per company by the provider). All "now" dates
@@ -751,6 +752,8 @@ export default function App() {
   const [dragFromUid,setDragFromUid] = useState(null);       // set when dragging an already-placed card (vs. from the pool)
   const [dragOverShift,setDragOverShift] = useState(null);   // shift bucket currently hovered while dragging
   const [mobileAssignFor,setMobileAssignFor] = useState(null); // operatorId with the tap-to-assign menu open (touch)
+  const [offCountsNat,setOffCountsNat] = useState("");        // nationality filter for the off-day counts table ("" = all)
+  const [offCountsAll,setOffCountsAll] = useState(false);     // "View more" — show every row instead of the first 10
   const [confirm,setConfirm] = useState(null);
   const [detailModal,setDetailModal] = useState(null);
   const [dashView,setDashView] = useState("today");
@@ -1420,6 +1423,9 @@ export default function App() {
       return { member, month: mine.filter(o=>o.date.slice(0,7)===offCalMonth).length, year: mine.filter(o=>o.date.slice(0,4)===y).length };
     });
   },[TEAM,offRecords,offCalMonth]);
+  // Nationality filter + "View more" cap (10 by default) for the off-day counts table.
+  const offCountsFiltered = useMemo(()=>offCountsNat ? offCounts.filter(c=>c.member.nationality===offCountsNat) : offCounts,[offCounts,offCountsNat]);
+  const offCountsShown = offCountsAll ? offCountsFiltered : offCountsFiltered.slice(0,10);
   // The selected month's log: search, then merge an employee's consecutive same-reason days into one run, then sort.
   const offLog = useMemo(()=>{
     const term = offLogSearch.trim().toLowerCase();
@@ -2707,22 +2713,29 @@ export default function App() {
             </div>
 
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-chart-bar">Off-day counts</SectionTitle>
+              <SectionTitle icon="ti-chart-bar" right={
+                <FluidDropdown width={170} value={offCountsNat} placeholder="All nationalities" ariaLabel="Filter by nationality"
+                  options={[{value:"",label:"All nationalities"},...NATIONALITIES.map(n=>({value:n.value,label:n.value}))]}
+                  onChange={v=>{ setOffCountsNat(v); setOffCountsAll(false); }}/>
+              }>Off-day counts</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>How many days each team member has taken off — this month and this year.</div>
-              {offCounts.length===0
+              {TEAM.length===0
                 ? <div style={{fontSize:13,color:C.muted,padding:"16px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No team accounts yet.</div>
+                : offCountsFiltered.length===0
+                ? <div style={{fontSize:13,color:C.muted,padding:"16px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No team members with that nationality.</div>
                 : (
+                  <>
                   <div style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                       <thead>
                         <tr style={{background:C.header}}>
-                          {["Team member",`This month · ${monthLabel(offCalMonth)}`,`This year · ${offCalMonth.slice(0,4)}`].map((h,i)=>(
-                            <th key={i} style={{textAlign:i===0?"left":"right",padding:"10px",color:C.muted,fontWeight:500,borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>
+                          {["Team member","Nationality",`This month · ${monthLabel(offCalMonth)}`,`This year · ${offCalMonth.slice(0,4)}`].map((h,i)=>(
+                            <th key={i} style={{textAlign:i<2?"left":"right",padding:"10px",color:C.muted,fontWeight:500,borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {offCounts.map(({member,month,year})=>(
+                        {offCountsShown.map(({member,month,year})=>(
                           <tr key={member.operatorId} style={{borderBottom:`1px solid ${C.border}`}}>
                             <td style={{padding:"9px 10px"}}>
                               <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
@@ -2730,6 +2743,7 @@ export default function App() {
                                 <span style={{fontWeight:500,color:C.text}}>{member.name}</span>
                               </span>
                             </td>
+                            <td style={{padding:"9px 10px",color:C.muted}}>{nationalityCode(member.nationality)||"—"}</td>
                             <td style={{padding:"9px 10px",textAlign:"right",fontFamily:"var(--font-mono)",fontVariantNumeric:"tabular-nums",color:month>0?C.text:C.muted,fontWeight:month>0?600:400}}>{month}</td>
                             <td style={{padding:"9px 10px",textAlign:"right",fontFamily:"var(--font-mono)",fontVariantNumeric:"tabular-nums",color:year>0?C.text:C.muted,fontWeight:year>0?600:400}}>{year}</td>
                           </tr>
@@ -2737,6 +2751,17 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
+                  {!offCountsAll && offCountsFiltered.length>10 && (
+                    <button onClick={()=>setOffCountsAll(true)} style={{cursor:"pointer",marginTop:10,fontSize:12.5,fontWeight:500,padding:"7px 14px",border:`1px solid ${C.border}`,borderRadius:8,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:6}}>
+                      <i className="ti ti-chevron-down" aria-hidden="true"/> View more ({offCountsFiltered.length-10} more)
+                    </button>
+                  )}
+                  {offCountsAll && offCountsFiltered.length>10 && (
+                    <button onClick={()=>setOffCountsAll(false)} style={{cursor:"pointer",marginTop:10,fontSize:12.5,fontWeight:500,padding:"7px 14px",border:`1px solid ${C.border}`,borderRadius:8,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:6}}>
+                      <i className="ti ti-chevron-up" aria-hidden="true"/> Show fewer
+                    </button>
+                  )}
+                  </>
                 )}
             </div>
 

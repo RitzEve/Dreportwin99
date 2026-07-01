@@ -44,7 +44,7 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
       const team = await listTeam(ctx.company.id).catch(() => []);
       window.FINTRACK_TEAM = team
         .filter((t) => t.active !== false)
-        .map((t) => ({ id: t.id, operatorId: t.operatorId, name: t.name, role: t.role }));
+        .map((t) => ({ id: t.id, operatorId: t.operatorId, name: t.name, role: t.role, nationality: t.nationality || '' }));
       const m = await import('./FinTrack.jsx');
       if (alive) setComp(() => m.default);
     })();

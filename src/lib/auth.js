@@ -54,6 +54,7 @@ function profileToUser(p, email) {
     operatorId: p.operator_id,
     role: p.role,
     active: p.active,
+    nationality: p.nationality || '',
   };
 }
 
@@ -305,7 +306,7 @@ export async function renameCompany(companyId, name) {
  * (RLS authorises by the caller's role). Email is the real login credential, so
  * it goes through the admin_set_email DB function (updates auth + profiles).
  */
-export async function updateAccountInfo(userId, { name, email } = {}) {
+export async function updateAccountInfo(userId, { name, email, nationality } = {}) {
   const me = await getCurrentUser();
   if (!me) return { ok: false, error: 'Not signed in.' };
 
@@ -314,6 +315,17 @@ export async function updateAccountInfo(userId, { name, email } = {}) {
     const { error } = await supabase.from('profiles')
       .update({ name: name.trim(), username: name.trim() }).eq('id', userId);
     if (error) return { ok: false, error: friendly(error) };
+  }
+
+  if (nationality != null) {
+    const { error } = await supabase.from('profiles')
+      .update({ nationality }).eq('id', userId);
+    if (error) {
+      if (/nationality|does not exist|could not find|schema cache|PGRST204/i.test(error.message || '')) {
+        return { ok: false, error: 'Nationality needs a one-time database setup (run migration-010.sql in Supabase). Any other change was still saved.' };
+      }
+      return { ok: false, error: friendly(error) };
+    }
   }
 
   if (email != null) {
@@ -376,7 +388,7 @@ export async function listTeam(companyId) {
   return data.map((p) => profileToUser(p));
 }
 
-export async function createAccount({ name, email, password, role }) {
+export async function createAccount({ name, email, password, role, nationality }) {
   const me = await getCurrentUser();
   if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
   if (!creatableRoles(me.role).includes(role)) return { ok: false, error: `You can't create a ${role} account.` };
@@ -391,7 +403,16 @@ export async function createAccount({ name, email, password, role }) {
     .insert({ id: a.userId, company_id: me.companyId, role, name: name.trim(), username: name.trim(), email: email.trim(), operator_id: operatorId, active: true })
     .select().single();
   if (error) return { ok: false, error: friendly(error) };
-  return { ok: true, user: profileToUser(data) };
+  let user = profileToUser(data);
+  // Nationality is set in a second, best-effort step so the account itself is never
+  // blocked by it (e.g. migration-010.sql not run yet — the account still gets created,
+  // just without a nationality tag until the migration is applied).
+  if (nationality) {
+    const { data: natData, error: natError } = await supabase.from('profiles')
+      .update({ nationality }).eq('id', a.userId).select().single();
+    if (!natError && natData) user = profileToUser(natData);
+  }
+  return { ok: true, user };
 }
 
 export async function changeRole(userId, role) {

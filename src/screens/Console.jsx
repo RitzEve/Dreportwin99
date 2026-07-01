@@ -15,6 +15,7 @@ import {
   canActOn,
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
+import { NATIONALITIES, nationalityCode } from '../lib/nationalities.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
@@ -160,7 +161,7 @@ function CompanyTimezone({ company }) {
 function CreateAccountForm({ currentUser, onCreated }) {
   const isMobile = useIsMobile();
   const roles = creatableRoles(currentUser.role);
-  const blank = { name: '', email: '', password: '', role: roles[roles.length - 1] || ROLES.STAFF };
+  const blank = { name: '', email: '', password: '', role: roles[roles.length - 1] || ROLES.STAFF, nationality: '' };
   const [form, setForm] = useState(blank);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
@@ -195,6 +196,11 @@ function CreateAccountForm({ currentUser, onCreated }) {
             <input value={ROLE_LABEL[roles[0]] || 'Staff'} disabled />
           )}
         </div>
+        <div className="field" style={{ margin: 0 }}><label>Nationality <span style={{ fontWeight: 400, opacity: 0.7 }}>(optional)</span></label>
+          <FluidDropdown value={form.nationality} placeholder="Select nationality" ariaLabel="Nationality"
+            options={NATIONALITIES.map((n) => ({ value: n.value, label: n.value }))}
+            onChange={(v) => setForm({ ...form, nationality: v })} />
+        </div>
       </div>
       {error && <div className="error-text">{error}</div>}
       {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
@@ -218,7 +224,7 @@ function AccountRow({ account, currentUser, onChanged }) {
   const [resetting, setResetting] = useState(false);
   const [newPw, setNewPw] = useState('');
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ name: '', email: '' });
+  const [draft, setDraft] = useState({ name: '', email: '', nationality: '' });
   const isSelf = account.id === currentUser.id;
   const manageable = canActOn(currentUser, account);
   const canToggleRole = currentUser.role === ROLES.MASTER && manageable;
@@ -242,7 +248,7 @@ function AccountRow({ account, currentUser, onChanged }) {
 
   function startEdit() {
     setEditing(true);
-    setDraft({ name: account.name, email: account.email || '' });
+    setDraft({ name: account.name, email: account.email || '', nationality: account.nationality || '' });
     setResetting(false);
     setError('');
   }
@@ -252,10 +258,12 @@ function AccountRow({ account, currentUser, onChanged }) {
     setError(''); setBusy(true);
     const nameChanged = draft.name.trim() !== (account.name || '');
     const emailChanged = draft.email.trim() !== (account.email || '');
-    if (!nameChanged && !emailChanged) { setBusy(false); setEditing(false); return; }
+    const nationalityChanged = draft.nationality !== (account.nationality || '');
+    if (!nameChanged && !emailChanged && !nationalityChanged) { setBusy(false); setEditing(false); return; }
     const payload = {};
     if (nameChanged) payload.name = draft.name;
     if (emailChanged) payload.email = draft.email;
+    if (nationalityChanged) payload.nationality = draft.nationality;
     const res = await updateAccountInfo(account.id, payload);
     setBusy(false);
     if (!res.ok) return setError(res.error);
@@ -276,6 +284,9 @@ function AccountRow({ account, currentUser, onChanged }) {
         <span className={`badge ${roleBadgeClass(account.role, account.active)}`}>
           {!account.active ? 'Disabled' : ROLE_LABEL[account.role]}
         </span>
+        {account.nationality && (
+          <span className="badge badge-staff" title={account.nationality}>{nationalityCode(account.nationality) || account.nationality}</span>
+        )}
 
         {manageable && (
           <>
@@ -315,6 +326,12 @@ function AccountRow({ account, currentUser, onChanged }) {
           <div className="field" style={{ margin: 0 }}>
             <label>Login email</label>
             <input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="name@company.com" />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label>Nationality</label>
+            <FluidDropdown value={draft.nationality} placeholder="Select nationality" ariaLabel="Nationality"
+              options={NATIONALITIES.map((n) => ({ value: n.value, label: n.value }))}
+              onChange={(v) => setDraft({ ...draft, nationality: v })} />
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>

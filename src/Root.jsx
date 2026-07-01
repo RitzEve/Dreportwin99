@@ -7,6 +7,7 @@ import Console from './screens/Console.jsx';
 import AppScreen from './app/AppScreen.jsx';
 import FluxLoader from './components/FluxLoader.jsx';
 import ToastHost from './components/Toast.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 
 /*
  * Root — loads the Supabase session, then routes by role:
@@ -52,7 +53,10 @@ export default function Root() {
   else if (screen === 'app') content = <AppScreen ctx={ctx} onExit={() => setScreen('console')} onLogout={handleLogout} />;
   else content = <Console ctx={ctx} onOpenApp={() => setScreen('app')} onLogout={handleLogout} />;
 
-  return (<>{content}<ToastHost /></>);
+  // ErrorBoundary wraps only the routed screen: a render crash anywhere in it shows
+  // a recoverable message instead of unmounting to a blank page (React's default
+  // with no boundary at all) — see the V2.0.6 incident in CLAUDE.md.
+  return (<><ErrorBoundary key={screen + String(!!ctx)}>{content}</ErrorBoundary><ToastHost /></>);
 }
 
 function Splash() {

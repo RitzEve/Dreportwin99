@@ -35,6 +35,7 @@ const SECTIONS = [
   { id: 'layout',      icon: 'ti-layout-navbar',    roles: ['staff', 'manager', 'master'] },
   { id: 'openapp',     icon: 'ti-wallet',           roles: ['manager', 'master'] },
   { id: 'transaction', icon: 'ti-cash',             roles: ['staff', 'manager', 'master'] },
+  { id: 'alltypes',    icon: 'ti-category',         roles: ['staff', 'manager', 'master'] },
   { id: 'txoptions',   icon: 'ti-checkbox',         roles: ['staff', 'manager', 'master'] },
   { id: 'members',     icon: 'ti-users',            roles: ['staff', 'manager', 'master'] },
   { id: 'banks',       icon: 'ti-building-bank',    roles: ['staff', 'manager', 'master'] },
@@ -62,6 +63,25 @@ const CHART_ROWS = [
   { key: 'actualPaid',   cells: [null, ['+', 'amt'], ['-', 'paid'], null, ['+', 'left']] },
   { key: 'storePaid',    cells: [null, ['+', 'amt'], ['-', 'paid'], ['-', 'store'], ['+', 'left']] },
 ];
+
+// ---- "All entry types" tutorial config (the ENTRY_TYPES from FinTrack.jsx). ----
+// Colours are the app's own TYPE_COLORS hex values (Store swapped for a readable
+// gold, since the app's #FFDE63 is a pale chip-fill colour, not a text colour) —
+// so the guide's cards visually match the tags/badges the app itself shows.
+const TYPE_ORDER = ['deposit', 'withdrawal', 'unclaimed', 'transfer', 'store', 'mistake', 'rental', 'adjust', 'other'];
+const TYPE_UI = {
+  deposit: 'Regular Deposit', withdrawal: 'Regular Withdrawal', unclaimed: 'Unclaimed Credit',
+  transfer: 'Transfer', store: 'Store', mistake: 'Mistake', rental: 'Rental', adjust: 'Adjust', other: 'Other',
+};
+const TYPE_COLOR = {
+  deposit: '#16a34a', withdrawal: '#dc2626', unclaimed: '#d97706', transfer: '#6366f1',
+  store: '#a67c00', mistake: '#7c3aed', rental: '#0891b2', adjust: '#0d9488', other: '#64748b',
+};
+const TYPE_ICON = {
+  deposit: 'ti-arrow-down-circle', withdrawal: 'ti-arrow-up-circle', unclaimed: 'ti-coin',
+  transfer: 'ti-arrows-left-right', store: 'ti-building-store', mistake: 'ti-alert-triangle',
+  rental: 'ti-home', adjust: 'ti-adjustments', other: 'ti-dots',
+};
 
 // ---- Lazy font loader: pull Noto (Latin + Simplified Chinese + Khmer) only the
 //      first time the guide is opened, so the rest of the portal stays light. ----
@@ -156,6 +176,8 @@ export default function Guide({ open, role, onClose }) {
                 <p style={{ color: 'var(--muted)', margin: '4px 0 0' }}>{c.intro}</p>
                 {s.id === 'txoptions' ? (
                   <TxOptions c={c} />
+                ) : s.id === 'alltypes' ? (
+                  <EntryTypes c={c} />
                 ) : (
                   <div className="guide-grid">
                     <ol className="guide-steps">
@@ -385,58 +407,76 @@ function Mockup({ id }) {
   }
 }
 
-/* Custom body for the "Deposit & withdrawal options" section: a key-idea callout,
-   the comparison chart, and one explainer card per tick-box (math + worked example). */
-function TxOptions({ c }) {
+/* Shared body for both "math tutorial" sections (the tick-box options and the
+   all-entry-types reference): a key-idea callout, a comparison chart, and one
+   explainer card per row (math + worked example). `rows`/`cards` are pre-built
+   by each section's thin wrapper below so this stays presentation-only. */
+function Lines({ v }) {
+  return Array.isArray(v) ? <>{v.map((line, i) => <div key={i}>{line}</div>)}</> : v;
+}
+function MathSection({ note, header, rows, cards }) {
   return (
     <>
       <div className="guide-callout">
         <i className="ti ti-bulb" aria-hidden="true" />
-        <span>{c.note}</span>
+        <span>{note}</span>
       </div>
 
       <div className="guide-chart-wrap table-scroll">
         <table className="guide-chart">
           <thead>
-            <tr>
-              <th>{c.rowsHeader}</th>
-              {c.colHeaders.map((h, i) => <th key={i}>{h}</th>)}
-            </tr>
+            <tr>{header.map((h, i) => <th key={i}>{h}</th>)}</tr>
           </thead>
           <tbody>
-            {CHART_ROWS.map((row) => (
-              <tr key={row.key}>
-                <td>{c.rowLabels[row.key]}</td>
-                {row.cells.map((cell, i) => {
-                  if (!cell) return <td key={i} className="c-none">—</td>;
-                  const [sign, tokKey] = cell;
-                  return (
-                    <td key={i} className={sign === '+' ? 'c-up' : 'c-down'}>
-                      {sign === '+' ? '+' : '−'} {c.tok[tokKey]}
-                    </td>
-                  );
-                })}
+            {rows.map((row, ri) => (
+              <tr key={ri}>
+                <td>{row.label}</td>
+                {row.cells.map((cell, i) => <td key={i} className={cell.cls}>{cell.text}</td>)}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {TK_ORDER.map((key) => {
-        const it = c.items[key];
-        return (
-          <div key={key} className="guide-tk" style={{ '--tk': TK_COLOR[key] }}>
-            <div className="guide-tk-head">
-              <span className="guide-tk-name"><i className={`ti ${TK_ICON[key]}`} aria-hidden="true" /> {TK_UI[key]}</span>
-            </div>
-            <p className="guide-tk-for">{it.for}</p>
-            <div className="guide-tk-formula">{it.formula}</div>
-            <p className="guide-tk-ex">{it.example}</p>
+      {cards.map((card) => (
+        <div key={card.key} className="guide-tk" style={{ '--tk': card.color }}>
+          <div className="guide-tk-head">
+            <span className="guide-tk-name"><i className={`ti ${card.icon}`} aria-hidden="true" /> {card.name}</span>
           </div>
-        );
-      })}
+          <p className="guide-tk-for">{card.for}</p>
+          <div className="guide-tk-formula"><Lines v={card.formula} /></div>
+          <div className="guide-tk-ex"><Lines v={card.example} /></div>
+        </div>
+      ))}
     </>
   );
+}
+
+/* "Deposit & withdrawal options" (the tick-boxes) — chart cells are language-neutral
+   sign+token pairs from CHART_ROWS, coloured green/red/muted. */
+function TxOptions({ c }) {
+  const rows = CHART_ROWS.map((row) => ({
+    label: c.rowLabels[row.key],
+    cells: row.cells.map((cell) => {
+      if (!cell) return { text: '—', cls: 'c-none' };
+      const [sign, tokKey] = cell;
+      return { text: `${sign === '+' ? '+' : '−'} ${c.tok[tokKey]}`, cls: sign === '+' ? 'c-up' : 'c-down' };
+    }),
+  }));
+  const cards = TK_ORDER.map((key) => ({ key, name: TK_UI[key], color: TK_COLOR[key], icon: TK_ICON[key], ...c.items[key] }));
+  return <MathSection note={c.note} header={[c.rowsHeader, ...c.colHeaders]} rows={rows} cards={cards} />;
+}
+
+/* "All entry types explained" — the 9 ENTRY_TYPES. Chart cells here are free
+   translated text (the 9 types' mechanics differ too much for one shared sign
+   grid), so no forced colour; the per-type cards carry the real math. */
+function EntryTypes({ c }) {
+  const rows = TYPE_ORDER.map((key) => ({
+    label: c.rowLabels[key],
+    cells: c.chartCells[key].map((text) => ({ text })),
+  }));
+  const cards = TYPE_ORDER.map((key) => ({ key, name: TYPE_UI[key], color: TYPE_COLOR[key], icon: TYPE_ICON[key], ...c.items[key] }));
+  return <MathSection note={c.note} header={[c.rowsHeader, ...c.colHeaders]} rows={rows} cards={cards} />;
 }
 
 /* =====================================================================
@@ -510,6 +550,75 @@ const T = {
           'Enter the amount and the bank or store it touches, plus a note if useful.',
           'Press Enter to save. The record appears in the history straight away.',
         ],
+      },
+      alltypes: {
+        title: 'All entry types explained',
+        intro: "FinTrack has 9 entry types. Each one is for a different kind of money movement — this is what each one actually does to your totals and to a bank, if you pick one.",
+        note: 'Rule of thumb: Regular Deposit, Regular Withdrawal, Unclaimed Credit, Rental, Adjust and Other are "straight" entries — picking a bank just means that money sits in that bank too, in the same direction. Store and Mistake are different: picking a bank actually moves money between that total and the bank, in opposite directions. Transfer only ever moves money between banks.',
+        rowsHeader: 'Entry type',
+        colHeaders: ['Its own total', 'If you also pick a bank'],
+        rowLabels: {
+          deposit: 'Regular Deposit', withdrawal: 'Regular Withdrawal', unclaimed: 'Unclaimed Credit',
+          transfer: 'Transfer', store: 'Store', mistake: 'Mistake', rental: 'Rental', adjust: 'Adjust', other: 'Other',
+        },
+        chartCells: {
+          deposit: ['+ amount → Total deposits', '+ amount, same bank'],
+          withdrawal: ['+ amount → Total withdrawals', '− amount, same bank'],
+          unclaimed: ['± amount → Unclaimed credits', '± amount, same direction'],
+          transfer: ['— (no total of its own)', '− source / + destination'],
+          store: ['± amount → Store entries (no bank)', '+ bank, − Store (opposite)'],
+          mistake: ['± amount → Mistakes (no bank)', '+ bank, − Mistakes (opposite)'],
+          rental: ['± amount → Rentals', '± amount, same direction'],
+          adjust: ['± amount → Adjustments', '± amount, same direction'],
+          other: ['± amount (no dashboard total)', '± amount, same direction'],
+        },
+        items: {
+          deposit: {
+            for: 'Money coming in from a member — the everyday deposit. A name/reference is required, amount must be more than zero.',
+            formula: 'Total deposits += amount. If a bank is picked, that bank += amount too.',
+            example: 'Sinat deposits $200 into ABA Bank → Total deposits +$200 · ABA Bank +$200.',
+          },
+          withdrawal: {
+            for: 'Money going out to a member — the everyday withdrawal. A name/reference is required, amount must be more than zero.',
+            formula: 'Total withdrawals += amount. If a bank is picked, that bank −= amount.',
+            example: 'Dara withdraws $150 from ACLEDA Bank → Total withdrawals +$150 · ACLEDA Bank −$150.',
+          },
+          unclaimed: {
+            for: "Credit a member is owed but hasn't claimed yet. No name required; the amount can be positive (add credit) or negative (correct it down).",
+            formula: 'Unclaimed credits += amount. If a bank is picked, that bank += amount too (same direction).',
+            example: ['Record +$80 unclaimed credit, no bank → Unclaimed credits +$80.', 'A later deposit ticked "from Unclaimed" can claim it back — see the section above.'],
+          },
+          transfer: {
+            for: 'Moving money between banks. No name needed. Pick a source bank, a destination bank, or both.',
+            formula: ['Source only: source bank −= amount.', 'Destination only: destination bank += amount.', 'Both picked: source −= amount AND destination += amount.'],
+            example: 'Transfer $300, source ABA Bank, destination ACLEDA Bank → ABA Bank −$300 · ACLEDA Bank +$300.',
+          },
+          store: {
+            for: 'Store credit / cash on hand. No name required, amount can be positive or negative. With no bank picked it only changes the Store total; with a bank picked it moves money BETWEEN the Store total and that bank.',
+            formula: ['No bank: Store entries += amount.', 'With a bank: that bank += amount, Store entries −= amount.'],
+            example: ['No bank, +$50 → Store entries +$50.', 'With ABA Bank picked, +$100 → ABA Bank +$100 · Store entries −$100 (banking $100 of store cash).'],
+          },
+          mistake: {
+            for: 'For logging and correcting mistakes. Works exactly like Store, but keeps its own separate total.',
+            formula: ['No bank: Mistakes += amount.', 'With a bank: that bank += amount, Mistakes −= amount.'],
+            example: 'No bank, −$25 → Mistakes −$25 (backing out an overcount).',
+          },
+          rental: {
+            for: 'Rental income or expense. No name required, amount can be positive or negative.',
+            formula: 'Rentals += amount. If a bank is picked, that bank += amount too (same direction).',
+            example: '+$120 rental income, banked into Maybank → Rentals +$120 · Maybank +$120.',
+          },
+          adjust: {
+            for: "A general correction that doesn't fit any other type. No name required, amount can be positive or negative.",
+            formula: 'Adjustments += amount. If a bank is picked, that bank += amount too (same direction).',
+            example: '−$15 adjustment, no bank → Adjustments −$15.',
+          },
+          other: {
+            for: "Anything that doesn't fit the other 8 types. No name required, amount can be positive or negative. It has no dashboard total of its own — find it by filtering the full history.",
+            formula: 'Recorded as typed. If a bank is picked, that bank += amount too (same direction).',
+            example: '+$40 other income, no bank → shows in the full history as +$40 Other.',
+          },
+        },
       },
       txoptions: {
         title: 'Deposit & withdrawal options (the tick-boxes)',
@@ -668,6 +777,75 @@ const T = {
           '点击“确认”保存，记录会立即出现在历史中。',
         ],
       },
+      alltypes: {
+        title: '所有记录类型说明',
+        intro: 'FinTrack 共有 9 种记录类型，每一种对应不同的资金变动。以下说明每种类型到底会对你的总额，以及（如果你选择）对某个银行做了什么。',
+        note: '要点：普通存款、普通取款、未领取额度、租金、调整和其他，都是“直接”记录——选了银行，只表示这笔钱也放在那家银行里，方向相同。商店和差错不同：选了银行后，钱会在该总额与银行之间“相反方向”移动。转账则永远只在银行之间移动资金。',
+        rowsHeader: '记录类型',
+        colHeaders: ['自身总额', '如果同时选择银行'],
+        rowLabels: {
+          deposit: '普通存款', withdrawal: '普通取款', unclaimed: '未领取额度',
+          transfer: '转账', store: '商店', mistake: '差错', rental: '租金', adjust: '调整', other: '其他',
+        },
+        chartCells: {
+          deposit: ['+ 金额 → 存款总额', '+ 金额，同一银行'],
+          withdrawal: ['+ 金额 → 取款总额', '− 金额，同一银行'],
+          unclaimed: ['± 金额 → 未领取额度', '± 金额，方向相同'],
+          transfer: ['—（没有自身总额）', '− 来源 / + 目的地'],
+          store: ['± 金额 → 商店记录（不选银行）', '+ 银行，− 商店（相反）'],
+          mistake: ['± 金额 → 差错（不选银行）', '+ 银行，− 差错（相反）'],
+          rental: ['± 金额 → 租金', '± 金额，方向相同'],
+          adjust: ['± 金额 → 调整', '± 金额，方向相同'],
+          other: ['± 金额（没有仪表盘总额）', '± 金额，方向相同'],
+        },
+        items: {
+          deposit: {
+            for: '会员存入的钱——最常见的存款记录。需要填写姓名/备注，金额必须大于零。',
+            formula: '存款总额 += 金额。如果选择了银行，该银行余额也 += 金额。',
+            example: 'Sinat 存入 $200 到 ABA 银行 → 存款总额 +$200 · ABA 银行 +$200。',
+          },
+          withdrawal: {
+            for: '支付给会员的取款——最常见的取款记录。需要填写姓名/备注，金额必须大于零。',
+            formula: '取款总额 += 金额。如果选择了银行，该银行余额 −= 金额。',
+            example: 'Dara 从 ACLEDA 银行取出 $150 → 取款总额 +$150 · ACLEDA 银行 −$150。',
+          },
+          unclaimed: {
+            for: '会员被欠下、但还没领取的额度。不需要填写姓名；金额可以是正数（增加额度）或负数（向下更正）。',
+            formula: '未领取额度 += 金额。如果选择了银行，该银行余额也 += 金额（方向相同）。',
+            example: ['不选银行，记 +$80 未领取额度 → 未领取额度 +$80。', '之后勾选“来自未领取”的存款可以把它领回——见上面章节。'],
+          },
+          transfer: {
+            for: '在银行之间转移资金。不需要填写姓名。可以只选来源银行、只选目的地银行，或两者都选。',
+            formula: ['只选来源：来源银行 −= 金额。', '只选目的地：目的地银行 += 金额。', '两者都选：来源 −= 金额，同时目的地 += 金额。'],
+            example: '转账 $300，来源 ABA 银行，目的地 ACLEDA 银行 → ABA 银行 −$300 · ACLEDA 银行 +$300。',
+          },
+          store: {
+            for: '商店额度／手头现金。不需要填写姓名，金额可正可负。不选银行时只改变商店总额；选了银行后，钱会在商店总额与该银行之间移动。',
+            formula: ['不选银行：商店记录 += 金额。', '选了银行：该银行 += 金额，商店记录 −= 金额。'],
+            example: ['不选银行，+$50 → 商店记录 +$50。', '选了 ABA 银行，+$100 → ABA 银行 +$100 · 商店记录 −$100（把 $100 商店现金存入银行）。'],
+          },
+          mistake: {
+            for: '用于记录并更正差错。运作方式和商店完全一样，但保留自己独立的总额。',
+            formula: ['不选银行：差错 += 金额。', '选了银行：该银行 += 金额，差错 −= 金额。'],
+            example: '不选银行，−$25 → 差错 −$25（冲销一次多记的金额）。',
+          },
+          rental: {
+            for: '租金收入或支出。不需要填写姓名，金额可正可负。',
+            formula: '租金 += 金额。如果选择了银行，该银行余额也 += 金额（方向相同）。',
+            example: '+$120 租金收入，存入 Maybank → 租金 +$120 · Maybank +$120。',
+          },
+          adjust: {
+            for: '不属于其他类型的一般性更正。不需要填写姓名，金额可正可负。',
+            formula: '调整 += 金额。如果选择了银行，该银行余额也 += 金额（方向相同）。',
+            example: '−$15 调整，不选银行 → 调整 −$15。',
+          },
+          other: {
+            for: '不属于其他 8 种类型的任何记录。不需要填写姓名，金额可正可负。它没有自己的仪表盘总额——可在完整历史记录中按类型筛选查看。',
+            formula: '按输入原样记录。如果选择了银行，该银行余额也 += 金额（方向相同）。',
+            example: '+$40 其他收入，不选银行 → 会出现在完整历史记录中，显示为 +$40 其他。',
+          },
+        },
+      },
       txoptions: {
         title: '存款与取款的选项（勾选框）',
         intro: '大多数记录就是普通的存款或取款。遇到特殊情况时，你可以勾选一个方框。勾选框从不改变取款的金额，它只改变这笔钱从哪里出——剩下未被覆盖的部分会作为该会员的“未领取额度”保存。',
@@ -824,6 +1002,75 @@ const T = {
           'បញ្ចូលចំនួនទឹកប្រាក់ និងធនាគារ ឬឥណទានហាងដែលពាក់ព័ន្ធ ព្រមទាំងចំណាំបើចាំបាច់។',
           'ចុច «បញ្ជាក់» ដើម្បីរក្សាទុក។ កំណត់ត្រានឹងបង្ហាញក្នុងប្រវត្តិភ្លាមៗ។',
         ],
+      },
+      alltypes: {
+        title: 'ការពន្យល់អំពីប្រភេទកំណត់ត្រាទាំងអស់',
+        intro: 'FinTrack មានប្រភេទកំណត់ត្រា ៩ យ៉ាង។ នីមួយៗសម្រាប់ចលនាលុយផ្សេងគ្នា — នេះជាការពន្យល់ពិតប្រាកដថាមួយៗធ្វើអ្វីខ្លះទៅលើចំនួនសរុបរបស់អ្នក ហើយទៅលើធនាគារមួយ បើអ្នកជ្រើសរើសវា។',
+        note: 'គោលការណ៍៖ ដាក់ប្រាក់ធម្មតា ដកប្រាក់ធម្មតា ឥណទានមិនទាន់ដក ជួល លម្អៃ និងផ្សេងៗ សុទ្ធតែជាកំណត់ត្រា «ត្រង់» — ជ្រើសរើសធនាគារមួយ គ្រាន់តែមានន័យថាលុយនោះក៏នៅក្នុងធនាគារនោះដែរ ក្នុងទិសដៅដូចគ្នា។ ហាង និងកំហុស ខុសគ្នា៖ ជ្រើសរើសធនាគារ ពិតជាផ្លាស់ទីលុយរវាងចំនួននោះ និងធនាគារ ក្នុងទិសដៅផ្ទុយគ្នា។ ការផ្ទេរ គឺតែងតែផ្លាស់ទីលុយរវាងធនាគារប៉ុណ្ណោះ។',
+        rowsHeader: 'ប្រភេទកំណត់ត្រា',
+        colHeaders: ['ចំនួនសរុបខ្លួនឯង', 'បើអ្នកជ្រើសរើសធនាគារផងដែរ'],
+        rowLabels: {
+          deposit: 'ដាក់ប្រាក់ធម្មតា', withdrawal: 'ដកប្រាក់ធម្មតា', unclaimed: 'ឥណទានមិនទាន់ដក',
+          transfer: 'ការផ្ទេរ', store: 'ហាង', mistake: 'កំហុស', rental: 'ជួល', adjust: 'លម្អៃ', other: 'ផ្សេងៗ',
+        },
+        chartCells: {
+          deposit: ['+ ចំនួន → ដាក់ប្រាក់សរុប', '+ ចំនួន ធនាគារដូចគ្នា'],
+          withdrawal: ['+ ចំនួន → ដកប្រាក់សរុប', '− ចំនួន ធនាគារដូចគ្នា'],
+          unclaimed: ['± ចំនួន → ឥណទានមិនទាន់ដក', '± ចំនួន ទិសដៅដូចគ្នា'],
+          transfer: ['— (គ្មានចំនួនសរុបខ្លួនឯង)', '− ប្រភព / + ទិសដៅ'],
+          store: ['± ចំនួន → កំណត់ត្រាហាង (មិនជ្រើសធនាគារ)', '+ ធនាគារ − ហាង (ផ្ទុយគ្នា)'],
+          mistake: ['± ចំនួន → កំហុស (មិនជ្រើសធនាគារ)', '+ ធនាគារ − កំហុស (ផ្ទុយគ្នា)'],
+          rental: ['± ចំនួន → ជួល', '± ចំនួន ទិសដៅដូចគ្នា'],
+          adjust: ['± ចំនួន → លម្អៃ', '± ចំនួន ទិសដៅដូចគ្នា'],
+          other: ['± ចំនួន (គ្មានចំនួនសរុបលើផ្ទាំងគ្រប់គ្រង)', '± ចំនួន ទិសដៅដូចគ្នា'],
+        },
+        items: {
+          deposit: {
+            for: 'លុយចូលពីសមាជិកម្នាក់ — ការដាក់ប្រាក់ធម្មតាប្រចាំថ្ងៃ។ ត្រូវការឈ្មោះ/ឯកសារយោង ហើយចំនួនត្រូវធំជាងសូន្យ។',
+            formula: 'ដាក់ប្រាក់សរុប += ចំនួន។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ។',
+            example: 'Sinat ដាក់ប្រាក់ $200 ចូល ធនាគារ ABA → ដាក់ប្រាក់សរុប +$200 · ធនាគារ ABA +$200។',
+          },
+          withdrawal: {
+            for: 'លុយចេញទៅសមាជិកម្នាក់ — ការដកប្រាក់ធម្មតាប្រចាំថ្ងៃ។ ត្រូវការឈ្មោះ/ឯកសារយោង ហើយចំនួនត្រូវធំជាងសូន្យ។',
+            formula: 'ដកប្រាក់សរុប += ចំនួន។ បើជ្រើសរើសធនាគារ ធនាគារនោះ −= ចំនួន។',
+            example: 'Dara ដកប្រាក់ $150 ពីធនាគារ ACLEDA → ដកប្រាក់សរុប +$150 · ធនាគារ ACLEDA −$150។',
+          },
+          unclaimed: {
+            for: 'ឥណទានដែលសមាជិកត្រូវបានជំពាក់ ប៉ុន្តែមិនទាន់ដកយក។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចជាវិជ្ជមាន (បន្ថែមឥណទាន) ឬអវិជ្ជមាន (កែតម្រូវចុះ)។',
+            formula: 'ឥណទានមិនទាន់ដក += ចំនួន។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ (ទិសដៅដូចគ្នា)។',
+            example: ['កត់ត្រា +$80 ឥណទានមិនទាន់ដក មិនជ្រើសធនាគារ → ឥណទានមិនទាន់ដក +$80។', 'ការដាក់ប្រាក់ក្រោយមកដែលធីក «ពីមិនទាន់ដក» អាចដកយកវាមកវិញបាន — សូមមើលផ្នែកខាងលើ។'],
+          },
+          transfer: {
+            for: 'ផ្លាស់ទីលុយរវាងធនាគារ។ មិនត្រូវការឈ្មោះទេ។ ជ្រើសរើសធនាគារប្រភព ធនាគារទិសដៅ ឬទាំងពីរ។',
+            formula: ['ជ្រើសតែប្រភព៖ ធនាគារប្រភព −= ចំនួន។', 'ជ្រើសតែទិសដៅ៖ ធនាគារទិសដៅ += ចំនួន។', 'ជ្រើសទាំងពីរ៖ ប្រភព −= ចំនួន ព្រមទាំងទិសដៅ += ចំនួន។'],
+            example: 'ផ្ទេរ $300 ប្រភពធនាគារ ABA ទិសដៅធនាគារ ACLEDA → ធនាគារ ABA −$300 · ធនាគារ ACLEDA +$300។',
+          },
+          store: {
+            for: 'ឥណទានហាង / សាច់ប្រាក់នៅដៃ។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមានឬអវិជ្ជមាន។ បើមិនជ្រើសធនាគារ វាផ្លាស់ប្ដូរតែចំនួនហាង។ បើជ្រើសធនាគារ វាផ្លាស់ទីលុយរវាងចំនួនហាង និងធនាគារនោះ ក្នុងទិសដៅផ្ទុយគ្នា។',
+            formula: ['មិនជ្រើសធនាគារ៖ កំណត់ត្រាហាង += ចំនួន។', 'ជ្រើសធនាគារ៖ ធនាគារនោះ += ចំនួន កំណត់ត្រាហាង −= ចំនួន។'],
+            example: ['មិនជ្រើសធនាគារ +$50 → កំណត់ត្រាហាង +$50។', 'ជ្រើសធនាគារ ABA +$100 → ធនាគារ ABA +$100 · កំណត់ត្រាហាង −$100 (យកសាច់ប្រាក់ហាង $100 ទៅដាក់ធនាគារ)។'],
+          },
+          mistake: {
+            for: 'សម្រាប់កត់ត្រា និងកែតម្រូវកំហុស។ ដំណើរការដូចហាងបេះបិទ ប៉ុន្តែរក្សាចំនួនសរុបដាច់ដោយឡែក។',
+            formula: ['មិនជ្រើសធនាគារ៖ កំហុស += ចំនួន។', 'ជ្រើសធនាគារ៖ ធនាគារនោះ += ចំនួន កំហុស −= ចំនួន។'],
+            example: 'មិនជ្រើសធនាគារ −$25 → កំហុស −$25 (ដកចេញនូវការរាប់លើសពីមុន)។',
+          },
+          rental: {
+            for: 'ចំណូល ឬចំណាយពីការជួល។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមានឬអវិជ្ជមាន។',
+            formula: 'ជួល += ចំនួន។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ (ទិសដៅដូចគ្នា)។',
+            example: '+$120 ចំណូលពីការជួល ដាក់ចូល Maybank → ជួល +$120 · Maybank +$120។',
+          },
+          adjust: {
+            for: 'ការកែតម្រូវទូទៅដែលមិនសមស្របទៅនឹងប្រភេទផ្សេងទៀត។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមានឬអវិជ្ជមាន។',
+            formula: 'លម្អៃ += ចំនួន។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ (ទិសដៅដូចគ្នា)។',
+            example: '−$15 លម្អៃ មិនជ្រើសធនាគារ → លម្អៃ −$15។',
+          },
+          other: {
+            for: 'អ្វីមួយដែលមិនសមស្របនឹងប្រភេទទាំង ៨ ទៀត។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមានឬអវិជ្ជមាន។ វាគ្មានចំនួនសរុបផ្ទាល់ខ្លួនលើផ្ទាំងគ្រប់គ្រងទេ — រកវាដោយច្រោះនៅក្នុងប្រវត្តិពេញលេញ។',
+            formula: 'កត់ត្រាតាមអ្វីដែលបានវាយបញ្ចូល។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ (ទិសដៅដូចគ្នា)។',
+            example: '+$40 ចំណូលផ្សេងៗ មិនជ្រើសធនាគារ → បង្ហាញនៅក្នុងប្រវត្តិពេញលេញជា +$40 ផ្សេងៗ។',
+          },
+        },
       },
       txoptions: {
         title: 'ជម្រើសដាក់ប្រាក់ និងដកប្រាក់ (ប្រអប់ធីក)',

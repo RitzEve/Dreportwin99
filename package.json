@@ -1,12 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.0.3",
+  "version": "2.0.4",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "The How-to guide now explains the deposit & withdrawal tick-boxes: Redeposit, Store withdraw, Actual paid amount, Store + actual paid, and deposit from Unclaimed credit.",
-    "It includes a clear chart of what each one does to your totals, banks, store credit and unclaimed credit, plus a worked money example for each.",
+    "The How-to guide now explains all 9 entry types: Regular Deposit, Regular Withdrawal, Unclaimed Credit, Transfer, Store, Mistake, Rental, Adjust and Other.",
+    "It includes an overview chart plus a worked money example for every type, showing exactly what each one does to its own total and to a bank if you pick one.",
     "As always, available in English, 中文 (Chinese) and ភាសាខ្មែរ (Khmer)."
   ],
   "scripts": {

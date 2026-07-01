@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { changeOwnPassword } from '../lib/auth.js';
+import { changeOwnPassword, listTeam } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
 import Guide from '../screens/Guide.jsx';
@@ -36,7 +36,18 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     window.FINTRACK_SET_THEME = (t) => { setTheme(t); window.location.reload(); };
 
     let alive = true;
-    import('./FinTrack.jsx').then((m) => { if (alive) setComp(() => m.default); });
+    (async () => {
+      // The shift roster / off-day cards are drawn from the company's real
+      // accounts, so FinTrack needs the team list too — fetch it before the
+      // import, same reason FINTRACK_SESSION is set before it (the artifact
+      // reads both ONCE at module-evaluation time).
+      const team = await listTeam(ctx.company.id).catch(() => []);
+      window.FINTRACK_TEAM = team
+        .filter((t) => t.active !== false)
+        .map((t) => ({ id: t.id, operatorId: t.operatorId, name: t.name, role: t.role }));
+      const m = await import('./FinTrack.jsx');
+      if (alive) setComp(() => m.default);
+    })();
     return () => { alive = false; };
   }, [ctx, onLogout]);
 

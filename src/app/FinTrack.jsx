@@ -32,6 +32,12 @@ const SESSION_DEFAULT = {
 };
 const readSession = () => (typeof window!=="undefined" && window.FINTRACK_SESSION) || SESSION_DEFAULT;
 
+// The company's real accounts (master/manager/staff), used to build the shift
+// roster cards and the off-day counts — read fresh per mount, same reason as
+// readSession() above. Empty until the portal wires it up (e.g. local demo).
+const TEAM_DEFAULT = [];
+const readTeam = () => (typeof window!=="undefined" && window.FINTRACK_TEAM) || TEAM_DEFAULT;
+
 
 const ENTRY_TYPES = ["Regular Deposit","Regular Withdrawal","Unclaimed Credit","Transfer","Store","Mistake","Rental","Adjust","Other"];
 const SIGNED_TYPES = ["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other"];
@@ -696,6 +702,9 @@ export default function App() {
   // component re-mounts on every login, so company name, operator, and the data
   // key below all track whichever company just signed in.
   const SESSION = readSession();
+  const TEAM = readTeam();
+  // Only master/manager can rearrange the shift roster — staff see it read-only.
+  const canEditRoster = SESSION.role==="master" || SESSION.role==="manager";
   // This company's time zone (set per company by the provider). All "now" dates
   // and times below are computed in this zone so the log follows it.
   const tz = SESSION.timezone || "Australia/Sydney";
@@ -728,15 +737,15 @@ export default function App() {
   const [members,setMembers] = useState(initMembers);
   const [nextId,setNextId] = useState(1);
   const [offDays,setOffDays] = useState([]);
-  const [offForm,setOffForm] = useState({employee:"",reason:""});
+  const [offForm,setOffForm] = useState({employeeId:"",reason:""});
   const [offSelDates,setOffSelDates] = useState([]);
   const [offCalMonth,setOffCalMonth] = useState(thisMonth);
   const [offError,setOffError] = useState("");
   const [offLogSearch,setOffLogSearch] = useState("");
   const [offLogSort,setOffLogSort] = useState("date");
-  const [shiftAdd,setShiftAdd] = useState({name:"",shift:"morning"});
-  const [shiftEditUid,setShiftEditUid] = useState(null);
-  const [shiftEditDraft,setShiftEditDraft] = useState({name:"",shift:"morning"});
+  const [dragOperatorId,setDragOperatorId] = useState(null); // operatorId currently being dragged (desktop DnD)
+  const [dragOverShift,setDragOverShift] = useState(null);   // shift bucket currently hovered while dragging
+  const [mobileAssignFor,setMobileAssignFor] = useState(null); // operatorId with the tap-to-assign menu open (touch)
   const [confirm,setConfirm] = useState(null);
   const [detailModal,setDetailModal] = useState(null);
   const [dashView,setDashView] = useState("today");
@@ -1381,12 +1390,25 @@ export default function App() {
   const offRecords = useMemo(()=>offLive.filter(o=>o.kind!=='shift'),[offLive]);   // real days off
   const shiftRecords = useMemo(()=>offLive.filter(o=>o.kind==='shift'),[offLive]); // month shift roster rows
   const dayNames = useMemo(()=>{ const mp={}; for(const o of offRecords){ (mp[o.date]||(mp[o.date]=[])).push(o.employee); } return mp; },[offRecords]);
-  const offEmployees = useMemo(()=>[...new Set([...offRecords.map(o=>o.employee),...shiftRecords.filter(r=>r.employee).map(r=>r.employee)])].sort((a,b)=>a.localeCompare(b)),[offRecords,shiftRecords]);
   const offMonths = useMemo(()=>{ const s=new Set(offRecords.map(o=>o.date.slice(0,7))); s.add(thisMonth); s.add(offCalMonth); return [...s].sort((a,b)=>b.localeCompare(a)); },[offRecords,offCalMonth]);
-  // Latest morning/night names for the displayed month (the row with the newest updatedAt wins).
+  // Who's on each shift for the displayed month.
   const monthShiftRows = useMemo(()=>shiftRecords.filter(r=>r.month===offCalMonth && r.employee),[shiftRecords,offCalMonth]);
   const shiftMorning = useMemo(()=>monthShiftRows.filter(r=>r.shift==='morning').sort((a,b)=>a.employee.localeCompare(b.employee)),[monthShiftRows]);
+  const shiftNoon = useMemo(()=>monthShiftRows.filter(r=>r.shift==='noon').sort((a,b)=>a.employee.localeCompare(b.employee)),[monthShiftRows]);
   const shiftNight = useMemo(()=>monthShiftRows.filter(r=>r.shift==='night').sort((a,b)=>a.employee.localeCompare(b.employee)),[monthShiftRows]);
+  // A record matches a team member by ID (rows created via the roster/picker) or, for rows
+  // recorded before accounts were linked in, by name — so pre-existing history still counts.
+  const matchesMember = (o,member)=> o.employeeId ? o.employeeId===member.operatorId : (o.employee||'').toLowerCase()===member.name.toLowerCase();
+  // Team members not yet placed on any shift this month — the draggable pool.
+  const shiftPool = useMemo(()=>TEAM.filter(t=>!monthShiftRows.some(r=>matchesMember(r,t))).sort((a,b)=>a.name.localeCompare(b.name)),[monthShiftRows,TEAM]);
+  // Every team member's off-day count for the selected month + its year (used by the counts section below).
+  const offCounts = useMemo(()=>{
+    const y = offCalMonth.slice(0,4);
+    return TEAM.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(member=>{
+      const mine = offRecords.filter(o=>matchesMember(o,member));
+      return { member, month: mine.filter(o=>o.date.slice(0,7)===offCalMonth).length, year: mine.filter(o=>o.date.slice(0,4)===y).length };
+    });
+  },[TEAM,offRecords,offCalMonth]);
   // The selected month's log: search, then merge an employee's consecutive same-reason days into one run, then sort.
   const offLog = useMemo(()=>{
     const term = offLogSearch.trim().toLowerCase();
@@ -1404,41 +1426,39 @@ export default function App() {
     return runs;
   },[offRecords,offCalMonth,offLogSearch,offLogSort]);
   const toggleOffDate = (iso)=> setOffSelDates(prev=> prev.includes(iso) ? prev.filter(d=>d!==iso) : [...prev,iso].sort());
-  const gotoMonth = (ym)=>{ setOffCalMonth(ym); setShiftEditUid(null); };
+  const gotoMonth = (ym)=>{ setOffCalMonth(ym); setMobileAssignFor(null); };
   const handleAddOffDays = () => {
-    const emp = offForm.employee.trim();
-    if(!emp){ setOffError("Enter the employee's name."); window.showToast?.("Error , Please Try Again","error"); return; }
+    const member = TEAM.find(t=>t.operatorId===offForm.employeeId);
+    if(!member){ setOffError("Pick who's off."); window.showToast?.("Error , Please Try Again","error"); return; }
     if(offSelDates.length===0){ setOffError("Pick at least one day on the calendar."); window.showToast?.("Error , Please Try Again","error"); return; }
-    const taken = new Set(offRecords.filter(o=>o.employee.toLowerCase()===emp.toLowerCase()).map(o=>o.date));
+    const taken = new Set(offRecords.filter(o=>matchesMember(o,member)).map(o=>o.date));
     const fresh = offSelDates.filter(d=>!taken.has(d));
-    if(fresh.length===0){ setOffError(`${emp} is already booked off on the day(s) you picked.`); window.showToast?.("Error , Please Try Again","error"); return; }
+    if(fresh.length===0){ setOffError(`${member.name} is already booked off on the day(s) you picked.`); window.showToast?.("Error , Please Try Again","error"); return; }
     const recordedBy = SESSION.operatorName || SESSION.operatorId || "";
     const now = Date.now();
-    const recs = fresh.map(d=>({uid:mkUid(),employee:emp,date:d,reason:offForm.reason.trim(),recordedBy,createdAt:now,deleted:false}));
+    const recs = fresh.map(d=>({uid:mkUid(),employee:member.name,employeeId:member.operatorId,date:d,reason:offForm.reason.trim(),recordedBy,createdAt:now,deleted:false}));
     setOffDays(prev=>[...recs,...prev]);
-    setOffSelDates([]); setOffForm({employee:"",reason:""}); setOffError("");
+    setOffSelDates([]); setOffForm({employeeId:"",reason:""}); setOffError("");
     window.showToast?.("Action Done !","success");
   };
   const handleDeleteOffRun = (run) => setConfirm({message:`Remove ${run.employee}'s ${run.dates.length>1?`${run.dates.length} days off (${fmtDate(run.dateFrom)} – ${fmtDate(run.dateTo)})`:`day off on ${fmtDate(run.dateFrom)}`}?`,onConfirm:()=>{ const ids=new Set(run.uids); setOffDays(prev=>prev.map(o=>ids.has(o.uid)?{...o,deleted:true}:o)); setConfirm(null); }});
-  const handleAddShift = ()=>{
-    const nm = shiftAdd.name.trim();
-    if(!nm){ window.showToast?.("Enter a name first","error"); return; }
-    if(monthShiftRows.some(r=>r.shift===shiftAdd.shift && r.employee.toLowerCase()===nm.toLowerCase())){ window.showToast?.("Already on that shift","error"); return; }
+  // Drag (or tap, on touch) a team card onto a shift group to put them on it this month.
+  const assignShift = (member,shiftValue)=>{
+    if(!member || !canEditRoster) return;
+    if(monthShiftRows.some(r=>r.shift===shiftValue && matchesMember(r,member))){ window.showToast?.(`${member.name} is already on that shift`,"error"); return; }
     const recordedBy = SESSION.operatorName || SESSION.operatorId || "";
     const now = Date.now();
-    setOffDays(prev=>[{uid:mkUid(),kind:'shift',month:offCalMonth,shift:shiftAdd.shift,employee:nm,recordedBy,updatedAt:now,createdAt:now,deleted:false},...prev]);
-    setShiftAdd(s=>({...s,name:""}));
+    setOffDays(prev=>[{uid:mkUid(),kind:'shift',month:offCalMonth,shift:shiftValue,employee:member.name,employeeId:member.operatorId,recordedBy,updatedAt:now,createdAt:now,deleted:false},...prev]);
+    setMobileAssignFor(null);
     window.showToast?.("Action Done !","success");
   };
-  const startEditShift = (r)=>{ setShiftEditUid(r.uid); setShiftEditDraft({name:r.employee,shift:r.shift}); };
-  const saveEditShift = ()=>{
-    const nm = shiftEditDraft.name.trim(); if(!nm){ window.showToast?.("Enter a name first","error"); return; }
-    const now = Date.now();
-    setOffDays(prev=>prev.map(o=>o.uid===shiftEditUid?{...o,employee:nm,shift:shiftEditDraft.shift,updatedAt:now}:o));
-    setShiftEditUid(null);
-    window.showToast?.("Action Done !","success");
+  // Drag an already-placed card into a different group — moves them, doesn't duplicate.
+  const moveShift = (uid,newShift)=>{
+    if(!canEditRoster) return;
+    setOffDays(prev=>prev.map(o=>o.uid===uid?{...o,shift:newShift,updatedAt:Date.now()}:o));
+    setMobileAssignFor(null);
   };
-  const deleteShift = (uid)=> setOffDays(prev=>prev.map(o=>o.uid===uid?{...o,deleted:true,updatedAt:Date.now()}:o));
+  const deleteShift = (uid)=>{ if(!canEditRoster) return; setOffDays(prev=>prev.map(o=>o.uid===uid?{...o,deleted:true,updatedAt:Date.now()}:o)); };
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
   const handleSaveMember = id => {
@@ -2549,40 +2569,45 @@ export default function App() {
         {page==="offdays"&&(()=>{
           const navBtn = {cursor:"pointer",width:34,height:34,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:16};
           const shiftMonthYm = (ym,delta)=>{ const [yy,mm]=ym.split('-').map(Number); const dt=new Date(yy,mm-1+delta,1); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; };
-          const shiftToggle = (val,set)=>(
-            <div style={{display:"inline-flex",borderRadius:8,border:`1px solid ${C.border}`,overflow:"hidden",flexShrink:0}}>
-              {[['morning','Morning','ti-sun','#d97706'],['night','Night','ti-moon','#6366f1']].map(([v,lab,ic,c])=>(
-                <button key={v} type="button" onClick={()=>set(v)} style={{cursor:"pointer",border:"none",padding:"6px 10px",fontSize:12,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,background:val===v?c:C.surface2,color:val===v?"#fff":C.muted}}><i className={`ti ${ic}`} aria-hidden="true"/>{lab}</button>
-              ))}
-            </div>
-          );
-          const shiftChip = (r)=> shiftEditUid===r.uid ? (
-            <div key={r.uid} style={{display:"flex",flexDirection:"column",gap:8,padding:8,borderRadius:8,border:`1px solid ${C.accent}`,background:C.surface2}}>
-              <input type="text" list="off-employees" value={shiftEditDraft.name} onChange={e=>setShiftEditDraft(s=>({...s,name:e.target.value}))} style={{width:"100%",boxSizing:"border-box",fontSize:13,padding:"6px 8px"}}/>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-                {shiftToggle(shiftEditDraft.shift,(v)=>setShiftEditDraft(s=>({...s,shift:v})))}
-                <div style={{display:"flex",gap:6}}>
-                  <button onClick={saveEditShift} style={{cursor:"pointer",fontSize:13,padding:"6px 12px",fontWeight:500,background:"#16a34a",color:"#fff",border:"none",borderRadius:6,display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-check" aria-hidden="true"/> Save</button>
-                  <button onClick={()=>setShiftEditUid(null)} style={{cursor:"pointer",fontSize:13,padding:"6px 12px",fontWeight:500,background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6}}>Cancel</button>
+          const SHIFT_DEFS = [['morning','Morning','ti-sun','#d97706'],['noon','Noon','ti-sun-high','#0ea5e9'],['night','Night','ti-moon','#6366f1']];
+          // One small card per team member — draggable (desktop) or tappable (touch) when canEditRoster.
+          const teamCard = (member,opts={})=>{
+            const { fromUid=null, removable=false } = opts;
+            const dragging = fromUid ? dragFromUid===fromUid : (dragOperatorId===member.operatorId && !dragFromUid);
+            const colorKey = member.operatorId || member.name;
+            return (
+              <div key={fromUid||member.operatorId||member.name}
+                draggable={canEditRoster}
+                onDragStart={canEditRoster?(e)=>{ setDragOperatorId(member.operatorId); setDragFromUid(fromUid); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',member.operatorId||''); }catch(_){} }:undefined}
+                onDragEnd={canEditRoster?()=>{ setDragOperatorId(null); setDragFromUid(null); setDragOverShift(null); }:undefined}
+                onClick={canEditRoster&&isMobile?()=>setMobileAssignFor({operatorId:member.operatorId,name:member.name,fromUid}):undefined}
+                style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface2,cursor:canEditRoster?(isMobile?"pointer":"grab"):"default",opacity:dragging?0.4:1,userSelect:"none",WebkitUserSelect:"none",transition:"opacity 0.12s"}}>
+                <span aria-hidden="true" style={{width:10,height:10,borderRadius:"50%",background:empColor(colorKey),flexShrink:0}}/>
+                <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{member.name}</span>
+                {canEditRoster&&removable&&!isMobile&&(
+                  <button onClick={(e)=>{e.stopPropagation(); deleteShift(fromUid);}} aria-label={`Remove ${member.name}`} style={{cursor:"pointer",border:"none",background:"transparent",color:"#dc2626",padding:3,display:"flex"}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/></button>
+                )}
+                {canEditRoster&&!isMobile&&<i className="ti ti-grip-vertical" aria-hidden="true" style={{color:C.muted,fontSize:13,flexShrink:0}}/>}
+              </div>
+            );
+          };
+          // One drop group (Morning / Noon / Night) — accepts a card dragged from the pool or from another group.
+          const shiftGroup = (shiftValue,label,icon,color,rows)=>{
+            const isOver = dragOverShift===shiftValue;
+            return (
+              <div key={shiftValue}
+                onDragOver={canEditRoster?(e)=>{ e.preventDefault(); if(dragOverShift!==shiftValue) setDragOverShift(shiftValue); }:undefined}
+                onDragLeave={canEditRoster?()=>setDragOverShift(s=>s===shiftValue?null:s):undefined}
+                onDrop={canEditRoster?(e)=>{ e.preventDefault(); if(dragFromUid) moveShift(dragFromUid,shiftValue); else if(dragOperatorId) assignShift(TEAM.find(t=>t.operatorId===dragOperatorId),shiftValue); setDragOperatorId(null); setDragFromUid(null); setDragOverShift(null); }:undefined}>
+                <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color,marginBottom:7,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true"/> {label} <span style={{color:C.muted,fontWeight:500}}>· {rows.length}</span></div>
+                <div style={{display:"flex",flexDirection:"column",gap:6,minHeight:canEditRoster?44:0,padding:canEditRoster?6:0,borderRadius:8,border:canEditRoster?`1px ${isOver?"solid":"dashed"} ${isOver?color:C.border}`:"none",background:isOver?`${color}14`:"transparent",transition:"background 0.15s, border-color 0.15s"}}>
+                  {rows.length===0
+                    ? <div style={{fontSize:12,color:C.muted,padding:"8px 2px"}}>{canEditRoster?(isMobile?"Tap a card above to add.":"Drag a card here."):"No one on this shift yet."}</div>
+                    : rows.map(r=>teamCard({operatorId:r.employeeId,name:r.employee},{fromUid:r.uid,removable:true}))}
                 </div>
               </div>
-            </div>
-          ) : (
-            <div key={r.uid} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.surface2}}>
-              <span aria-hidden="true" style={{width:10,height:10,borderRadius:"50%",background:empColor(r.employee),flexShrink:0}}/>
-              <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.employee}</span>
-              <button onClick={()=>startEditShift(r)} aria-label={`Edit ${r.employee}`} style={{cursor:"pointer",border:"none",background:"transparent",color:C.muted,padding:3,display:"flex"}}><i className="ti ti-edit" aria-hidden="true" style={{fontSize:15}}/></button>
-              <button onClick={()=>deleteShift(r.uid)} aria-label={`Remove ${r.employee}`} style={{cursor:"pointer",border:"none",background:"transparent",color:"#dc2626",padding:3,display:"flex"}}><i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/></button>
-            </div>
-          );
-          const shiftGroup = (label,icon,color,rows)=>(
-            <div>
-              <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color,marginBottom:7,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true"/> {label} <span style={{color:C.muted,fontWeight:500}}>· {rows.length}</span></div>
-              {rows.length===0
-                ? <div style={{fontSize:12,color:C.muted,padding:"8px 10px",border:`1px dashed ${C.border}`,borderRadius:8}}>No one on this shift yet.</div>
-                : <div style={{display:"flex",flexDirection:"column",gap:6}}>{rows.map(shiftChip)}</div>}
-            </div>
-          );
+            );
+          };
           const runRow = (run)=>{
             const single = run.dates.length===1, includesToday = run.dates.includes(today), past = run.dateTo < today;
             return (
@@ -2606,12 +2631,11 @@ export default function App() {
           };
           return (
           <div>
-            <datalist id="off-employees">{offEmployees.map(n=><option key={n} value={n}/>)}</datalist>
             <div style={sectionStyle}>
               <SectionTitle icon="ti-calendar-month" right={
                 <FluidDropdown width={150} value={offCalMonth} ariaLabel="Month" options={offMonths.map(ym=>({value:ym,label:monthLabel(ym)}))} onChange={gotoMonth}/>
               }>Work Shifts / Off Day</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:16}}>The calendar, shift roster and log below all follow the month shown here — pick a month to view it or plan ahead. Everyone on your team sees the same lists.</div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:16}}>The calendar, shift roster and log below all follow the month shown here — pick a month to view it or plan ahead. Everyone on your team can see this page; only masters and managers can rearrange the shift roster.</div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(0,300px)",gap:18,alignItems:"start"}}>
                 {/* left: calendar */}
                 <div>
@@ -2626,19 +2650,24 @@ export default function App() {
                     <span>Each colour is one person.</span>
                   </div>
                 </div>
-                {/* right: shift roster (add / edit / delete) */}
+                {/* right: shift roster — drag (desktop) or tap (touch) a team card onto a shift */}
                 <div>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,display:"flex",alignItems:"center",gap:6,marginBottom:10}}><i className="ti ti-users-group" aria-hidden="true" style={{color:C.accent,flexShrink:0}}/> <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Shift roster · {monthLabel(offCalMonth)}</span></div>
-                  <div style={{display:"flex",flexDirection:"column",gap:8,padding:10,borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2,marginBottom:14}}>
-                    <input type="text" list="off-employees" placeholder="Add employee name…" value={shiftAdd.name} onChange={e=>setShiftAdd(s=>({...s,name:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter')handleAddShift();}} style={{width:"100%",boxSizing:"border-box",fontSize:13,padding:"7px 9px"}}/>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-                      {shiftToggle(shiftAdd.shift,(v)=>setShiftAdd(s=>({...s,shift:v})))}
-                      <button onClick={handleAddShift} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"7px 14px",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-plus" aria-hidden="true"/> Add</button>
-                    </div>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color:C.muted,marginBottom:7}}>Team{!canEditRoster?" · view only":""}</div>
+                    {shiftPool.length===0
+                      ? <div style={{fontSize:12,color:C.muted,padding:"8px 10px",border:`1px dashed ${C.border}`,borderRadius:8}}>{TEAM.length===0?"No team accounts yet.":"Everyone is on a shift this month."}</div>
+                      : (
+                        <div
+                          onDragOver={canEditRoster&&dragFromUid?(e)=>e.preventDefault():undefined}
+                          onDrop={canEditRoster&&dragFromUid?(e)=>{ e.preventDefault(); deleteShift(dragFromUid); setDragOperatorId(null); setDragFromUid(null); setDragOverShift(null); }:undefined}
+                          style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                          {shiftPool.map(m=>teamCard(m))}
+                        </div>
+                      )}
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:14}}>
-                    {shiftGroup("Morning","ti-sun","#d97706",shiftMorning)}
-                    {shiftGroup("Night","ti-moon","#6366f1",shiftNight)}
+                    {SHIFT_DEFS.map(([v,lab,ic,c])=>shiftGroup(v,lab,ic,c,v==='morning'?shiftMorning:v==='noon'?shiftNoon:shiftNight))}
                   </div>
                 </div>
               </div>
@@ -2650,7 +2679,7 @@ export default function App() {
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
                   <div><label style={labelStyle}>Employee</label>
-                    <input list="off-employees" type="text" placeholder="Who's off?" value={offForm.employee} onChange={e=>setOffForm(f=>({...f,employee:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                    <FluidDropdown value={offForm.employeeId} placeholder="Who's off?" ariaLabel="Who's off" options={TEAM.map(t=>({value:t.operatorId,label:t.name}))} onChange={v=>setOffForm(f=>({...f,employeeId:v}))}/></div>
                   <div><label style={labelStyle}>Reason <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
                     <input type="text" placeholder="e.g. Annual leave, sick" value={offForm.reason} onChange={e=>setOffForm(f=>({...f,reason:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 </div>
@@ -2664,6 +2693,40 @@ export default function App() {
                 {offError&&<div style={{fontSize:12,color:"#dc2626"}}>{offError}</div>}
                 <button onClick={handleAddOffDays} style={{cursor:"pointer",alignSelf:"flex-start",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:10,padding:"11px 18px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><i className="ti ti-calendar-plus" aria-hidden="true"/> Save day off{offSelDates.length>1?"s":""}</button>
               </div>
+            </div>
+
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-chart-bar">Off-day counts</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>How many days each team member has taken off — this month and this year.</div>
+              {offCounts.length===0
+                ? <div style={{fontSize:13,color:C.muted,padding:"16px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No team accounts yet.</div>
+                : (
+                  <div style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                      <thead>
+                        <tr style={{background:C.header}}>
+                          {["Team member",`This month · ${monthLabel(offCalMonth)}`,`This year · ${offCalMonth.slice(0,4)}`].map((h,i)=>(
+                            <th key={i} style={{textAlign:i===0?"left":"right",padding:"10px",color:C.muted,fontWeight:500,borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {offCounts.map(({member,month,year})=>(
+                          <tr key={member.operatorId} style={{borderBottom:`1px solid ${C.border}`}}>
+                            <td style={{padding:"9px 10px"}}>
+                              <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                                <span aria-hidden="true" style={{width:9,height:9,borderRadius:"50%",background:empColor(member.operatorId),flexShrink:0}}/>
+                                <span style={{fontWeight:500,color:C.text}}>{member.name}</span>
+                              </span>
+                            </td>
+                            <td style={{padding:"9px 10px",textAlign:"right",fontFamily:"var(--font-mono)",fontVariantNumeric:"tabular-nums",color:month>0?C.text:C.muted,fontWeight:month>0?600:400}}>{month}</td>
+                            <td style={{padding:"9px 10px",textAlign:"right",fontFamily:"var(--font-mono)",fontVariantNumeric:"tabular-nums",color:year>0?C.text:C.muted,fontWeight:year>0?600:400}}>{year}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
             </div>
 
             <div style={sectionStyle}>
@@ -2686,6 +2749,31 @@ export default function App() {
                 ? <div style={{fontSize:13,color:C.muted,padding:"16px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No days off {offLogSearch?"match your search":`recorded for ${monthLabel(offCalMonth)}`}.</div>
                 : <div style={{display:"flex",flexDirection:"column",gap:8}}>{offLog.map(runRow)}</div>}
             </div>
+
+            {/* Touch devices can't drag — tapping a card opens this instead. */}
+            {mobileAssignFor && (
+              <div role="dialog" aria-label={`Assign ${mobileAssignFor.name}'s shift`} onClick={()=>setMobileAssignFor(null)}
+                style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:1000}}>
+                <div onClick={e=>e.stopPropagation()} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:"16px 16px 0 0",padding:"18px 18px calc(18px + env(safe-area-inset-bottom,0px))",width:"100%",maxWidth:420,boxShadow:"0 -12px 40px rgba(0,0,0,0.4)"}}>
+                  <div style={{fontWeight:600,fontSize:15,color:C.text,marginBottom:14}}>{mobileAssignFor.name}</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {SHIFT_DEFS.map(([v,lab,ic,c])=>(
+                      <button key={v} onClick={()=>{ if(mobileAssignFor.fromUid) moveShift(mobileAssignFor.fromUid,v); else assignShift(TEAM.find(t=>t.operatorId===mobileAssignFor.operatorId),v); }}
+                        style={{cursor:"pointer",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,fontSize:14,fontWeight:500}}>
+                        <i className={`ti ${ic}`} aria-hidden="true" style={{color:c,fontSize:18}}/> Put on {lab}
+                      </button>
+                    ))}
+                    {mobileAssignFor.fromUid && (
+                      <button onClick={()=>deleteShift(mobileAssignFor.fromUid)}
+                        style={{cursor:"pointer",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:10,border:"1px solid #dc262655",background:dark?"#3a1515":"#dc262614",color:"#dc2626",fontSize:14,fontWeight:500}}>
+                        <i className="ti ti-x" aria-hidden="true" style={{fontSize:18}}/> Remove from shift
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={()=>setMobileAssignFor(null)} style={{marginTop:12,width:"100%",cursor:"pointer",padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,fontSize:13,fontWeight:500}}>Cancel</button>
+                </div>
+              </div>
+            )}
           </div>
           );
         })()}

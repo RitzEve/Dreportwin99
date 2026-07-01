@@ -1,13 +1,14 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.0.4",
+  "version": "2.0.5",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "The How-to guide now explains all 9 entry types: Regular Deposit, Regular Withdrawal, Unclaimed Credit, Transfer, Store, Mistake, Rental, Adjust and Other.",
-    "It includes an overview chart plus a worked money example for every type, showing exactly what each one does to its own total and to a bank if you pick one.",
-    "As always, available in English, 中文 (Chinese) and ភាសាខ្មែរ (Khmer)."
+    "Work Shifts / Off Day: the shift roster is now drag-and-drop — pick a team member's card and drop it onto Morning, Noon or Night (tap the card instead on phones). No more typing names.",
+    "Added a Noon shift alongside Morning and Night.",
+    "New \"Off-day counts\" section shows how many days off each team member has taken this month and this year.",
+    "Only masters and managers can rearrange the shift roster now; staff can still view it and plan a day off."
   ],
   "scripts": {
     "dev": "vite",

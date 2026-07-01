@@ -48,6 +48,12 @@ are globally unique. Routing by role in `src/Root.jsx`.
   `npm run dev` (happened twice; a blank screen or old behavior is the tell).
 - Verify changes in the browser (Playwright) before declaring done.
 - `npm run build` must stay green; it's the completion gate.
+- **No React error boundary anywhere.** An uncaught render error unmounts the ENTIRE
+  app to a blank screen, not just the page that threw — happened in V2.0.5 (a `.sort()`
+  over Supabase-sourced team data crashed on a null `name`, killing every page, not
+  just the Off Days page it lived on). Any new code that reads external/DB data (not
+  data your own validated forms produced) must be normalised at the point it enters
+  FinTrack.jsx — don't assume it's shaped like internally-created data.
 
 ## Status / next step
 

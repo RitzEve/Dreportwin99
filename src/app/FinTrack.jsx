@@ -1051,7 +1051,8 @@ export default function App() {
     const selBank = banks.find(bk=>String(bk.id)===String(search.bank)); // search.bank holds a bank id
     return transactions.filter(t=>{
       const term = (search.term||"").toLowerCase();
-      const matchTerm = !term||t.memberId.toLowerCase().includes(term)||t.memberName.toLowerCase().includes(term)||t.bank.toLowerCase().includes(term);
+      // Keyword matches name / ID / bank / notes (text) OR the raw amount (e.g. "500").
+      const matchTerm = !term || [t.memberId,t.memberName,t.bank,t.notes].some(v=>String(v||"").toLowerCase().includes(term)) || String(t.amount||"").includes(term);
       const matchFrom = !search.dateFrom||t.date>=search.dateFrom;
       const matchTo = !search.dateTo||t.date<=search.dateTo;
       const matchType = !search.type||t.type===search.type;
@@ -2529,7 +2530,7 @@ export default function App() {
               <SectionTitle icon="ti-filter">Filter all history</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Search across all saved transactions — any date, member, bank, or type.</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
-                <div><label style={labelStyle}>Keyword</label><input type="text" placeholder="Name, ID, bank..." value={search.term} onChange={e=>setSearch(s=>({...s,term:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                <div><label style={labelStyle}>Keyword</label><input type="text" placeholder="Name, ID, bank, amount, notes..." value={search.term} onChange={e=>setSearch(s=>({...s,term:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>Member</label><FluidDropdown value={search.member} placeholder="All members" ariaLabel="Filter by member" options={[{value:"",label:"All members"},...members.map(m=>({value:String(m.id),label:`${m.name} (${m.id})`}))]} onChange={v=>setSearch(s=>({...s,member:v}))}/></div>
                 <div><label style={labelStyle}>Bank</label><FluidDropdown value={search.bank} placeholder="All banks" ariaLabel="Filter by bank" options={[{value:"",label:"All banks"},...banksLive.map(b=>({value:String(b.id),label:b.holder?`${b.holder} — ${b.name}`:b.name}))]} onChange={v=>setSearch(s=>({...s,bank:v}))}/></div>
                 <div><label style={labelStyle}>From date</label><input type="date" value={search.dateFrom} onChange={e=>setSearch(s=>({...s,dateFrom:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>

@@ -403,23 +403,26 @@ function SumTile({label,value,color,icon}) {
 }
 
 // Totals across all bank accounts: all / active-only / inactive-only.
-function BankTotals({banksLive}) {
+function BankTotals({banksLive, asOf, isPast}) {
   const sum = arr => arr.reduce((s,b)=>s+(b.balance||0),0);
   const ysum = arr => arr.reduce((s,b)=>s+(b.yBalance||0),0);
+  const asum = arr => arr.reduce((s,b)=>s+(b.asOfBalance||0),0);   // closing as of the selected date
   const active = banksLive.filter(b=>b.active!==false);
   const inactive = banksLive.filter(b=>b.active===false);
-  const Card = ({label,amount,yamount,count,color,icon}) => (
+  // When a past date is chosen the headline shows THAT day's closing (with the live
+  // total as a secondary note); otherwise it's the live total + yesterday, as before.
+  const Card = ({label,amount,yamount,asAmount,count,color,icon}) => (
     <GlowCard color={color} style={{background:C.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${color}`}}>
-      <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${icon}`} aria-hidden="true" style={{color}}/>{label}</div>
-      <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(amount)}</div>
-      <div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"bank":"banks"} · Yesterday: {fmt(yamount)}</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><i className={`ti ${icon}`} aria-hidden="true" style={{color}}/>{label}{isPast&&<span style={{fontSize:10.5,color,fontWeight:600}}>· as of {fmtDate(asOf)}</span>}</div>
+      <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(isPast?asAmount:amount)}</div>
+      <div style={{fontSize:12,color:C.muted,marginTop:2}}>{count} {count===1?"bank":"banks"} · {isPast?`Now: ${fmt(amount)}`:`Yesterday: ${fmt(yamount)}`}</div>
     </GlowCard>
   );
   return (
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10}}>
-      <Card label="All banks total" amount={sum(banksLive)} yamount={ysum(banksLive)} count={banksLive.length} color={C.accent} icon="ti-building-bank"/>
-      <Card label="Active banks total" amount={sum(active)} yamount={ysum(active)} count={active.length} color="#16a34a" icon="ti-circle-check"/>
-      <Card label="Inactive banks total" amount={sum(inactive)} yamount={ysum(inactive)} count={inactive.length} color="#64748b" icon="ti-circle-off"/>
+      <Card label="All banks total" amount={sum(banksLive)} yamount={ysum(banksLive)} asAmount={asum(banksLive)} count={banksLive.length} color={C.accent} icon="ti-building-bank"/>
+      <Card label="Active banks total" amount={sum(active)} yamount={ysum(active)} asAmount={asum(active)} count={active.length} color="#16a34a" icon="ti-circle-check"/>
+      <Card label="Inactive banks total" amount={sum(inactive)} yamount={ysum(inactive)} asAmount={asum(inactive)} count={inactive.length} color="#64748b" icon="ti-circle-off"/>
     </div>
   );
 }
@@ -789,6 +792,7 @@ export default function App() {
   const [newBank,setNewBank] = useState({name:"",holder:"",bsb:"",account:"",payid:"",balance:""});
   const [bankError,setBankError] = useState("");
   const [bankSearch,setBankSearch] = useState(""); // Bank Accounts page: filter by holder / bank / account / PayID
+  const [bankAsOfSel,setBankAsOfSel] = useState(""); // Bank Accounts page: "" = today/live, else a date → show closing balances as of that day
   const [editingBank,setEditingBank] = useState(null);
   const [editBankForm,setEditBankForm] = useState({});
   const [editBankError,setEditBankError] = useState("");
@@ -1010,12 +1014,20 @@ export default function App() {
   // Active banks only, in the same priority order — used in the dashboard per-bank
   // list and the entry-form bank dropdowns (so the top bank is the default choice).
   const activeBanks = useMemo(()=>banksLive.filter(b=>b.active!==false),[banksLive]);
+  // Bank Accounts page "balances as of": the closing date the totals + cards reflect.
+  const bankAsOf = bankAsOfSel || today;          // "" → today (live)
+  const bankIsPast = bankAsOf < today;             // a genuine past close (else = current balance)
+  // Each bank's closing balance as of that date (skips the recompute when it's just today).
+  const banksAsOf = useMemo(()=> bankIsPast
+    ? banksLive.map(b=>({...b, asOfBalance: ftBankBalanceAsOf(b, transactions, bankAsOf)}))
+    : banksLive.map(b=>({...b, asOfBalance: b.balance})),
+  [banksLive,transactions,bankAsOf,bankIsPast]);
   // Bank Accounts page: filter the cards by holder name / bank name / account no. / PayID.
   const banksShown = useMemo(()=>{
     const q = bankSearch.trim().toLowerCase();
-    if(!q) return banksLive;
-    return banksLive.filter(b=>[b.holder,b.name,b.account,b.payid].some(v=>String(v||"").toLowerCase().includes(q)));
-  },[banksLive,bankSearch]);
+    if(!q) return banksAsOf;
+    return banksAsOf.filter(b=>[b.holder,b.name,b.account,b.payid].some(v=>String(v||"").toLowerCase().includes(q)));
+  },[banksAsOf,bankSearch]);
 
   // Newest first. (Sorting matters now that saves merge data — merged entries can land
   // anywhere in the underlying array, so we can't rely on insertion order here.)
@@ -2509,7 +2521,16 @@ export default function App() {
                 </button>
               }>Bank accounts</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a card to view its full transaction history.</div>
-              {banksLive.length>0&&<div style={{marginBottom:16}}><BankTotals banksLive={banksLive}/></div>}
+              {banksLive.length>0&&(
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:12}}>
+                  <span style={{fontSize:12.5,color:C.muted,fontWeight:500}}>Balances as of</span>
+                  {toggleBtn(!bankAsOfSel,()=>setBankAsOfSel(""),"Today")}
+                  {toggleBtn(bankAsOfSel===yesterday,()=>setBankAsOfSel(yesterday),"Yesterday")}
+                  <input type="date" value={bankAsOfSel} max={today} onChange={e=>setBankAsOfSel(e.target.value)} style={{boxSizing:"border-box"}}/>
+                  {bankIsPast&&<span style={{fontSize:12,color:C.accent,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-history" aria-hidden="true"/> Showing closing balances as of {fmtDate(bankAsOf)}</span>}
+                </div>
+              )}
+              {banksLive.length>0&&<div style={{marginBottom:16}}><BankTotals banksLive={banksAsOf} asOf={bankAsOf} isPast={bankIsPast}/></div>}
               {banksLive.length>0&&(
                 <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
                   <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
@@ -2552,6 +2573,7 @@ export default function App() {
                         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>PayID: {b.payid||"—"}</div>
                         <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(b.balance)}</div>
                         <div style={{fontSize:11,color:C.muted,marginTop:2}}>Yesterday: {fmt(b.yBalance)}</div>
+                        {bankIsPast&&<div style={{fontSize:11,fontWeight:600,color:C.accent,marginTop:1}}>Closing {fmtDate(bankAsOf)}: {fmt(b.asOfBalance)}</div>}
                         {bankTodayCounts(b)}
                         <div style={{fontSize:11,color:C.muted,marginTop:6}}>Click card to view history</div>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>

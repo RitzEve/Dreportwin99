@@ -1,12 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.1.7",
+  "version": "2.1.8",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "New \"Buy/Sell AUD\" entry type (More drawer) for third-party buy/sell: enter an amount and a Rate, and it auto-writes the sum to the note (e.g. 5x3=15). It feeds a new \"Buy/Sell AUD\" stat card. No bank is selected by default.",
-    "New \"Buy AUD\" tick-box on Regular Withdrawal: the full amount still counts as a withdrawal, the Buy AUD part is taken from the Buy/Sell AUD balance, and any leftover becomes unclaimed credit."
+    "Bank Accounts: new \"Balances as of\" picker (Today / Yesterday / any date). Pick a past day and the three totals show that day's closing balance, and each bank card shows a \"Closing [date]\" line.",
+    "Your live balances are unchanged — the date picker just adds a historical view."
   ],
   "scripts": {
     "dev": "vite",

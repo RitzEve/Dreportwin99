@@ -1,12 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.1.6",
+  "version": "2.1.7",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "New \"Bank Block\" entry type (in the More drawer) for clearing a frozen bank's balance: it lowers that bank's total and adds the amount to a new \"Bank Blocked\" stat card.",
-    "\"Bank Block\" doesn't touch your deposit, withdrawal or store totals — it only moves the bank balance."
+    "New \"Buy/Sell AUD\" entry type (More drawer) for third-party buy/sell: enter an amount and a Rate, and it auto-writes the sum to the note (e.g. 5x3=15). It feeds a new \"Buy/Sell AUD\" stat card. No bank is selected by default.",
+    "New \"Buy AUD\" tick-box on Regular Withdrawal: the full amount still counts as a withdrawal, the Buy AUD part is taken from the Buy/Sell AUD balance, and any leftover becomes unclaimed credit."
   ],
   "scripts": {
     "dev": "vite",

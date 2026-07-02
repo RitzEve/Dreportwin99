@@ -62,7 +62,7 @@ const TYPE_COLORS = {
   "Regular Deposit":"#16a34a","Regular Withdrawal":"#dc2626",
   "Unclaimed Credit":"#d97706","Mistake":"#7c3aed",
   "Rental":"#0891b2","Store":"#FFDE63","Transfer":"#6366f1","Adjust":"#0d9488",
-  "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b","Bank Block":"#0284c7","Buy/Sell AUD":"#db2777"
+  "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b","Bank Block":"#5b7a99","Buy/Sell AUD":"#db2777"
 };
 // Store's brand colour (#FFDE63) is a pale yellow — readable on a dark background
 // but nearly invisible as plain text on a light one. So everywhere Store would be
@@ -1778,7 +1778,7 @@ export default function App() {
     {label:"Store entries", count:stats.store.length, amount:stats.sum(storeAllTime), color:"#FFDE63", note:`Running store credit · yest. ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", stats.store, undefined, undefined, {store:true})},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
-    {label:"Bank Blocked", count:stats.bankBlocked.length, amount:stats.sum(stats.bankBlocked), color:"#0284c7", onClick:()=>openStatDetail("Bank Blocked", stats.bankBlocked)},
+    {label:"Bank Blocked", count:stats.bankBlocked.length, amount:stats.sum(stats.bankBlocked), color:"#5b7a99", onClick:()=>openStatDetail("Bank Blocked", stats.bankBlocked)},
     {label:"Buy/Sell AUD", count:stats.buySellAud.length, amount:stats.sum(stats.buySellAud), color:"#db2777", onClick:()=>openStatDetail("Buy/Sell AUD", stats.buySellAud)},
   ];
   const PRIMARY_STATS = ["Total deposits","Total withdrawals","Win / Loss","Unclaimed credits","Store entries"];
@@ -1821,7 +1821,7 @@ export default function App() {
   // Dashboard overview — scope bar + ALL 10 stat cards.
   const statOverview = (<>
     {statScopeBar}
-    <div style={{display:"grid",gridTemplateColumns:isWideView?"repeat(5, minmax(0,1fr))":"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
+    <div style={{display:"grid",gridTemplateColumns:isWideView?"repeat(6, minmax(0,1fr))":"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
       {statCardsGrid}
     </div>
   </>);

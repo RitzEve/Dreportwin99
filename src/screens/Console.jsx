@@ -11,6 +11,7 @@ import {
   updateAccountInfo,
   setOwnCompanyTimezone,
   setOwnCompanyLogo,
+  setOwnNationality,
   creatableRoles,
   canActOn,
 } from '../lib/auth.js';
@@ -87,6 +88,7 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
 
         {user.role === ROLES.MASTER && <CompanyLogo company={company} />}
         {user.role === ROLES.MASTER && <CompanyTimezone company={company} />}
+        <MyNationality user={user} onSaved={refresh} />
 
         <section style={styles.card}>
           <h3 style={styles.cardTitle}><i className="ti ti-users-group" aria-hidden="true" /> Team &amp; accounts</h3>
@@ -150,6 +152,40 @@ function CompanyTimezone({ company }) {
           onChange={(v) => setTz(v)} />
         <button className="btn btn-primary btn-sm" onClick={save} disabled={!changed || busy}>
           <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Saving…' : 'Save time zone'}
+        </button>
+      </div>
+      {error && <div className="error-text">{error}</div>}
+      {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
+    </section>
+  );
+}
+
+function MyNationality({ user, onSaved }) {
+  const [nat, setNat] = useState(user.nationality || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [ok, setOk] = useState('');
+  const changed = nat !== (user.nationality || '');
+
+  async function save() {
+    setError(''); setOk(''); setBusy(true);
+    const res = await setOwnNationality(nat);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOk('Nationality saved.');
+    onSaved?.();
+  }
+
+  return (
+    <section style={styles.card}>
+      <h3 style={styles.cardTitle}><i className="ti ti-flag" aria-hidden="true" /> My nationality</h3>
+      <p style={styles.cardSub}>Set your own nationality. It shows next to your name in the team list and the app's off-day counts.</p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <FluidDropdown value={nat} placeholder="Select nationality" ariaLabel="My nationality" style={{ flex: '1 1 260px', maxWidth: 380 }}
+          options={NATIONALITIES.map((n) => ({ value: n.value, label: n.value }))}
+          onChange={(v) => { setNat(v); setOk(''); }} />
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={!changed || busy}>
+          <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {busy ? 'Saving…' : 'Save'}
         </button>
       </div>
       {error && <div className="error-text">{error}</div>}

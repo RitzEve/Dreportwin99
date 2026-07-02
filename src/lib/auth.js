@@ -220,6 +220,20 @@ export async function setOwnCompanyTimezone(timezone) {
   return { ok: true };
 }
 
+/** Any signed-in account sets (or clears, with '') its OWN nationality. */
+export async function setOwnNationality(nationality) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not signed in.' };
+  const { error } = await supabase.rpc('set_own_nationality', { new_nat: nationality || '' });
+  if (error) {
+    if (/set_own_nationality|nationality|does not exist|could not find|schema cache|PGRST202|PGRST204/i.test(error.message || '')) {
+      return { ok: false, error: 'Nationality needs a one-time database setup (run migration-010.sql then migration-011.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
+}
+
 /** Provider sets (or clears, with null/'') a company's logo. */
 export async function setCompanyLogo(companyId, logo) {
   const me = await getCurrentUser();

@@ -6,6 +6,7 @@ export const NATIONALITIES = [
   { value: 'Indonesia', code: 'ID' },
   { value: 'Philippine', code: 'PH' },
   { value: 'Cambodia', code: 'CA' },
+  { value: 'Thailand', code: 'TH' },
   { value: 'Others', code: 'Other' },
 ];
 

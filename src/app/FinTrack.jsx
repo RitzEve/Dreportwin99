@@ -40,7 +40,7 @@ const TEAM_DEFAULT = [];
 const readTeam = () => (typeof window!=="undefined" && window.FINTRACK_TEAM) || TEAM_DEFAULT;
 
 
-const ENTRY_TYPES = ["Regular Deposit","Regular Withdrawal","Unclaimed Credit","Transfer","Store","Mistake","Rental","Adjust","Other"];
+const ENTRY_TYPES = ["Regular Deposit","Regular Withdrawal","Unclaimed Credit","Transfer","Store","Mistake","Rental","Adjust","Other","Bank Block"];
 const SIGNED_TYPES = ["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other"];
 const INIT_BANKS = ["Acleda Bank","ABA Bank","Canadia Bank","Maybank","Wing Bank"];
 const BANK_CHOICES = [
@@ -55,7 +55,7 @@ const TYPE_COLORS = {
   "Regular Deposit":"#16a34a","Regular Withdrawal":"#dc2626",
   "Unclaimed Credit":"#d97706","Mistake":"#7c3aed",
   "Rental":"#0891b2","Store":"#FFDE63","Transfer":"#6366f1","Adjust":"#0d9488",
-  "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b"
+  "Transfer Out":"#dc2626","Transfer In":"#16a34a","Other":"#64748b","Bank Block":"#0284c7"
 };
 // Store's brand colour (#FFDE63) is a pale yellow — readable on a dark background
 // but nearly invisible as plain text on a light one. So everywhere Store would be
@@ -126,7 +126,7 @@ const mkUid = () => `${Date.now().toString(36)}-${Math.random().toString(36).sli
 // bridge can reuse it for its fallback merge. Imported at the top of this file.
 // ---- balance helpers (single definition) ----
 function ftTxDelta(t){
-  if(["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other"].includes(t.type)) return t.amount;
+  if(["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other","Bank Block"].includes(t.type)) return t.amount;
   if(t.type==="Regular Deposit") return t.amount;
   if(t.type==="Transfer In") return t.amount;
   if(t.type==="Regular Withdrawal") return -t.amount;
@@ -282,7 +282,7 @@ const isCreditType = t => ["Regular Deposit","Unclaimed Credit"].includes(t.type
 const amtDisplay = t => {
   if(t.type==="Transfer In") return {sign:"+",val:fmt(Math.abs(t.amount)),color:"#16a34a"};
   if(t.type==="Transfer Out") return {sign:"-",val:fmt(Math.abs(t.amount)),color:"#dc2626"};
-  if(SIGNED_TYPES.includes(t.type)){
+  if(SIGNED_TYPES.includes(t.type) || t.type==="Bank Block"){
     const pos = t.amount>=0;
     const posColor = t.type==="Adjust" ? "#0d9488" : (TYPE_COLORS[t.type]||"#16a34a");
     const color = pos?posColor:"#dc2626";
@@ -973,6 +973,7 @@ export default function App() {
       deposits:f("Regular Deposit"),withdrawals:f("Regular Withdrawal"),
       unclaimed:f("Unclaimed Credit"),mistakes:f("Mistake"),
       rentals:f("Rental"),store:f("Store"),transfers:f("Transfer Out"),adjustments:f("Adjust"),
+      bankBlocked:f("Bank Block"),
       newMembers:active.filter(t=>t.isNew),sum,active
     };
   };
@@ -1097,7 +1098,7 @@ export default function App() {
 
   const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
-  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
+  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:(t==="Bank Block")?null:(activeBanks[0]?.id??null),notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -1194,6 +1195,22 @@ export default function App() {
       if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
+      done();
+      return;
+    }
+
+    // ---- Bank Block: clear a frozen bank's balance. DEBITS the chosen bank by the
+    // amount (a fundLeg, so the bank total drops) and adds the same amount to the
+    // "Bank Blocked" card (a bucket leg). Touches NO deposit/withdrawal/store totals.
+    // Two linked legs. ----
+    if(form.type==="Bank Block"){
+      if(!srcBank){ setFormError("Pick the bank to clear."); window.showToast?.("Error , Please Try Again","error"); return; }
+      const pairId = `BB-${nextId}`;
+      const common = {memberId:"",memberName:ref||"Bank Block",notes:form.notes,receipt:rcpt,operator:op,pairId,isNew:false,deleted:false};
+      const bankLeg   = {id:nextId,  date:txDate,time,type:"Bank Block",amount:-amt,bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",uid:mkUid(),fundLeg:true,...common};
+      const bucketLeg = {id:nextId+1,date:txDate,time,type:"Bank Block",amount:amt, bank:"Bank Block",bankId:null,bankHolder:"",uid:mkUid(),bucketLeg:true,...common};
+      setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
+      setNextId(n=>n+2);
       done();
       return;
     }
@@ -1707,6 +1724,7 @@ export default function App() {
     {label:"Store entries", count:stats.store.length, amount:stats.sum(storeAllTime), color:"#FFDE63", note:`Running store credit · yest. ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", stats.store, undefined, undefined, {store:true})},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
+    {label:"Bank Blocked", count:stats.bankBlocked.length, amount:stats.sum(stats.bankBlocked), color:"#0284c7", onClick:()=>openStatDetail("Bank Blocked", stats.bankBlocked)},
   ];
   const PRIMARY_STATS = ["Total deposits","Total withdrawals","Win / Loss","Unclaimed credits","Store entries"];
   const primaryStatCards = statCardDefs.filter(c=>PRIMARY_STATS.includes(c.label));
@@ -1957,9 +1975,9 @@ export default function App() {
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
-                <div><label style={labelStyle}>Bank account affected (optional)</label>
+                <div><label style={labelStyle}>{form.type==="Bank Block"?"Bank to clear":"Bank account affected (optional)"}</label>
                   <FluidDropdown value={form.bankId??""} placeholder="— None —" ariaLabel="Bank account affected"
-                    options={[{value:"",label:"— None —"},...activeBanks.map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
+                    options={[{value:"",label:"— None —"},...(form.type==="Bank Block"?banksLive:activeBanks).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}${b.blocked?" ❄":""}`}))]}
                     onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/>
                   {bankBalanceHint(form.bankId)}</div>
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>

@@ -12,6 +12,29 @@
  * Shared by src/app/FinTrack.jsx (the live merge-on-poll) and src/lib/storageBridge.js
  * (the fallback merge when the atomic server-side RPC isn't installed).
  */
+// Stable per-row keys, matching the server merge (see migration-012).
+export const txKey = (t) => (t && t.uid ? t.uid : (t && t.id != null ? `#${t.id}` : ''));
+export const idKey = (r) => (r && r.id != null && r.id !== '' ? String(r.id) : '');
+
+/*
+ * dedupeByKey — keep the FIRST occurrence of each key, preserving order. Rows whose
+ * key is falsy (no stable identity) are all kept. Defense-in-depth against the
+ * duplicate-key blow-up that migration-012 fixes server-side: the client normalises
+ * a loaded blob so it can never hold — or send back — duplicate-keyed rows.
+ */
+export function dedupeByKey(arr, keyFn) {
+  if (!Array.isArray(arr)) return arr;
+  const seen = new Set();
+  const out = [];
+  for (const row of arr) {
+    const k = keyFn(row);
+    if (k && seen.has(k)) continue;
+    if (k) seen.add(k);
+    out.push(row);
+  }
+  return out;
+}
+
 export function mergeData(remote, local) {
   remote = remote || {}; local = local || {};
   const keyOf = t => (t && t.uid ? t.uid : `#${t && t.id}`);

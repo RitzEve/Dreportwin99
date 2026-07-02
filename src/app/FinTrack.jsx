@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import FluidDropdown from "../components/FluidDropdown.jsx";
 import UpdateBell from "../components/UpdateBell.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
-import { mergeData } from "../lib/mergeData.js";
+import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 
 // Short labels for the mobile bottom tab bar (the desktop sidebar uses the full
@@ -806,8 +806,10 @@ export default function App() {
 
   // Apply a stored data blob to state (with the one-time opening-balance migration).
   const applyData = (d) => {
-    if(d.transactions) setTransactions(d.transactions);
-    if(d.banks) setBanks(d.banks.map(b=>{
+    // Dedupe on load: never hold (and therefore never send back) duplicate-keyed rows,
+    // which is what the server merge would multiply. See migration-012 for the root fix.
+    if(d.transactions) setTransactions(dedupeByKey(d.transactions, txKey));
+    if(d.banks) setBanks(dedupeByKey(d.banks, idKey).map(b=>{
       if(b.openingBalance!=null) return b;
       // migrate older records: derive opening from stored balance minus its tx effects
       const eff = (d.transactions||[]).reduce((acc,t)=>{
@@ -818,8 +820,8 @@ export default function App() {
       },0);
       return {...b,openingBalance:(b.balance??0)-eff};
     }));
-    if(d.members) setMembers(d.members);
-    if(d.offDays) setOffDays(d.offDays);
+    if(d.members) setMembers(dedupeByKey(d.members, idKey));
+    if(d.offDays) setOffDays(dedupeByKey(d.offDays, txKey));
     if(d.nextId) setNextId(d.nextId);
   };
 

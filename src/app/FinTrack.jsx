@@ -234,10 +234,14 @@ const editBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:
 const deleteBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:12,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
 const bankActiveBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:"1px solid #16a34a",borderRadius:6,background:dark?"#14331f":"#16a34a14",color:dark?"#7dd59e":"#16a34a",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
 const bankInactiveBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
-// Block toggle: neutral when the bank is open (the "Block" action), red when it's blocked
-// (the "Unblock" action) — mirrors the danger styling so a blocked bank reads at a glance.
+// Freeze toggle: neutral when the bank is open (the "Freeze" action), icy blue when it's
+// frozen (the "Unfreeze" action) — so a frozen bank reads at a glance. (The persisted data
+// field stays `blocked` for backwards/merge compatibility; only the wording is "Freeze".)
 const bankBlockBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:`1px solid ${C.borderStrong}`,borderRadius:6,background:C.surface2,color:C.muted,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
-const bankBlockedBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:"1px solid #dc2626",borderRadius:6,background:dark?"#4a1515":"#dc262614",color:dark?"#f09595":"#dc2626",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
+const bankBlockedBtnStyle = {cursor:"pointer",padding:"4px 10px",minHeight:32,fontSize:11,fontWeight:500,border:"1px solid #38bdf8",borderRadius:6,background:dark?"#0e2a3a":"#e0f2fe",color:dark?"#7dd3fc":"#0369a1",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4};
+const FROST_BORDER = "#38bdf8";
+// A subtle "frozen" look for a frozen bank card: icy tint + sky-blue border.
+const frozenCardStyle = {background:dark?"linear-gradient(160deg,#0d2331,#0a141c)":"linear-gradient(160deg,#eef7fd,#f7fcff)",borderColor:FROST_BORDER};
 const sectionStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:20,boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 const cardStyle = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",boxShadow:dark?"none":"0 1px 2px rgba(0,0,0,0.05)"};
 
@@ -336,6 +340,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
                 if(t.storeAndPaid && t.bankId==null) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#7c3aed"}}><i className="ti ti-arrows-split-2" aria-hidden="true"/>Store + paid</span>; if(t.actualPaid && t.bankId==null) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#0d9488"}}><i className="ti ti-cash" aria-hidden="true"/>Actual paid</span>;
                 if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
+                if(t.depositExtra) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#7c3aed"}}><i className="ti ti-plus" aria-hidden="true"/>Deposit extra</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                 const holder = (b&&b.holder) || t.bankHolder || "";
                 return (<span>
@@ -645,6 +650,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summar
                         if(t.storeAndPaid && t.bankId==null) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#7c3aed"}}><i className="ti ti-arrows-split-2" aria-hidden="true"/>Store + paid</span>; if(t.actualPaid && t.bankId==null) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#0d9488"}}><i className="ti ti-cash" aria-hidden="true"/>Actual paid</span>;
                 if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
+                if(t.depositExtra) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#7c3aed"}}><i className="ti ti-plus" aria-hidden="true"/>Deposit extra</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                         const holder = (b&&b.holder) || t.bankHolder || "";
                         return (<span>
@@ -761,7 +767,7 @@ export default function App() {
   const [rangeFrom,setRangeFrom] = useState(weekAgo);
   const [rangeTo,setRangeTo] = useState(today);
 
-  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false});
+  const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false});
   const [formError,setFormError] = useState("");
   const [nameSuggestions,setNameSuggestions] = useState([]);
   const [idSuggestions,setIdSuggestions] = useState([]);
@@ -773,6 +779,7 @@ export default function App() {
 
   const [newBank,setNewBank] = useState({name:"",holder:"",bsb:"",account:"",payid:"",balance:""});
   const [bankError,setBankError] = useState("");
+  const [bankSearch,setBankSearch] = useState(""); // Bank Accounts page: filter by holder / bank / account / PayID
   const [editingBank,setEditingBank] = useState(null);
   const [editBankForm,setEditBankForm] = useState({});
   const [editBankError,setEditBankError] = useState("");
@@ -993,6 +1000,12 @@ export default function App() {
   // Active banks only, in the same priority order — used in the dashboard per-bank
   // list and the entry-form bank dropdowns (so the top bank is the default choice).
   const activeBanks = useMemo(()=>banksLive.filter(b=>b.active!==false),[banksLive]);
+  // Bank Accounts page: filter the cards by holder name / bank name / account no. / PayID.
+  const banksShown = useMemo(()=>{
+    const q = bankSearch.trim().toLowerCase();
+    if(!q) return banksLive;
+    return banksLive.filter(b=>[b.holder,b.name,b.account,b.payid].some(v=>String(v||"").toLowerCase().includes(q)));
+  },[banksLive,bankSearch]);
 
   // Newest first. (Sorting matters now that saves merge data — merged entries can land
   // anywhere in the underlying array, so we can't rely on insertion order here.)
@@ -1082,9 +1095,9 @@ export default function App() {
       closingLabel: closeDate===yesterday ? "Yesterday's closing" : `Store closing · ${fmtDate(closeDate)}`, asOf};
   },[filteredTx,storeCredit,storeAllTime,search.dateTo,search.dateFrom,today,yesterday]);
 
-  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
+  const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
-  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
+  const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
   const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
@@ -1168,7 +1181,7 @@ export default function App() {
     const txDate = form.date || today;   // chosen "Entry date", else default to today
     const ref = form.memberName.trim();
     const rcpt = (form.receipt||"").trim();   // optional receipt number, stamped on every leg
-    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false};
+    const blank = {type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false};
     // Entry saved OK — close the form, reset it, and pop the success toast.
     const done = ()=>{ setShowEntryModal(false); setForm(blank); window.showToast?.("Action Done !","success"); };
 
@@ -1181,6 +1194,22 @@ export default function App() {
       if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
+      done();
+      return;
+    }
+
+    // ---- Mistake flagged "Deposit Extra": a mistaken extra deposit. It COUNTS as a
+    // deposit (+amount to Total deposits) AND is logged as a Mistake (+amount to the
+    // Mistake card). Two linked, bank-less legs. ----
+    if(form.type==="Mistake" && form.depositExtra){
+      const pairId = `DX-${nextId}`;
+      const common = {memberId:"",memberName:ref||"Deposit Extra",bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,pairId,depositExtra:true,isNew:false,deleted:false};
+      const rows = [
+        {id:nextId,   date:txDate,time,type:"Regular Deposit",amount:amt, uid:mkUid(),...common},
+        {id:nextId+1, date:txDate,time,type:"Mistake",         amount:amt, uid:mkUid(),bucketLeg:true,...common},
+      ];
+      setTransactions(prev=>[...rows,...prev]);
+      setNextId(n=>n+2);
       done();
       return;
     }
@@ -1924,7 +1953,7 @@ export default function App() {
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   const active = form.type===t;
-                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false,claimDate:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
+                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false,claimDate:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
@@ -2086,6 +2115,18 @@ export default function App() {
                   </div>
                   );
                 })()}
+                {form.type==="Mistake"&&(
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{position:"relative",display:"inline-flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,border:`1px solid ${form.depositExtra?"#7c3aed":C.border}`,background:C.surface2,cursor:"pointer",userSelect:"none"}}>
+                      <input type="checkbox" checked={!!form.depositExtra} onChange={e=>setForm(f=>({...f,depositExtra:e.target.checked}))} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                      <span aria-hidden="true" style={{width:18,height:18,borderRadius:5,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:form.depositExtra?"#7c3aed":"#0b0f16",border:`1px solid ${form.depositExtra?"#7c3aed":C.borderStrong}`}}>{form.depositExtra&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:13}}/>}</span>
+                      <span style={{display:"flex",flexDirection:"column",lineHeight:1.2,minWidth:0}}>
+                        <span style={{fontSize:12.5,fontWeight:500,color:C.text}}>Deposit Extra</span>
+                        <span style={{fontSize:10,color:C.muted}}>Also adds this amount to Total deposits · no bank</span>
+                      </span>
+                    </label>
+                  </div>
+                )}
                 <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:C.surface2,borderRadius:8,border:`1px solid ${C.border}`}}>
                   <i className="ti ti-user-cog" aria-hidden="true" style={{fontSize:16,color:C.accent}}/>
                   <span style={{fontSize:12,color:C.muted}}>Recording as operator</span>
@@ -2389,12 +2430,20 @@ export default function App() {
               }>Bank accounts</SectionTitle>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a card to view its full transaction history.</div>
               {banksLive.length>0&&<div style={{marginBottom:16}}><BankTotals banksLive={banksLive}/></div>}
+              {banksLive.length>0&&(
+                <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
+                  <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+                  <input type="text" value={bankSearch} onChange={e=>setBankSearch(e.target.value)} placeholder="Search holder, bank, account or PayID…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  {bankSearch&&<button type="button" onClick={()=>setBankSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+                </div>
+              )}
               {banksLive.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank accounts yet. Click "Add bank" to create one.</div>}
+              {banksLive.length>0&&banksShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No banks match “{bankSearch}”.</div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(220px, calc((100% - 48px) / 5)), 1fr))",gap:12}}>
-                {banksLive.map(b=>(
-                  <GlowCard key={b.id} color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:editingBank===b.id?"default":"pointer"}}
+                {banksShown.map(b=>(
+                  <GlowCard key={b.id} color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:editingBank===b.id?"default":"pointer",...(b.blocked?frozenCardStyle:null)}}
                     onMouseEnter={e=>{if(editingBank!==b.id)e.currentTarget.style.borderColor=C.accent;}}
-                    onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor=b.blocked?FROST_BORDER:C.border}
                     onClick={()=>{if(editingBank!==b.id) openBankDetail(b);}}>
                     {editingBank===b.id?(
                       <div onClick={e=>e.stopPropagation()}>
@@ -2415,7 +2464,7 @@ export default function App() {
                         <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,marginBottom:8}}>
                           <i className="ti ti-building-bank" aria-hidden="true" style={{fontSize:20,color:C.accent,flexShrink:0}}/>
                           <span title={b.holder||b.name} style={{fontWeight:500,fontSize:14,color:C.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.holder||b.name}</span>
-                          {b.blocked&&<span style={{flexShrink:0,fontSize:10,fontWeight:600,color:dark?"#f09595":"#dc2626",background:dark?"#4a1515":"#dc262614",border:"1px solid #dc2626",borderRadius:4,padding:"1px 6px"}}>Blocked</span>}
+                          {b.blocked&&<span style={{flexShrink:0,fontSize:10,fontWeight:600,color:dark?"#7dd3fc":"#0369a1",background:dark?"#0e2a3a":"#e0f2fe",border:"1px solid #38bdf8",borderRadius:4,padding:"1px 6px",display:"inline-flex",alignItems:"center",gap:3}}><i className="ti ti-snowflake" aria-hidden="true" style={{fontSize:11}}/>Frozen</span>}
                         </div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Bank: {b.name}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
@@ -2432,13 +2481,13 @@ export default function App() {
                           </div>
                           <button onClick={()=>handleToggleBankActive(b.id)} disabled={!!b.blocked}
                             style={{...(b.active===false?bankInactiveBtnStyle:bankActiveBtnStyle),justifyContent:"center",...(b.blocked?{opacity:0.5,cursor:"not-allowed"}:null)}}
-                            title={b.blocked?"Blocked — unblock this bank before you can activate it":(b.active===false?"Inactive — click to show this bank in the dashboard & entry dropdowns":"Active — click to hide this bank from the dashboard & entry dropdowns")}>
+                            title={b.blocked?"Frozen — unfreeze this bank before you can activate it":(b.active===false?"Inactive — click to show this bank in the dashboard & entry dropdowns":"Active — click to hide this bank from the dashboard & entry dropdowns")}>
                             <i className={`ti ti-${b.active===false?"circle-off":"circle-check"}`} aria-hidden="true"/> {b.active===false?"Inactive":"Active"}
                           </button>
                           <button onClick={()=>handleToggleBankBlock(b.id)}
                             style={{...(b.blocked?bankBlockedBtnStyle:bankBlockBtnStyle),justifyContent:"center"}}
-                            title={b.blocked?"Blocked — click to unblock so it can be activated again":"Click to block this bank — it can't be activated until you unblock it"}>
-                            <i className={`ti ti-${b.blocked?"lock-open":"lock"}`} aria-hidden="true"/> {b.blocked?"Unblock":"Block"}
+                            title={b.blocked?"Frozen — click to unfreeze so it can be activated again":"Click to freeze this bank — it can't be activated until you unfreeze it"}>
+                            <i className={`ti ti-${b.blocked?"snowflake-off":"snowflake"}`} aria-hidden="true"/> {b.blocked?"Unfreeze":"Freeze"}
                           </button>
                         </div>
                       </>

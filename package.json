@@ -1,12 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.1.4",
+  "version": "2.1.5",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Store card popup: the second balance now shows \"Yesterday's closing\" instead of today's (which was just the current balance again). Pick a past month or date and it shows that period's closing instead.",
-    "Every stat-card popup's summary (money in / out / net) already follows the date scope you've selected — this just makes the store balances line up with it too."
+    "Bank Accounts: \"Block\" is now called \"Freeze\", and a frozen bank card gets a subtle icy tint so it stands out.",
+    "Bank Accounts: new search box — find a bank by holder name, bank name, account number or PayID.",
+    "Mistake entry: new \"Deposit Extra\" tick-box — adds the amount to Total deposits and logs it as a Mistake at the same time."
   ],
   "scripts": {
     "dev": "vite",

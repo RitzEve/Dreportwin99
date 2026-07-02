@@ -573,7 +573,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summar
             <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
               {summary.store&&(<>
                 <SumTile icon="ti-wallet" color={C.accent} label="Current store balance" value={fmt(summary.store.current)}/>
-                <SumTile icon="ti-history" color={STORE_COLOR} label={`Closing · ${summary.asOfLabel}`} value={fmt(summary.store.closing)}/>
+                <SumTile icon="ti-history" color={STORE_COLOR} label={summary.store.closingLabel} value={fmt(summary.store.closing)}/>
               </>)}
               <SumTile icon="ti-arrow-down-left" color="#16a34a" label={`Credit in · ${summary.credits.n} ${summary.credits.n===1?"entry":"entries"}`} value={fmt(summary.credits.sum)}/>
               <SumTile icon="ti-arrow-up-right" color="#dc2626" label={`Debit out · ${summary.debits.n} ${summary.debits.n===1?"entry":"entries"}`} value={fmt(summary.debits.sum)}/>
@@ -1075,8 +1075,12 @@ export default function App() {
   // "As of" the To date (or From, or today) drives the store closing balance.
   const searchSummary = useMemo(()=>{
     const asOf = search.dateTo||search.dateFrom||today;
-    return {...ftCreditDebit(filteredTx), current:storeCredit, closing:storeBalanceAsOf(asOf), asOf};
-  },[filteredTx,storeCredit,storeAllTime,search.dateTo,search.dateFrom,today]);
+    // Same rule as the stat popups: if the range ends today, today's close = current
+    // (pointless), so show yesterday's close; a past end-date shows its own close.
+    const closeDate = asOf >= today ? yesterday : asOf;
+    return {...ftCreditDebit(filteredTx), current:storeCredit, closing:storeBalanceAsOf(closeDate),
+      closingLabel: closeDate===yesterday ? "Yesterday's closing" : `Store closing · ${fmtDate(closeDate)}`, asOf};
+  },[filteredTx,storeCredit,storeAllTime,search.dateTo,search.dateFrom,today,yesterday]);
 
   const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
@@ -1640,10 +1644,17 @@ export default function App() {
   const openStatDetail = (label, rows, totalOverride, scopeOverride, opts={}) => {
     const list = rows.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
     const total = totalOverride!==undefined ? totalOverride : rows.reduce((s,t)=>s+(t.amount||0),0);
+    // Store "closing": the balance at the END of the selected period. When that period
+    // ends today (live views), today's close just equals the current balance — pointless
+    // — so show YESTERDAY's close instead. A past period shows its own end-date close.
+    const closeDate = scopeAsOf >= today ? yesterday : scopeAsOf;
     const summary = {
       ...ftCreditDebit(rows),
-      asOfLabel: fmtDate(scopeAsOf),
-      store: opts.store ? {current:storeCredit, closing:storeBalanceAsOf(scopeAsOf)} : undefined,
+      store: opts.store ? {
+        current: storeCredit,
+        closing: storeBalanceAsOf(closeDate),
+        closingLabel: closeDate===yesterday ? "Yesterday's closing" : `Closing · ${fmtDate(closeDate)}`,
+      } : undefined,
     };
     setDetailModal({
       title: label,
@@ -2574,7 +2585,7 @@ export default function App() {
               {(search.dateFrom||search.dateTo)&&filteredTx.length>0&&(
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
                   <SumTile icon="ti-wallet" color={C.accent} label="Current store balance" value={fmt(searchSummary.current)}/>
-                  <SumTile icon="ti-history" color={STORE_COLOR} label={`Store closing · ${fmtDate(searchSummary.asOf)}`} value={fmt(searchSummary.closing)}/>
+                  <SumTile icon="ti-history" color={STORE_COLOR} label={searchSummary.closingLabel} value={fmt(searchSummary.closing)}/>
                   <SumTile icon="ti-arrow-down-left" color="#16a34a" label={`Credit in · ${searchSummary.credits.n} ${searchSummary.credits.n===1?"entry":"entries"}`} value={fmt(searchSummary.credits.sum)}/>
                   <SumTile icon="ti-arrow-up-right" color="#dc2626" label={`Debit out · ${searchSummary.debits.n} ${searchSummary.debits.n===1?"entry":"entries"}`} value={fmt(searchSummary.debits.sum)}/>
                   <SumTile icon="ti-sum" color={searchSummary.net>=0?"#16a34a":"#dc2626"} label="Net (in − out)" value={fmt(searchSummary.net)}/>

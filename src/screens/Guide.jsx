@@ -69,22 +69,22 @@ const CHART_ROWS = [
 // Colours are the app's own TYPE_COLORS hex values (Store swapped for a readable
 // gold, since the app's #FFDE63 is a pale chip-fill colour, not a text colour) —
 // so the guide's cards visually match the tags/badges the app itself shows.
-const TYPE_ORDER = ['deposit', 'withdrawal', 'unclaimed', 'transfer', 'store', 'mistake', 'rental', 'adjust', 'other', 'buysellaud'];
+const TYPE_ORDER = ['deposit', 'withdrawal', 'unclaimed', 'transfer', 'store', 'mistake', 'rental', 'adjust', 'other', 'bankblock', 'buysellaud'];
 const TYPE_UI = {
   deposit: 'Regular Deposit', withdrawal: 'Regular Withdrawal', unclaimed: 'Unclaimed Credit',
   transfer: 'Transfer', store: 'Store', mistake: 'Mistake', rental: 'Rental', adjust: 'Adjust', other: 'Other',
-  buysellaud: 'Buy/Sell AUD',
+  bankblock: 'Bank Block', buysellaud: 'Buy/Sell AUD',
 };
 const TYPE_COLOR = {
   deposit: '#16a34a', withdrawal: '#dc2626', unclaimed: '#d97706', transfer: '#6366f1',
   store: '#a67c00', mistake: '#7c3aed', rental: '#0891b2', adjust: '#0d9488', other: '#64748b',
-  buysellaud: '#db2777',
+  bankblock: '#5b7a99', buysellaud: '#db2777',
 };
 const TYPE_ICON = {
   deposit: 'ti-arrow-down-circle', withdrawal: 'ti-arrow-up-circle', unclaimed: 'ti-coin',
   transfer: 'ti-arrows-left-right', store: 'ti-building-store', mistake: 'ti-alert-triangle',
   rental: 'ti-home', adjust: 'ti-adjustments', other: 'ti-dots',
-  buysellaud: 'ti-currency-dollar',
+  bankblock: 'ti-lock', buysellaud: 'ti-currency-dollar',
 };
 
 // ---- Lazy font loader: pull Noto (Latin + Simplified Chinese + Khmer) only the
@@ -558,13 +558,13 @@ const T = {
       alltypes: {
         title: 'All entry types explained',
         intro: "FinTrack has several entry types. Each one is for a different kind of money movement — this is what each one actually does to your totals and to a bank, if you pick one.",
-        note: 'Rule of thumb: Regular Deposit, Regular Withdrawal, Unclaimed Credit, Rental, Adjust, Other and Buy/Sell AUD are "straight" entries — picking a bank just means that money sits in that bank too, in the same direction. Store and Mistake are different: picking a bank actually moves money between that total and the bank, in opposite directions. Transfer only ever moves money between banks.',
+        note: 'Rule of thumb: Regular Deposit, Regular Withdrawal, Unclaimed Credit, Rental, Adjust, Other and Buy/Sell AUD are "straight" entries — picking a bank just means that money sits in that bank too, in the same direction. Store and Mistake are different: picking a bank actually moves money between that total and the bank, in opposite directions (banking cash INTO the bank). Bank Block always requires a bank, and moves the other way — money comes OUT of that bank and into the Bank Block total. Transfer only ever moves money between banks.',
         rowsHeader: 'Entry type',
         colHeaders: ['Its own total', 'If you also pick a bank'],
         rowLabels: {
           deposit: 'Regular Deposit', withdrawal: 'Regular Withdrawal', unclaimed: 'Unclaimed Credit',
           transfer: 'Transfer', store: 'Store', mistake: 'Mistake', rental: 'Rental', adjust: 'Adjust', other: 'Other',
-          buysellaud: 'Buy/Sell AUD',
+          bankblock: 'Bank Block', buysellaud: 'Buy/Sell AUD',
         },
         chartCells: {
           deposit: ['+ amount → Total deposits', '+ amount, same bank'],
@@ -576,6 +576,7 @@ const T = {
           rental: ['± amount → Rentals', '± amount, same direction'],
           adjust: ['± amount → Adjustments', '± amount, same direction'],
           other: ['± amount (no dashboard total)', '± amount, same direction'],
+          bankblock: ['+ amount → Bank Block total', 'required · − bank, + Bank Block (opposite)'],
           buysellaud: ['± amount → Buy/Sell AUD balance', '± amount, same direction'],
         },
         items: {
@@ -623,6 +624,11 @@ const T = {
             for: "Anything that doesn't fit the other types. No name required, amount can be positive or negative. It has no dashboard total of its own — find it by filtering the full history.",
             formula: 'Recorded as typed. If a bank is picked, that bank += amount too (same direction).',
             example: '+$40 other income, no bank → shows in the full history as +$40 Other.',
+          },
+          bankblock: {
+            for: 'Clears a frozen/blocked bank\'s tracked balance — moves it out of "Bank balance" and into its own Bank Block total. A bank is always required (there is no "no bank" option). Amount must be greater than zero.',
+            formula: 'The chosen bank −= amount. Bank Block total += amount (opposite directions — the reverse of Store, which banks cash IN).',
+            example: 'ABA Bank is frozen with $800 tracked in it. Record an $800 Bank Block on ABA Bank → ABA Bank −$800 · Bank Block total +$800.',
           },
           buysellaud: {
             for: 'Tracks your Buy/Sell AUD balance — AUD currency you buy into stock and sell back down. No name required, amount can be positive (buy) or negative (sell). An optional Rate field writes amount × rate into the note as a memo — it never changes any total.',
@@ -797,13 +803,13 @@ const T = {
       alltypes: {
         title: '所有记录类型说明',
         intro: 'FinTrack 有多种记录类型，每一种对应不同的资金变动。以下说明每种类型到底会对你的总额，以及（如果你选择）对某个银行做了什么。',
-        note: '要点：普通存款、普通取款、未领取额度、租金、调整、其他和买卖澳元，都是”直接”记录——选了银行，只表示这笔钱也放在那家银行里，方向相同。商店和差错不同：选了银行后，钱会在该总额与银行之间”相反方向”移动。转账则永远只在银行之间移动资金。',
+        note: '要点：普通存款、普通取款、未领取额度、租金、调整、其他和买卖澳元，都是”直接”记录——选了银行，只表示这笔钱也放在那家银行里，方向相同。商店和差错不同：选了银行后，钱会在该总额与银行之间”相反方向”移动（把现金存入银行）。银行冻结则必须选择银行，方向相反——钱从该银行出来，进入银行冻结总额。转账则永远只在银行之间移动资金。',
         rowsHeader: '记录类型',
         colHeaders: ['自身总额', '如果同时选择银行'],
         rowLabels: {
           deposit: '普通存款', withdrawal: '普通取款', unclaimed: '未领取额度',
           transfer: '转账', store: '商店', mistake: '差错', rental: '租金', adjust: '调整', other: '其他',
-          buysellaud: '买卖澳元',
+          bankblock: '银行冻结', buysellaud: '买卖澳元',
         },
         chartCells: {
           deposit: ['+ 金额 → 存款总额', '+ 金额，同一银行'],
@@ -815,6 +821,7 @@ const T = {
           rental: ['± 金额 → 租金', '± 金额，方向相同'],
           adjust: ['± 金额 → 调整', '± 金额，方向相同'],
           other: ['± 金额（没有仪表盘总额）', '± 金额，方向相同'],
+          bankblock: ['+ 金额 → 银行冻结总额', '必选 · − 银行，+ 银行冻结（相反）'],
           buysellaud: ['± 金额 → 买卖澳元余额', '± 金额，方向相同'],
         },
         items: {
@@ -862,6 +869,11 @@ const T = {
             for: '不属于其他类型的任何记录。不需要填写姓名，金额可正可负。它没有自己的仪表盘总额——可在完整历史记录中按类型筛选查看。',
             formula: '按输入原样记录。如果选择了银行，该银行余额也 += 金额（方向相同）。',
             example: '+$40 其他收入，不选银行 → 会出现在完整历史记录中，显示为 +$40 其他。',
+          },
+          bankblock: {
+            for: '清空一个已被冻结／封锁的银行账户的追踪余额——把它从”银行余额”移到独立的银行冻结总额中。必须选择银行（没有”不选银行”的选项）。金额必须大于零。',
+            formula: '所选银行 −= 金额。银行冻结总额 += 金额（方向相反——和商店把现金存入银行正好相反）。',
+            example: 'ABA 银行被冻结，里面记录着 $800。为 ABA 银行记一笔 $800 银行冻结 → ABA 银行 −$800 · 银行冻结总额 +$800。',
           },
           buysellaud: {
             for: '记录你的”买卖澳元”余额——你买入囤积、再卖出的澳元现金或额度。不需要填写姓名，金额可正（买入）可负（卖出）。可选的”汇率”栏会把 金额×汇率 的结果写进备注，仅作备忘，不影响任何总额。',
@@ -1036,13 +1048,13 @@ const T = {
       alltypes: {
         title: 'ការពន្យល់អំពីប្រភេទកំណត់ត្រាទាំងអស់',
         intro: 'FinTrack មានប្រភេទកំណត់ត្រាច្រើនយ៉ាង។ នីមួយៗសម្រាប់ចលនាលុយផ្សេងគ្នា — នេះជាការពន្យល់ពិតប្រាកដថាមួយៗធ្វើអ្វីខ្លះទៅលើចំនួនសរុបរបស់អ្នក ហើយទៅលើធនាគារមួយ បើអ្នកជ្រើសរើសវា។',
-        note: 'គោលការណ៍៖ ដាក់ប្រាក់ធម្មតា ដកប្រាក់ធម្មតា ឥណទានមិនទាន់ដក ជួល លម្អៃ ផ្សេងៗ និងទិញ/លក់ដុល្លារអូស្ត្រាលី សុទ្ធតែជាកំណត់ត្រា «ត្រង់» — ជ្រើសរើសធនាគារមួយ គ្រាន់តែមានន័យថាលុយនោះក៏នៅក្នុងធនាគារនោះដែរ ក្នុងទិសដៅដូចគ្នា។ ហាង និងកំហុស ខុសគ្នា៖ ជ្រើសរើសធនាគារ ពិតជាផ្លាស់ទីលុយរវាងចំនួននោះ និងធនាគារ ក្នុងទិសដៅផ្ទុយគ្នា។ ការផ្ទេរ គឺតែងតែផ្លាស់ទីលុយរវាងធនាគារប៉ុណ្ណោះ។',
+        note: 'គោលការណ៍៖ ដាក់ប្រាក់ធម្មតា ដកប្រាក់ធម្មតា ឥណទានមិនទាន់ដក ជួល លម្អៃ ផ្សេងៗ និងទិញ/លក់ដុល្លារអូស្ត្រាលី សុទ្ធតែជាកំណត់ត្រា «ត្រង់» — ជ្រើសរើសធនាគារមួយ គ្រាន់តែមានន័យថាលុយនោះក៏នៅក្នុងធនាគារនោះដែរ ក្នុងទិសដៅដូចគ្នា។ ហាង និងកំហុស ខុសគ្នា៖ ជ្រើសរើសធនាគារ ពិតជាផ្លាស់ទីលុយរវាងចំនួននោះ និងធនាគារ ក្នុងទិសដៅផ្ទុយគ្នា (ដាក់សាច់ប្រាក់ចូលធនាគារ)។ ការទប់ស្កាត់ធនាគារ ត្រូវការជ្រើសរើសធនាគារជានិច្ច ហើយទិសដៅផ្ទុយ — លុយចេញពីធនាគារនោះ ចូលទៅចំនួនសរុបទប់ស្កាត់ធនាគារវិញ។ ការផ្ទេរ គឺតែងតែផ្លាស់ទីលុយរវាងធនាគារប៉ុណ្ណោះ។',
         rowsHeader: 'ប្រភេទកំណត់ត្រា',
         colHeaders: ['ចំនួនសរុបខ្លួនឯង', 'បើអ្នកជ្រើសរើសធនាគារផងដែរ'],
         rowLabels: {
           deposit: 'ដាក់ប្រាក់ធម្មតា', withdrawal: 'ដកប្រាក់ធម្មតា', unclaimed: 'ឥណទានមិនទាន់ដក',
           transfer: 'ការផ្ទេរ', store: 'ហាង', mistake: 'កំហុស', rental: 'ជួល', adjust: 'លម្អៃ', other: 'ផ្សេងៗ',
-          buysellaud: 'ទិញ/លក់ដុល្លារអូស្ត្រាលី',
+          bankblock: 'ការទប់ស្កាត់ធនាគារ', buysellaud: 'ទិញ/លក់ដុល្លារអូស្ត្រាលី',
         },
         chartCells: {
           deposit: ['+ ចំនួន → ដាក់ប្រាក់សរុប', '+ ចំនួន ធនាគារដូចគ្នា'],
@@ -1054,6 +1066,7 @@ const T = {
           rental: ['± ចំនួន → ជួល', '± ចំនួន ទិសដៅដូចគ្នា'],
           adjust: ['± ចំនួន → លម្អៃ', '± ចំនួន ទិសដៅដូចគ្នា'],
           other: ['± ចំនួន (គ្មានចំនួនសរុបលើផ្ទាំងគ្រប់គ្រង)', '± ចំនួន ទិសដៅដូចគ្នា'],
+          bankblock: ['+ ចំនួន → ចំនួនសរុបទប់ស្កាត់ធនាគារ', 'ត្រូវការជាចាំបាច់ · − ធនាគារ + ទប់ស្កាត់ធនាគារ (ផ្ទុយគ្នា)'],
           buysellaud: ['± ចំនួន → សមតុល្យទិញ/លក់ដុល្លារអូស្ត្រាលី', '± ចំនួន ទិសដៅដូចគ្នា'],
         },
         items: {
@@ -1101,6 +1114,11 @@ const T = {
             for: 'អ្វីមួយដែលមិនសមស្របនឹងប្រភេទផ្សេងទៀត។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមានឬអវិជ្ជមាន។ វាគ្មានចំនួនសរុបផ្ទាល់ខ្លួនលើផ្ទាំងគ្រប់គ្រងទេ — រកវាដោយច្រោះនៅក្នុងប្រវត្តិពេញលេញ។',
             formula: 'កត់ត្រាតាមអ្វីដែលបានវាយបញ្ចូល។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ (ទិសដៅដូចគ្នា)។',
             example: '+$40 ចំណូលផ្សេងៗ មិនជ្រើសធនាគារ → បង្ហាញនៅក្នុងប្រវត្តិពេញលេញជា +$40 ផ្សេងៗ។',
+          },
+          bankblock: {
+            for: 'សម្អាតសមតុល្យដែលបានតាមដាននៃធនាគារដែលបានកកសម្ងាត់/ទប់ស្កាត់ — ផ្លាស់ទីវាចេញពី «សមតុល្យធនាគារ» ទៅជាចំនួនសរុបទប់ស្កាត់ធនាគារដាច់ដោយឡែក។ ត្រូវការជ្រើសរើសធនាគារជានិច្ច (គ្មានជម្រើស «មិនជ្រើសធនាគារ» ទេ)។ ចំនួនត្រូវធំជាងសូន្យ។',
+            formula: 'ធនាគារដែលបានជ្រើសរើស −= ចំនួន។ ចំនួនសរុបទប់ស្កាត់ធនាគារ += ចំនួន (ទិសដៅផ្ទុយគ្នា — ផ្ទុយពីហាង ដែលដាក់សាច់ប្រាក់ចូលធនាគារ)។',
+            example: 'ធនាគារ ABA ត្រូវបានទប់ស្កាត់ដោយមានចំនួន $800 កំពុងតាមដាន។ កត់ត្រាទប់ស្កាត់ធនាគារ $800 លើធនាគារ ABA → ធនាគារ ABA −$800 · ចំនួនសរុបទប់ស្កាត់ធនាគារ +$800។',
           },
           buysellaud: {
             for: 'តាមដានសមតុល្យ «ទិញ/លក់ដុល្លារអូស្ត្រាលី» របស់អ្នក — សាច់ប្រាក់ ឬឥណទានដុល្លារអូស្ត្រាលីដែលអ្នកទិញចូល និងលក់ចេញ។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមាន (ទិញ) ឬអវិជ្ជមាន (លក់)។ វាល «អត្រា» ជាជម្រើស នឹងសរសេរ ចំនួន × អត្រា ទៅក្នុងចំណាំ ជាការចងចាំតែប៉ុណ្ណោះ — មិនប៉ះពាល់ចំនួនសរុបណាមួយឡើយ។',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { changeOwnPassword, listTeam } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
@@ -17,6 +17,8 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
   const [retryTick, setRetryTick] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
   const isMobile = useIsMobile();
+  // Identifies the signed-in session (company+user), not the `ctx` object itself.
+  const sessionKeyRef = useRef(null);
 
   useEffect(() => {
     if (!ctx || !ctx.company) { onLogout(); return; }
@@ -37,9 +39,23 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     // theme is saved. Root restores the 'app' screen from sessionStorage on reload.
     window.FINTRACK_SET_THEME = (t) => { setTheme(t); window.location.reload(); };
 
+    // Supabase re-fires onAuthStateChange (and Root.jsx rebuilds `ctx` from scratch)
+    // whenever the tab regains focus after being backgrounded, as part of its own
+    // session-refresh check — even though the signed-in company/user hasn't changed.
+    // Only treat this as a REAL reload (which resets Comp -> remounts FinTrack,
+    // losing whatever page/scroll state the user was on) when the company or user
+    // actually changed, or the user hit Retry. Otherwise just refresh the window
+    // globals below and let FinTrack's own lightweight visibility-poll (inside the
+    // artifact) pull any new data — don't force a full re-mount / full data re-fetch.
+    const sessionKey = `${ctx.company.id}|${ctx.user.id}`;
+    const isFreshSession = sessionKeyRef.current !== sessionKey;
+    sessionKeyRef.current = sessionKey;
+
     let alive = true;
-    setComp(null);
-    setLoadError(false);
+    if (isFreshSession) {
+      setComp(null);
+      setLoadError(false);
+    }
     (async () => {
       try {
         // The shift roster / off-day cards are drawn from the company's real
@@ -51,7 +67,7 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
           .filter((t) => t.active !== false)
           .map((t) => ({ id: t.id, operatorId: t.operatorId, name: t.name, role: t.role, nationality: t.nationality || '' }));
         const m = await import('./FinTrack.jsx');
-        if (alive) setComp(() => m.default);
+        if (alive) { setComp(() => m.default); setLoadError(false); }
       } catch (err) {
         // A failed/blocked chunk load (bad deploy, flaky network) rejects this
         // promise outside React's render pipeline, so ErrorBoundary in Root.jsx

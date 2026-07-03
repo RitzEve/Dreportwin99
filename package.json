@@ -1,11 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Reliability: if the financial app ever fails to load (bad connection, etc.), you now get a clear \"Couldn't load the app\" message with a Retry button instead of a spinner that never finishes."
+    "Fixed: reopening/switching back to the app tab no longer jumps you back to the Dashboard — it now stays on whatever page you were on and just quietly checks for new data, like before."
   ],
   "scripts": {
     "dev": "vite",

@@ -1,11 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.2.2",
+  "version": "2.2.3",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Redesigned the login screen: replaced the animated cursor-chasing characters with the DRW shield mark and a quiet field of gold sparkles. The brand mark now also shows on mobile, where there used to be none."
+    "The How-to guide now covers Buy/Sell AUD — the entry type for tracking your AUD currency float, including the optional exchange-rate note.",
+    "It also explains the \"Buy AUD\" withdrawal tick-box: how a withdrawal can draw from your Buy/Sell AUD balance instead of a bank, with a worked example and an updated chart.",
+    "As always, available in English, 中文 (Chinese) and ភាសាខ្មែរ (Khmer)."
   ],
   "scripts": {
     "dev": "vite",

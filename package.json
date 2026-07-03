@@ -1,11 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.2.1",
+  "version": "2.2.2",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Fixed: reopening/switching back to the app tab no longer jumps you back to the Dashboard — it now stays on whatever page you were on and just quietly checks for new data, like before."
+    "Redesigned the login screen: replaced the animated cursor-chasing characters with the DRW shield mark and a quiet field of gold sparkles. The brand mark now also shows on mobile, where there used to be none."
   ],
   "scripts": {
     "dev": "vite",

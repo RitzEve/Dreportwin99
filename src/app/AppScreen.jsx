@@ -13,6 +13,8 @@ import useIsMobile from '../lib/useIsMobile.js';
  */
 export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = true }) {
   const [Comp, setComp] = useState(null);
+  const [loadError, setLoadError] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
   const isMobile = useIsMobile();
 
@@ -36,20 +38,31 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     window.FINTRACK_SET_THEME = (t) => { setTheme(t); window.location.reload(); };
 
     let alive = true;
+    setComp(null);
+    setLoadError(false);
     (async () => {
-      // The shift roster / off-day cards are drawn from the company's real
-      // accounts, so FinTrack needs the team list too — fetch it before the
-      // import, same reason FINTRACK_SESSION is set before it (the artifact
-      // reads both ONCE at module-evaluation time).
-      const team = await listTeam(ctx.company.id).catch(() => []);
-      window.FINTRACK_TEAM = team
-        .filter((t) => t.active !== false)
-        .map((t) => ({ id: t.id, operatorId: t.operatorId, name: t.name, role: t.role, nationality: t.nationality || '' }));
-      const m = await import('./FinTrack.jsx');
-      if (alive) setComp(() => m.default);
+      try {
+        // The shift roster / off-day cards are drawn from the company's real
+        // accounts, so FinTrack needs the team list too — fetch it before the
+        // import, same reason FINTRACK_SESSION is set before it (the artifact
+        // reads both ONCE at module-evaluation time).
+        const team = await listTeam(ctx.company.id).catch(() => []);
+        window.FINTRACK_TEAM = team
+          .filter((t) => t.active !== false)
+          .map((t) => ({ id: t.id, operatorId: t.operatorId, name: t.name, role: t.role, nationality: t.nationality || '' }));
+        const m = await import('./FinTrack.jsx');
+        if (alive) setComp(() => m.default);
+      } catch (err) {
+        // A failed/blocked chunk load (bad deploy, flaky network) rejects this
+        // promise outside React's render pipeline, so ErrorBoundary in Root.jsx
+        // never sees it — without this catch the user is stuck on the loading
+        // spinner forever with no way to recover. Surface it + offer a retry.
+        console.error('AppScreen: failed to load the app', err);
+        if (alive) setLoadError(true);
+      }
     })();
     return () => { alive = false; };
-  }, [ctx, onLogout]);
+  }, [ctx, onLogout, retryTick]);
 
   return (
     <div style={styles.wrap}>
@@ -77,7 +90,20 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
       </div>
       <Guide open={guideOpen} role={ctx?.user?.role} onClose={() => setGuideOpen(false)} />
       <div style={{ ...styles.appArea, padding: isMobile ? 0 : '16px' }}>
-        {Comp ? <Comp /> : (
+        {Comp ? <Comp /> : loadError ? (
+          <div style={styles.loadingWrap}>
+            <div style={styles.errorCard}>
+              <i className="ti ti-alert-triangle" aria-hidden="true" style={styles.errorIcon} />
+              <div style={styles.errorTitle}>Couldn't load the app</div>
+              <div style={styles.errorBody}>
+                Your data is safe — this was just a loading problem. Check your connection and try again.
+              </div>
+              <button type="button" className="btn btn-primary" onClick={() => setRetryTick((n) => n + 1)}>
+                <i className="ti ti-refresh" aria-hidden="true" /> Retry
+              </button>
+            </div>
+          </div>
+        ) : (
           <div style={styles.loadingWrap}>
             <FluxLoader phases={[
               { at: 0, label: 'opening app' },
@@ -103,4 +129,8 @@ const styles = {
   dot: { opacity: 0.5 },
   appArea: { flex: 1, padding: '16px', minWidth: 0 },
   loadingWrap: { minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' },
+  errorCard: { maxWidth: 380, textAlign: 'center' },
+  errorIcon: { fontSize: 34, color: 'var(--danger)', marginBottom: 10, display: 'block' },
+  errorTitle: { fontSize: 16, fontWeight: 600, marginBottom: 6, color: 'var(--text)' },
+  errorBody: { fontSize: 13, opacity: 0.75, marginBottom: 18, lineHeight: 1.5, color: 'var(--text)' },
 };

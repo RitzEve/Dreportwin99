@@ -1,12 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.1.9",
+  "version": "2.2.0",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Dashboard: the stat cards now sit in two even rows of six (no lopsided last row) now that there are twelve of them.",
-    "Gave the new \"Bank Blocked\" card a muted steel-blue so it no longer blends in with the other blue cards."
+    "Reliability: if the financial app ever fails to load (bad connection, etc.), you now get a clear \"Couldn't load the app\" message with a Retry button instead of a spinner that never finishes."
   ],
   "scripts": {
     "dev": "vite",

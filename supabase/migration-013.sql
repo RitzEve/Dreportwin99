@@ -120,6 +120,11 @@ create policy app_data_select on public.app_data for select to authenticated
 -- Store is a running BALANCE (not a daily flow — see FinTrack.jsx), so it
 -- reports today's entry COUNT alongside the all-time balance and yesterday's
 -- close, matching exactly what the Store stat card shows inside the app.
+--
+-- Postgres refuses to CREATE OR REPLACE a function whose return columns
+-- changed ("cannot change return type of existing function") — it has to be
+-- dropped first. Harmless if it doesn't exist yet (first-ever run).
+drop function if exists public.owner_company_summaries();
 
 create or replace function public.owner_company_summaries()
 returns table (

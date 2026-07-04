@@ -876,7 +876,8 @@ export default function App() {
       try{
         const key = `fintrack-${SESSION.companyId}-v2`;
         const res = await window.storage.set(key,serialized);
-        if(cancelled || !res) return;
+        if(cancelled) return;
+        if(!res){ window.showToast?.("Couldn't save — you may be in a read-only view, or check your connection.","error"); return; }
         const serverObj = JSON.parse((res && res.value) ? res.value : serialized);
         // If the server's merge doesn't know about offDays yet (migration-009 not applied),
         // keep our local copy so they aren't lost AND the change-check settles instead of

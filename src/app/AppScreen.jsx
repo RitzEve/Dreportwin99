@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { changeOwnPassword, listTeam } from '../lib/auth.js';
+import { changeOwnPassword, listTeam, ROLES } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
 import Guide from '../screens/Guide.jsx';
@@ -104,6 +104,11 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
           <i className="ti ti-help" aria-hidden="true" style={{ fontSize: 18 }} />
         </button>
       </div>
+      {ctx?.user?.role === ROLES.OWNER && (
+        <div style={styles.readOnlyBanner}>
+          <i className="ti ti-eye" aria-hidden="true" /> Viewing as owner — read-only. Anything you try to add or change here won't be saved.
+        </div>
+      )}
       <Guide open={guideOpen} role={ctx?.user?.role} onClose={() => setGuideOpen(false)} />
       <div style={{ ...styles.appArea, padding: isMobile ? 0 : '16px' }}>
         {Comp ? <Comp /> : loadError ? (
@@ -143,6 +148,11 @@ const styles = {
   barMeta: { fontSize: 12.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 7 },
   barLogo: { height: 20, maxWidth: 130, objectFit: 'contain', display: 'block' },
   dot: { opacity: 0.5 },
+  readOnlyBanner: {
+    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', fontSize: 12.5,
+    color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+    borderBottom: '1px solid var(--border)', flexShrink: 0,
+  },
   appArea: { flex: 1, padding: '16px', minWidth: 0 },
   loadingWrap: { minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' },
   errorCard: { maxWidth: 380, textAlign: 'center' },

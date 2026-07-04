@@ -1,13 +1,13 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.2.5",
+  "version": "2.2.6",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "The Owner view now shows a clear \"read-only\" notice while looking at a company's dashboard, and a proper error if a save is ever blocked — instead of the screen quietly pretending it worked.",
     "New \"Owner\" login for a boss who oversees several companies: one card per company with today's deposits, withdrawals, Win/Loss and the Store balance.",
-    "Tapping a company's card opens its real dashboard for a closer look — view-only, so an owner login can never add or edit a company's data.",
-    "The provider backend now has an Owners section to create an owner login and tick which companies it can see."
+    "Tapping a company's card opens its real dashboard for a closer look — view-only, so an owner login can never add or edit a company's data."
   ],
   "scripts": {
     "dev": "vite",

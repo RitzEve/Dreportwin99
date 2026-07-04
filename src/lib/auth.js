@@ -5,7 +5,8 @@
  * Companies / accounts / roles live in Postgres tables (companies, profiles)
  * protected by Row-Level Security — see supabase/schema.sql.
  *
- * Roles: provider (no company) / master / manager / staff.
+ * Roles: provider (no company) / master / manager / staff / owner (no single
+ * company — linked to several via company_owners; read-only, see migration-013).
  * Every function here is ASYNC (it talks to the database).
  *
  * Account creation note: to create a login without logging the creator out, we
@@ -15,7 +16,7 @@
 
 import { supabase, makeSignupClient } from './supabaseClient.js';
 
-export const ROLES = { PROVIDER: 'provider', MASTER: 'master', MANAGER: 'manager', STAFF: 'staff' };
+export const ROLES = { PROVIDER: 'provider', MASTER: 'master', MANAGER: 'manager', STAFF: 'staff', OWNER: 'owner' };
 
 // ---- validation ------------------------------------------------------------
 
@@ -95,11 +96,11 @@ export async function getCurrentUser() {
   return profileToUser(profile, user.email);
 }
 
-/** Full context for routing: provider -> {user, company:null}; others -> {user, company}. */
+/** Full context for routing: provider/owner -> {user, company:null}; others -> {user, company}. */
 export async function loadContext() {
   const me = await getCurrentUser();
   if (!me) return null;
-  if (me.role === ROLES.PROVIDER) return { user: me, company: null };
+  if (me.role === ROLES.PROVIDER || me.role === ROLES.OWNER) return { user: me, company: null };
   const { data: company } = await supabase.from('companies').select('*').eq('id', me.companyId).maybeSingle();
   if (!company) return null;
   return { user: me, company };
@@ -466,4 +467,78 @@ export async function adminResetPassword(userId, newPassword) {
   const { error } = await supabase.rpc('admin_set_password', { target_id: userId, new_password: newPassword });
   if (error) return { ok: false, error: friendly(error) };
   return { ok: true };
+}
+
+// ---- owner accounts (span multiple companies, read-only) -------------------
+
+/** Provider creates an "owner" login — not tied to a single company. */
+export async function createOwner({ name, email, password }) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!name || !name.trim()) return { ok: false, error: 'Enter a name.' };
+  if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email.' };
+  if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
+
+  const a = await createAuthUser(email, password);
+  if (!a.ok) return a;
+  const { data, error } = await supabase.from('profiles')
+    .insert({ id: a.userId, company_id: null, role: ROLES.OWNER, name: name.trim(), username: name.trim(), email: email.trim(), active: true })
+    .select().single();
+  if (error) {
+    if (/profiles_role_check|invalid input value for enum|role/i.test(error.message || '')) {
+      return { ok: false, error: 'Owner accounts need a one-time database setup (run migration-013.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true, user: profileToUser(data) };
+}
+
+/** Provider: every owner login, each with the list of company IDs it's linked to. */
+export async function listOwners() {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return [];
+  const { data: owners, error } = await supabase.from('profiles').select('*').eq('role', ROLES.OWNER).order('created_at');
+  if (error) return [];
+  const { data: links } = await supabase.from('company_owners').select('owner_id, company_id');
+  const all = links || [];
+  return owners.map((p) => ({ ...profileToUser(p), companyIds: all.filter((l) => l.owner_id === p.id).map((l) => l.company_id) }));
+}
+
+/** Provider links (linked=true) or unlinks (linked=false) a company to an owner. */
+export async function setOwnerCompanyLink(ownerId, companyId, linked) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (linked) {
+    const { error } = await supabase.from('company_owners').insert({ owner_id: ownerId, company_id: companyId });
+    if (error && !/duplicate key/i.test(error.message || '')) {
+      if (/company_owners|does not exist|schema cache/i.test(error.message || '')) {
+        return { ok: false, error: 'Owner accounts need a one-time database setup (run migration-013.sql in Supabase).' };
+      }
+      return { ok: false, error: friendly(error) };
+    }
+  } else {
+    const { error } = await supabase.from('company_owners').delete().eq('owner_id', ownerId).eq('company_id', companyId);
+    if (error) return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
+}
+
+/** Owner: today's deposits/withdrawals + store balance for every linked company. */
+export async function getOwnerSummaries() {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.OWNER) return { ok: false, error: 'Not authorised.', rows: [] };
+  const { data, error } = await supabase.rpc('owner_company_summaries');
+  if (error) {
+    if (/owner_company_summaries|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      return { ok: false, error: 'This needs a one-time database setup (run migration-013.sql in Supabase).', rows: [] };
+    }
+    return { ok: false, error: friendly(error), rows: [] };
+  }
+  return { ok: true, rows: (data || []).map((r) => ({
+    companyId: r.company_id, name: r.name, logo: r.logo, timezone: r.timezone, asOfDate: r.as_of_date,
+    depositsCount: r.deposits_count, depositsAmount: r.deposits_amount,
+    withdrawalsCount: r.withdrawals_count, withdrawalsAmount: r.withdrawals_amount,
+    storeCountToday: r.store_count_today, storeBalance: r.store_balance, storeYesterday: r.store_yesterday,
+    updatedAt: r.updated_at,
+  })) };
 }

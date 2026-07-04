@@ -11,7 +11,7 @@ import useIsMobile from '../lib/useIsMobile.js';
  * The artifact reads `window.FINTRACK_SESSION` ONCE at module-evaluation time, so
  * we set the session BEFORE importing it (the import is dynamic, inside the effect).
  */
-export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = true }) {
+export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = true, backLabel = 'Console' }) {
   const [Comp, setComp] = useState(null);
   const [loadError, setLoadError] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
@@ -85,7 +85,7 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
       <div style={styles.bar}>
         {canReturnToConsole ? (
           <button className="btn btn-ghost btn-sm" onClick={onExit}>
-            <i className="ti ti-chevron-left" aria-hidden="true" /> Console
+            <i className="ti ti-chevron-left" aria-hidden="true" /> {backLabel}
           </button>
         ) : (
           <button className="btn btn-ghost btn-sm" onClick={onLogout}>

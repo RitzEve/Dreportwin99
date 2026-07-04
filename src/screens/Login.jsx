@@ -141,7 +141,7 @@ export default function Login({ onAuthed }) {
           <InstallPrompt />
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · V2.2.2
+            Secure access · authorised accounts only · V2.2.5
           </div>
         </div>
       </div>

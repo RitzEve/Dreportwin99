@@ -11,6 +11,9 @@ import {
   updateAccountInfo,
   setCompanyLogo,
   purgeOrphanLogins,
+  createOwner,
+  listOwners,
+  setOwnerCompanyLink,
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
@@ -72,6 +75,7 @@ export default function Provider({ ctx, onLogout }) {
         <div style={{ ...styles.grid, gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 340px) minmax(0, 1fr)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <CreateCompany onCreated={refresh} />
+            <OwnersCard companies={companies || []} />
             <MaintenanceCard />
           </div>
 
@@ -153,6 +157,104 @@ function CreateCompany({ onCreated }) {
   );
 }
 
+/* Owner logins: one login, linked to several companies, for a bird's-eye view
+ * (today's deposits/withdrawals/store) without a separate password per company. */
+function OwnersCard({ companies }) {
+  const blank = { name: '', email: '', password: '' };
+  const [owners, setOwners] = useState(null);
+  const [form, setForm] = useState(blank);
+  const [error, setError] = useState('');
+  const [ok, setOk] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+  const [linkBusy, setLinkBusy] = useState(null);
+
+  async function refresh() {
+    setOwners(await listOwners());
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(''); setOk(''); setBusy(true);
+    const res = await createOwner(form);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOk(`Created owner ${res.user.name}. Link companies below.`);
+    setForm(blank);
+    refresh();
+  }
+
+  async function toggleLink(ownerId, companyId, linked) {
+    const key = `${ownerId}:${companyId}`;
+    setLinkBusy(key);
+    const res = await setOwnerCompanyLink(ownerId, companyId, linked);
+    setLinkBusy(null);
+    if (!res.ok) { window.showToast?.(res.error, 'error'); return; }
+    refresh();
+  }
+
+  return (
+    <section style={styles.card}>
+      <h3 style={styles.cardTitle}><i className="ti ti-crown" aria-hidden="true" /> Owners</h3>
+      <p style={styles.cardSub}>
+        An owner logs in once and sees today's numbers for every company you link them to below —
+        no separate password per company, and they can't edit any company's data.
+      </p>
+      <form onSubmit={submit}>
+        <div className="field"><label>Name / ID</label>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. The Boss" /></div>
+        <div className="field"><label>Email</label>
+          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="boss@example.com" /></div>
+        <div className="field"><label>Temp password</label>
+          <input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="≥ 6 characters" /></div>
+        {error && <div className="error-text">{error}</div>}
+        {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
+        <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 6 }} disabled={busy}>
+          <i className={`ti ti-${busy ? 'loader-2' : 'plus'}`} aria-hidden="true" /> {busy ? 'Creating…' : 'Create owner'}
+        </button>
+      </form>
+
+      {owners === null && <p style={{ ...styles.cardSub, marginTop: 12, marginBottom: 0 }}>Loading…</p>}
+      {owners && owners.length === 0 && <p style={{ ...styles.cardSub, marginTop: 12, marginBottom: 0 }}>No owners yet.</p>}
+
+      {owners && owners.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          {owners.map((o) => (
+            <div key={o.id} style={styles.masterRow}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>
+                  {o.name} <span className="badge badge-owner" style={{ marginLeft: 4 }}>Owner</span>
+                </div>
+                <div style={styles.sub}>{o.email} · {o.companyIds.length} compan{o.companyIds.length === 1 ? 'y' : 'ies'} linked</div>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}>
+                <i className={`ti ti-${expandedId === o.id ? 'chevron-up' : 'link'}`} aria-hidden="true" /> {expandedId === o.id ? 'Close' : 'Link companies'}
+              </button>
+              {expandedId === o.id && (
+                <div style={{ ...styles.editBox, gap: 4 }}>
+                  {companies.length === 0 && <div style={styles.sub}>No companies yet.</div>}
+                  {companies.map((c) => {
+                    const linked = o.companyIds.includes(c.id);
+                    const key = `${o.id}:${c.id}`;
+                    return (
+                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', cursor: linkBusy === key ? 'wait' : 'pointer' }}>
+                        <input type="checkbox" checked={linked} disabled={linkBusy === key}
+                          onChange={(e) => toggleLink(o.id, c.id, e.target.checked)} />
+                        {c.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* One-click cleanup of leftover login emails from already-deleted accounts. */
 function MaintenanceCard() {
   const [confirming, setConfirming] = useState(false);
@@ -209,6 +311,7 @@ function MaintenanceCard() {
 }
 
 function CompanyCard({ company, onChanged }) {
+  const isMobile = useIsMobile();
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [adding, setAdding] = useState(false);

@@ -157,6 +157,7 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 .badge-master { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .badge-manager { background: color-mix(in srgb, #7c3aed 16%, transparent); color: #7c3aed; }
 .badge-provider { background: color-mix(in srgb, #0d9488 18%, transparent); color: #0d9488; }
+.badge-owner { background: color-mix(in srgb, #2563eb 16%, transparent); color: #2563eb; }
 .badge-staff { background: var(--surface-2); color: var(--muted); }
 .badge-off { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 

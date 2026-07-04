@@ -23,6 +23,14 @@ function useSparkles(count) {
   })), [count]);
 }
 
+// Client-side speed bump only — a page refresh or a different browser resets
+// it. Real enforcement lives in Supabase's own auth rate limits; this just
+// stops casual repeated guessing from the form itself.
+const MAX_ATTEMPTS = 5;
+const COOLDOWN_SECONDS = 30;
+const ATTEMPTS_KEY = 'drw_login_attempts';
+const LOCKOUT_KEY = 'drw_login_lockout_until';
+
 function ShieldMark({ size = 64, wordmark = false }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: wordmark ? 14 : 0 }}>
@@ -49,6 +57,8 @@ export default function Login({ onAuthed }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [isWide, setIsWide] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  const [lockedUntil, setLockedUntil] = useState(() => Number(localStorage.getItem(LOCKOUT_KEY)) || 0);
+  const [secondsLeft, setSecondsLeft] = useState(0);
 
   const sparkles = useSparkles(55);
 
@@ -59,13 +69,50 @@ export default function Login({ onAuthed }) {
     return () => mq.removeEventListener('change', onResize);
   }, []);
 
+  // Countdown while locked out; clears itself (and the stored counters) at zero.
+  useEffect(() => {
+    if (!lockedUntil) { setSecondsLeft(0); return; }
+    const tick = () => {
+      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        localStorage.removeItem(LOCKOUT_KEY);
+        localStorage.removeItem(ATTEMPTS_KEY);
+        setLockedUntil(0);
+        setSecondsLeft(0);
+      } else {
+        setSecondsLeft(remaining);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
+
+  const locked = secondsLeft > 0;
+
   async function submit(e) {
     e.preventDefault();
+    if (lockedUntil && Date.now() < lockedUntil) return;
     setError('');
     setBusy(true);
     const res = await login({ identifier, password });
     setBusy(false);
-    if (!res.ok) return setError(res.error);
+    if (!res.ok) {
+      const attempts = (Number(localStorage.getItem(ATTEMPTS_KEY)) || 0) + 1;
+      if (attempts >= MAX_ATTEMPTS) {
+        const until = Date.now() + COOLDOWN_SECONDS * 1000;
+        localStorage.setItem(LOCKOUT_KEY, String(until));
+        localStorage.removeItem(ATTEMPTS_KEY);
+        setLockedUntil(until);
+        setError('Too many attempts. Please wait before trying again.');
+      } else {
+        localStorage.setItem(ATTEMPTS_KEY, String(attempts));
+        setError(res.error);
+      }
+      return;
+    }
+    localStorage.removeItem(ATTEMPTS_KEY);
+    localStorage.removeItem(LOCKOUT_KEY);
     onAuthed();
   }
 
@@ -133,15 +180,15 @@ export default function Login({ onAuthed }) {
 
             {error && <div className="error-text" style={{ marginBottom: 12, marginTop: 4 }}>{error}</div>}
 
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', height: 48, fontSize: 15 }} disabled={busy}>
-              <i className={`ti ti-${busy ? 'loader-2' : 'login-2'}`} aria-hidden="true" /> {busy ? 'Signing in…' : 'Log in'}
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', height: 48, fontSize: 15 }} disabled={busy || locked}>
+              <i className={`ti ti-${locked ? 'lock' : busy ? 'loader-2' : 'login-2'}`} aria-hidden="true" /> {locked ? `Try again in ${secondsLeft}s` : busy ? 'Signing in…' : 'Log in'}
             </button>
           </form>
 
           <InstallPrompt />
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · V2.2.9
+            Secure access · authorised accounts only · V2.3.0
           </div>
         </div>
       </div>

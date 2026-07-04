@@ -24,3 +24,17 @@
   for = "/manifest.webmanifest"
   [headers.values]
     Content-Type = "application/manifest+json"
+
+# Security headers on every response. The script/style policy stays a little
+# loose (allows inline) because the Members-directory and receipt "print"
+# buttons open a popup window and write their own <script>/<style> straight
+# into it (FinTrack.jsx) rather than loading them from a file — a stricter
+# policy would silently stop those from auto-printing.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:; img-src 'self' data: blob:; connect-src 'self' https://vveydcmdsmucaoqitnch.supabase.co wss://vveydcmdsmucaoqitnch.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"

@@ -61,7 +61,7 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
 
   return (
     <div style={styles.page}>
-      <header style={styles.topbar}>
+      <header style={{ ...styles.topbar, padding: isMobile ? '12px 16px' : '14px 24px' }}>
         <div style={styles.brand}>
           <div style={styles.logo}><i className="ti ti-crown" aria-hidden="true" /></div>
           <div>
@@ -71,7 +71,7 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
             </div>
           </div>
         </div>
-        <div style={styles.userBox}>
+        <div style={isMobile ? styles.userBoxMobile : styles.userBox}>
           <div style={styles.dateBox}>
             <label htmlFor="owner-date" style={styles.dateLabel}>Date</label>
             <input id="owner-date" type="date" value={displayDate} max={todayLocal()}
@@ -80,10 +80,16 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPickedDate('')}>Today</button>
             )}
           </div>
-          <UpdateBell />
-          <ThemeToggle />
-          <span className="badge badge-owner"><i className="ti ti-crown" aria-hidden="true" /> Owner</span>
-          <AccountMenu user={user} roleLabel="Owner" onLogout={onLogout} />
+          {/* Its own row, right-aligned, on mobile — keeps the account menu pinned to the
+              true right edge of the screen so its dropdown (position:absolute, right:0)
+              always has room to open on-screen, instead of landing wherever flex-wrap
+              happens to strand it. */}
+          <div style={isMobile ? styles.actionsMobile : styles.actions}>
+            <UpdateBell />
+            <ThemeToggle />
+            <span className="badge badge-owner"><i className="ti ti-crown" aria-hidden="true" /> Owner</span>
+            <AccountMenu user={user} roleLabel="Owner" onLogout={onLogout} />
+          </div>
         </div>
       </header>
 
@@ -163,8 +169,15 @@ const styles = {
   title: { fontSize: 16, fontWeight: 600 },
   sub: { fontSize: 12, color: 'var(--muted)' },
   userBox: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
-  dateBox: { display: 'flex', alignItems: 'center', gap: 8 },
+  // Mobile: date control and the icon/account cluster each become their own full-width
+  // row (stacked), instead of sharing one wrapped row where they land unpredictably.
+  userBoxMobile: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', width: '100%', gap: 10 },
+  dateBox: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   dateLabel: { fontSize: 12, color: 'var(--muted)' },
+  actions: { display: 'flex', alignItems: 'center', gap: 12 },
+  // Right-aligned on its own full-width row — keeps AccountMenu's trigger pinned to the
+  // true right edge, so its dropdown (position:absolute, right:0) never opens off-screen.
+  actionsMobile: { display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' },
   main: { flex: 1, width: '100%', maxWidth: 1200, margin: '0 auto', padding: 24 },
   emptyText: { fontSize: 13.5, color: 'var(--muted)' },
   companyCard: {

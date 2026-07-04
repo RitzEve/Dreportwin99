@@ -26,5 +26,7 @@ export default defineConfig({
   plugins: [react(), emitVersionJson(pkg.version, pkg.whatsNew)],
   // Inject the build-time version so the running tab knows its own version.
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
-  server: { port: 5173, open: true },
+  // PORT lets a second concurrent dev server (e.g. another editor session) pick a
+  // free port instead of colliding with this one; defaults to 5173 unmodified.
+  server: { port: Number(process.env.PORT) || 5173, open: true },
 });

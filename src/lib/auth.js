@@ -523,18 +523,30 @@ export async function setOwnerCompanyLink(ownerId, companyId, linked) {
   return { ok: true };
 }
 
-/** Owner: today's deposits/withdrawals + store balance for every linked company. */
-export async function getOwnerSummaries() {
+/**
+ * Owner: deposits/withdrawals + store balance for every linked company, scoped to
+ * one date. Pass 'YYYY-MM-DD' to look at a specific day; omit it for each company's
+ * own "today" (per its own time zone).
+ */
+export async function getOwnerSummaries(date) {
   const me = await getCurrentUser();
   if (!me || me.role !== ROLES.OWNER) return { ok: false, error: 'Not authorised.', rows: [] };
-  const { data, error } = await supabase.rpc('owner_company_summaries');
+
+  let { data, error } = await supabase.rpc('owner_company_summaries', { p_date: date || null });
+  let dateUnsupported = false;
+  // migration-014 (adds the date parameter) not run yet — fall back to the original
+  // zero-argument version so the overview itself doesn't break, just date-picking.
+  if (error && /does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+    dateUnsupported = true;
+    ({ data, error } = await supabase.rpc('owner_company_summaries'));
+  }
   if (error) {
-    if (/owner_company_summaries|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+    if (/owner_company_summaries/i.test(error.message || '')) {
       return { ok: false, error: 'This needs a one-time database setup (run migration-013.sql in Supabase).', rows: [] };
     }
     return { ok: false, error: friendly(error), rows: [] };
   }
-  return { ok: true, rows: (data || []).map((r) => ({
+  return { ok: true, dateUnsupported: dateUnsupported && !!date, rows: (data || []).map((r) => ({
     companyId: r.company_id, name: r.name, logo: r.logo, timezone: r.timezone, asOfDate: r.as_of_date,
     depositsCount: r.deposits_count, depositsAmount: r.deposits_amount,
     withdrawalsCount: r.withdrawals_count, withdrawalsAmount: r.withdrawals_amount,

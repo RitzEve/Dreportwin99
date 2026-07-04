@@ -15,26 +15,49 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// The browser's own local calendar date, as 'YYYY-MM-DD' (not toISOString(),
+// which is UTC and can land on the wrong day near midnight).
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function fmtChosenDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 /*
  * OwnerOverview — lands here after an "owner" login: one card per company the
- * provider has linked to this account, showing today's deposits, withdrawals,
- * Win/Loss and the Store balance. Read-only — see migration-013.sql, which
- * grants an owner read access but never touches any write policy, so this view
- * (and the full dashboard a card opens into) can't edit any company's data.
+ * provider has linked to this account, showing that day's deposits, withdrawals,
+ * Win/Loss and the Store balance for a chosen date (defaults to today). Read-only
+ * — see migration-013.sql, which grants an owner read access but never touches
+ * any write policy, so this view (and the full dashboard a card opens into)
+ * can't edit any company's data.
  */
 export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
   const { user } = ctx;
   const isMobile = useIsMobile();
   const [rows, setRows] = useState(null); // null = loading
   const [error, setError] = useState('');
+  const [dateUnsupported, setDateUnsupported] = useState(false);
+  // '' = live "today", computed per company's own time zone (the original default
+  // behaviour). Only becomes a real value once the owner picks a specific date —
+  // at that point it's the SAME literal date applied to every company, which is
+  // what makes a side-by-side comparison across companies meaningful.
+  const [pickedDate, setPickedDate] = useState('');
 
-  async function refresh() {
-    const res = await getOwnerSummaries();
+  const isToday = !pickedDate;
+  const displayDate = pickedDate || todayLocal();
+
+  async function refresh(date) {
+    const res = await getOwnerSummaries(date || undefined);
     if (!res.ok) { setError(res.error); setRows([]); return; }
     setError('');
+    setDateUnsupported(!!res.dateUnsupported);
     setRows(res.rows);
   }
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(pickedDate); }, [pickedDate]);
 
   return (
     <div style={styles.page}>
@@ -43,10 +66,20 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
           <div style={styles.logo}><i className="ti ti-crown" aria-hidden="true" /></div>
           <div>
             <div style={styles.title}>Owner overview</div>
-            <div style={styles.sub}>Today's numbers across every company you own</div>
+            <div style={styles.sub}>
+              {isToday || dateUnsupported ? "Today's numbers across every company you own" : `Numbers for ${fmtChosenDate(displayDate)}`}
+            </div>
           </div>
         </div>
         <div style={styles.userBox}>
+          <div style={styles.dateBox}>
+            <label htmlFor="owner-date" style={styles.dateLabel}>Date</label>
+            <input id="owner-date" type="date" value={displayDate} max={todayLocal()}
+              onChange={(e) => setPickedDate(e.target.value)} style={{ padding: '6px 8px', fontSize: 13 }} />
+            {!isToday && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPickedDate('')}>Today</button>
+            )}
+          </div>
           <UpdateBell />
           <ThemeToggle />
           <span className="badge badge-owner"><i className="ti ti-crown" aria-hidden="true" /> Owner</span>
@@ -56,6 +89,11 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
 
       <main style={{ ...styles.main, padding: isMobile ? 14 : 24 }}>
         {error && <div className="error-text" style={{ marginBottom: 16 }}>{error}</div>}
+        {dateUnsupported && !error && (
+          <div className="error-text" style={{ marginBottom: 16 }}>
+            Picking a date needs a one-time database update — showing today's numbers instead. Ask your provider to run migration-014.sql.
+          </div>
+        )}
         {rows === null && !error && <p style={styles.emptyText}>Loading…</p>}
         {rows && rows.length === 0 && !error && (
           <p style={styles.emptyText}>No companies are linked to your account yet — ask your provider to link one.</p>
@@ -63,7 +101,7 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
           {rows && rows.map((r) => (
-            <CompanyCard key={r.companyId} row={r}
+            <CompanyCard key={r.companyId} row={r} isToday={isToday || dateUnsupported}
               onOpen={() => onOpenCompany({ id: r.companyId, name: r.name, logo: r.logo, timezone: r.timezone })} />
           ))}
         </div>
@@ -72,8 +110,9 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
   );
 }
 
-function CompanyCard({ row, onOpen }) {
+function CompanyCard({ row, isToday, onOpen }) {
   const win = (row.depositsAmount || 0) - (row.withdrawalsAmount || 0);
+  const countSuffix = isToday ? 'today' : 'that day';
   return (
     <button type="button" onClick={onOpen} style={styles.companyCard}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
@@ -90,20 +129,20 @@ function CompanyCard({ row, onOpen }) {
       </div>
 
       <div style={styles.statGrid}>
-        <Stat label="Deposits" count={row.depositsCount} amount={row.depositsAmount} color="var(--success)" />
-        <Stat label="Withdrawals" count={row.withdrawalsCount} amount={row.withdrawalsAmount} color="var(--danger)" />
+        <Stat label="Deposits" count={row.depositsCount} countSuffix={countSuffix} amount={row.depositsAmount} color="var(--success)" />
+        <Stat label="Withdrawals" count={row.withdrawalsCount} countSuffix={countSuffix} amount={row.withdrawalsAmount} color="var(--danger)" />
         <Stat label="Win / Loss" amount={win} color={win >= 0 ? 'var(--success)' : 'var(--danger)'} />
-        <Stat label="Store" count={row.storeCountToday} amount={row.storeBalance} color="var(--accent)"
-          note={`yesterday ${fmt(row.storeYesterday)}`} />
+        <Stat label="Store" count={row.storeCountToday} countSuffix={countSuffix} amount={row.storeBalance} color="var(--accent)"
+          note={`${isToday ? 'yesterday' : 'day before'} ${fmt(row.storeYesterday)}`} />
       </div>
     </button>
   );
 }
 
-function Stat({ label, count, amount, color, note }) {
+function Stat({ label, count, countSuffix, amount, color, note }) {
   return (
     <div style={styles.stat}>
-      <div style={styles.statLabel}>{label}{count != null && <span style={styles.statCount}> · {count} today</span>}</div>
+      <div style={styles.statLabel}>{label}{count != null && <span style={styles.statCount}> · {count} {countSuffix}</span>}</div>
       <div style={{ ...styles.statAmount, color }}>{fmt(amount)}</div>
       {note && <div style={styles.statNote}>{note}</div>}
     </div>
@@ -123,7 +162,9 @@ const styles = {
   },
   title: { fontSize: 16, fontWeight: 600 },
   sub: { fontSize: 12, color: 'var(--muted)' },
-  userBox: { display: 'flex', alignItems: 'center', gap: 12 },
+  userBox: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
+  dateBox: { display: 'flex', alignItems: 'center', gap: 8 },
+  dateLabel: { fontSize: 12, color: 'var(--muted)' },
   main: { flex: 1, width: '100%', maxWidth: 1200, margin: '0 auto', padding: 24 },
   emptyText: { fontSize: 13.5, color: 'var(--muted)' },
   companyCard: {

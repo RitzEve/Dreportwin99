@@ -232,16 +232,24 @@ function OwnersCard({ companies }) {
                 <i className={`ti ti-${expandedId === o.id ? 'chevron-up' : 'link'}`} aria-hidden="true" /> {expandedId === o.id ? 'Close' : 'Link companies'}
               </button>
               {expandedId === o.id && (
-                <div style={{ ...styles.editBox, gap: 4 }}>
+                <div style={{ ...styles.editBox, gap: 2 }}>
                   {companies.length === 0 && <div style={styles.sub}>No companies yet.</div>}
                   {companies.map((c) => {
                     const linked = o.companyIds.includes(c.id);
                     const key = `${o.id}:${c.id}`;
                     return (
-                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', cursor: linkBusy === key ? 'wait' : 'pointer' }}>
+                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, padding: '6px 4px', borderRadius: 7, cursor: linkBusy === key ? 'wait' : 'pointer' }}>
+                        {/* `input, select { width:100% }` is a global rule for text/select fields —
+                            override it here so this checkbox renders natively instead of stretched. */}
                         <input type="checkbox" checked={linked} disabled={linkBusy === key}
-                          onChange={(e) => toggleLink(o.id, c.id, e.target.checked)} />
-                        {c.name}
+                          onChange={(e) => toggleLink(o.id, c.id, e.target.checked)}
+                          style={{ width: 16, height: 16, minWidth: 16, padding: 0, border: 'revert', borderRadius: 'revert', background: 'revert', flexShrink: 0, accentColor: 'var(--accent)' }} />
+                        {c.logo
+                          ? <img src={c.logo} alt="" style={{ height: 20, maxWidth: 64, objectFit: 'contain', borderRadius: 4, flexShrink: 0 }} />
+                          : <div style={{ width: 22, height: 22, borderRadius: 5, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <i className="ti ti-building" aria-hidden="true" style={{ fontSize: 12, color: 'var(--muted)' }} />
+                            </div>}
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
                       </label>
                     );
                   })}

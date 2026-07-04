@@ -98,6 +98,9 @@ export default function Login({ onAuthed }) {
     const res = await login({ identifier, password });
     setBusy(false);
     if (!res.ok) {
+      // A server-side rate limit isn't a wrong guess — don't count it against the
+      // local attempt counter or stack our own cooldown on top of Supabase's.
+      if (res.rateLimited) { setError(res.error); return; }
       const attempts = (Number(localStorage.getItem(ATTEMPTS_KEY)) || 0) + 1;
       if (attempts >= MAX_ATTEMPTS) {
         const until = Date.now() + COOLDOWN_SECONDS * 1000;
@@ -188,7 +191,7 @@ export default function Login({ onAuthed }) {
           <InstallPrompt />
 
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · V2.3.0
+            Secure access · authorised accounts only · V2.3.1
           </div>
         </div>
       </div>

@@ -108,6 +108,14 @@ export async function loadContext() {
 
 // ---- login / logout / own password ----------------------------------------
 
+const RATE_LIMIT_MESSAGE = 'Too many login attempts from your network right now. Please wait a few minutes and try again.';
+
+/** True for Supabase's own "too many requests" auth error, under whatever shape this SDK version uses. */
+function isRateLimited(error) {
+  if (!error) return false;
+  return error.status === 429 || error.code === 'over_request_rate_limit' || /rate limit/i.test(error.message || '');
+}
+
 /** Login by Name/ID OR email (+ password). */
 export async function login({ identifier, password }) {
   const id = String(identifier || '').trim();
@@ -117,12 +125,14 @@ export async function login({ identifier, password }) {
   if (!id.includes('@')) {
     // Resolve a Name/ID to its login email (DB function, callable before sign-in).
     const { data, error } = await supabase.rpc('email_for_login', { identifier: id });
-    if (error || !data) return { ok: false, error: 'Incorrect Name/ID or password.' };
+    if (error) return { ok: false, error: isRateLimited(error) ? RATE_LIMIT_MESSAGE : 'Incorrect Name/ID or password.', rateLimited: isRateLimited(error) };
+    if (!data) return { ok: false, error: 'Incorrect Name/ID or password.' };
     email = data;
   }
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
+    if (isRateLimited(error)) return { ok: false, error: RATE_LIMIT_MESSAGE, rateLimited: true };
     if (/email not confirmed/i.test(error.message)) return { ok: false, error: 'Account not active yet — contact your administrator.' };
     return { ok: false, error: 'Incorrect Name/ID, email, or password.' };
   }

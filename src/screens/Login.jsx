@@ -1,33 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { login } from '../lib/auth.js';
 import { applyTheme } from '../lib/theme.js';
 import InstallPrompt from '../components/InstallPrompt.jsx';
 import UpdateBell from '../components/UpdateBell.jsx';
 
+// Lazy-loaded: Three.js + @react-three/fiber + @react-three/drei add ~230KB
+// gzipped, which would otherwise bloat EVERY page's bundle (Provider/Console/
+// FinTrack included) just for this login-screen decoration. Split into its
+// own chunk, fetched only once Login.jsx actually renders — someone already
+// signed in (session persists) never mounts Login at all, so they never pay
+// for this chunk, same reasoning as FinTrack.jsx's own lazy-load in AppScreen.jsx.
+const Beams = lazy(() => import('../components/Beams.jsx'));
+
 /*
- * Login — email/Name-ID + password, staged over a full-bleed dark hero: soft
- * gold light beams sweeping behind a centred glass card (nothing tracks the
- * cursor — recreated in CSS from a react-bits "Beams" reference the user
- * liked, since this project has no Tailwind/shadcn/WebGL dependency to
- * install it via, see multi-company-portal memory). Always dark, regardless
- * of the site's light/dark setting — this is a fixed brand moment, not a
- * themed page. No company picker / self-registration: the provider creates
+ * Login — email/Name-ID + password, staged over a full-bleed dark hero: the
+ * real react-bits "Beams" component (Three.js / @react-three/fiber), gold-
+ * tinted to match the brand, sweeping behind a centred glass card (nothing
+ * tracks the cursor — a first CSS-only approximation wasn't what the user
+ * wanted, so this ports the actual WebGL component; see multi-company-portal
+ * memory for why that's fine here even without shadcn/Tailwind/TypeScript —
+ * R3F itself has no dependency on any of those). Always dark, regardless of
+ * the site's light/dark setting — this is a fixed brand moment, not a themed
+ * page. No company picker / self-registration: the provider creates
  * companies + master accounts, and email is globally unique.
  */
-
-// Deterministic pseudo-random beam field, generated once per mount. Spread
-// wider than the viewport (-15% to 115%) because each beam is rotated, which
-// swings its top/bottom ends sideways — without the extra margin, beams near
-// the edges would rotate their visible portion off-screen.
-function useBeams(count) {
-  return useMemo(() => Array.from({ length: count }, (_, i) => ({
-    key: i,
-    left: -15 + (i / (count - 1)) * 130 + (Math.random() * 4 - 2),
-    width: 2 + Math.random() * 3,
-    delay: Math.random() * 5,
-    duration: 4.5 + Math.random() * 4,
-  })), [count]);
-}
 
 // Client-side speed bump only — a page refresh or a different browser resets
 // it. Real enforcement lives in Supabase's own auth rate limits; this just
@@ -65,7 +61,9 @@ export default function Login({ onAuthed }) {
   const [lockedUntil, setLockedUntil] = useState(() => Number(localStorage.getItem(LOCKOUT_KEY)) || 0);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
-  const beams = useBeams(16);
+  // Skip the WebGL canvas entirely for reduced-motion users — no motion, no
+  // GPU/battery cost, just the plain gradient background underneath it.
+  const [reducedMotion] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   // This screen is always the dark brand look, independent of the site's own
   // light/dark toggle. Force it just while mounted, then hand back whatever
@@ -136,20 +134,14 @@ export default function Login({ onAuthed }) {
         <UpdateBell />
       </div>
 
-      {/* Ambient hero: sweeping gold light beams + a vignette, full-bleed behind the card */}
-      <div style={styles.beamField} aria-hidden="true">
-        {beams.map((b) => (
-          <div key={b.key} data-motion="beam" style={{
-            position: 'absolute', top: '-25%', left: `${b.left}%`,
-            width: b.width, height: '150%',
-            background: 'linear-gradient(to bottom, transparent 0%, rgba(227,179,65,0.85) 45%, rgba(244,236,216,0.35) 55%, transparent 100%)',
-            filter: 'blur(2.5px)',
-            transform: 'rotate(-25deg)',
-            opacity: 0.1,
-            animation: `login-beam-glow ${b.duration}s ease-in-out ${b.delay}s infinite`,
-          }} />
-        ))}
-      </div>
+      {/* Ambient hero: react-bits Beams (WebGL), gold-tinted, + a vignette, full-bleed behind the card */}
+      {!reducedMotion && (
+        <div style={styles.beamField} aria-hidden="true">
+          <Suspense fallback={null}>
+            <Beams beamWidth={2} beamHeight={15} beamNumber={12} lightColor="#e3b341" speed={2} noiseIntensity={1.75} scale={0.2} rotation={-25} />
+          </Suspense>
+        </div>
+      )}
       <div style={styles.vignette} aria-hidden="true" />
 
       {/* Login card */}
@@ -194,7 +186,7 @@ export default function Login({ onAuthed }) {
         <InstallPrompt />
 
         <div style={styles.footer}>
-          Secure access · authorised accounts only · V2.3.7
+          Secure access · authorised accounts only · V2.3.8
         </div>
       </div>
     </div>

@@ -37,11 +37,24 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// Generic matchMedia hook, local to this file (useIsMobile.js already covers the
+// narrow end; this covers the wide end for the 3-column desktop layout below).
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = (e) => setMatches(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
 export default function Provider({ ctx, onLogout }) {
   const { user } = ctx;
   const isMobile = useIsMobile();
+  const isWide = useMediaQuery('(min-width: 1200px)');
   const [companies, setCompanies] = useState(null); // null = loading
-  const [query, setQuery] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
   const [billing, setBilling] = useState(null); // null = loading; array of {companyId, startedAt, rentalFee, rentalPaid, rentalPaidAt}
   const [billingError, setBillingError] = useState('');
@@ -54,13 +67,15 @@ export default function Provider({ ctx, onLogout }) {
   }
   useEffect(() => { refresh(); }, []);
 
-  const q = query.trim().toLowerCase();
-  const filtered = !companies ? [] : q
-    ? companies.filter(
-        (c) => c.name.toLowerCase().includes(q) ||
-          c.masters.some((m) => (m.email || '').toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
-      )
-    : companies;
+  const leftColumn = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <CreateCompany onCreated={refresh} />
+      <OwnersCard companies={companies || []} />
+      <MaintenanceCard />
+    </div>
+  );
+  const companiesSection = <CompaniesCard companies={companies} billing={billing} onChanged={refresh} />;
+  const billingSection = <BillingCard companies={companies || []} billing={billing} billingError={billingError} onChanged={refresh} />;
 
   return (
     <div style={styles.page}>
@@ -84,48 +99,65 @@ export default function Provider({ ctx, onLogout }) {
       </header>
       <Guide open={guideOpen} role={user.role} onClose={() => setGuideOpen(false)} />
 
-      <main style={{ ...styles.main, padding: isMobile ? 14 : 24 }}>
-        <div style={{ ...styles.grid, gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 340px) minmax(0, 1fr)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <CreateCompany onCreated={refresh} />
-            <OwnersCard companies={companies || []} />
-            <MaintenanceCard />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <section style={styles.card}>
-              <div style={styles.companiesHead}>
-                <h3 style={{ ...styles.cardTitle, margin: 0 }}>
-                  <i className="ti ti-building" aria-hidden="true" /> Companies {companies ? `(${companies.length})` : ''}
-                </h3>
-                <div style={styles.searchWrap}>
-                  <i className="ti ti-search" aria-hidden="true" style={styles.searchIcon} />
-                  <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search company or master…" style={styles.searchInput} />
-                  {query && (
-                    <button type="button" onClick={() => setQuery('')} style={styles.searchClear} aria-label="Clear search">
-                      <i className="ti ti-x" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {companies === null && <p style={styles.cardSub}>Loading…</p>}
-              {companies && companies.length === 0 && <p style={styles.cardSub}>No companies yet — create one on the left.</p>}
-              {companies && companies.length > 0 && filtered.length === 0 && (
-                <p style={styles.cardSub}>No companies match “{query}”.</p>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {filtered.map((c) => <CompanyCard key={c.id} company={c} billing={billing} onChanged={refresh} />)}
-              </div>
-            </section>
-
-            <BillingCard companies={companies || []} billing={billing} billingError={billingError} onChanged={refresh} />
-          </div>
+      <main style={{ ...styles.main, maxWidth: isWide ? 1320 : styles.main.maxWidth, padding: isMobile ? 14 : 24 }}>
+        <div style={{ ...styles.grid, gridTemplateColumns: isMobile ? '1fr' : isWide ? styles.gridWide.gridTemplateColumns : styles.grid.gridTemplateColumns }}>
+          {leftColumn}
+          {isWide ? (
+            <>
+              {companiesSection}
+              {billingSection}
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {companiesSection}
+              {billingSection}
+            </div>
+          )}
         </div>
       </main>
     </div>
+  );
+}
+
+/* Companies list + its own search box (name or master name/email). */
+function CompaniesCard({ companies, billing, onChanged }) {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const filtered = !companies ? [] : q
+    ? companies.filter(
+        (c) => c.name.toLowerCase().includes(q) ||
+          c.masters.some((m) => (m.email || '').toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
+      )
+    : companies;
+
+  return (
+    <section style={styles.card}>
+      <div style={styles.companiesHead}>
+        <h3 style={{ ...styles.cardTitle, margin: 0 }}>
+          <i className="ti ti-building" aria-hidden="true" /> Companies {companies ? `(${companies.length})` : ''}
+        </h3>
+        <div style={styles.searchWrap}>
+          <i className="ti ti-search" aria-hidden="true" style={styles.searchIcon} />
+          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search company or master…" style={styles.searchInput} />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} style={styles.searchClear} aria-label="Clear search">
+              <i className="ti ti-x" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {companies === null && <p style={styles.cardSub}>Loading…</p>}
+      {companies && companies.length === 0 && <p style={styles.cardSub}>No companies yet — create one on the left.</p>}
+      {companies && companies.length > 0 && filtered.length === 0 && (
+        <p style={styles.cardSub}>No companies match “{query}”.</p>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {filtered.map((c) => <CompanyCard key={c.id} company={c} billing={billing} onChanged={onChanged} />)}
+      </div>
+    </section>
   );
 }
 
@@ -340,9 +372,25 @@ function MaintenanceCard() {
  * other role. One row per company: start date, rent amount, paid/unpaid.
  */
 function BillingCard({ companies, billing, billingError, onChanged }) {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const filtered = q ? companies.filter((c) => c.name.toLowerCase().includes(q)) : companies;
+
   return (
     <section style={styles.card}>
-      <h3 style={styles.cardTitle}><i className="ti ti-cash" aria-hidden="true" /> Rental fees</h3>
+      <div style={styles.companiesHead}>
+        <h3 style={{ ...styles.cardTitle, margin: 0 }}><i className="ti ti-cash" aria-hidden="true" /> Rental fees</h3>
+        <div style={styles.searchWrap}>
+          <i className="ti ti-search" aria-hidden="true" style={styles.searchIcon} />
+          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search company…" style={styles.searchInput} />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} style={styles.searchClear} aria-label="Clear search">
+              <i className="ti ti-x" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
       <p style={styles.cardSub}>Provider-only — never shown to a company's own master, manager or staff.</p>
 
       {billing === null && <p style={styles.cardSub}>Loading…</p>}
@@ -352,10 +400,13 @@ function BillingCard({ companies, billing, billingError, onChanged }) {
       {billing && !billingError && companies.length === 0 && (
         <p style={styles.cardSub}>No companies yet.</p>
       )}
+      {billing && !billingError && companies.length > 0 && filtered.length === 0 && (
+        <p style={styles.cardSub}>No companies match “{query}”.</p>
+      )}
 
-      {billing && !billingError && companies.length > 0 && (
+      {billing && !billingError && filtered.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {companies.map((c) => (
+          {filtered.map((c) => (
             <BillingRow key={c.id} company={c} billing={billing.find((b) => b.companyId === c.id)} onChanged={onChanged} />
           ))}
         </div>
@@ -737,6 +788,7 @@ const styles = {
   userBox: { display: 'flex', alignItems: 'center', gap: 12 },
   main: { flex: 1, width: '100%', maxWidth: 1040, margin: '0 auto', padding: 24 },
   grid: { display: 'grid', gridTemplateColumns: 'minmax(0, 340px) minmax(0, 1fr)', gap: 20, alignItems: 'start' },
+  gridWide: { gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr) minmax(0, 340px)' },
   card: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px' },
   cardTitle: { fontSize: 15, fontWeight: 600, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 },
   cardSub: { fontSize: 12.5, color: 'var(--muted)', margin: '0 0 14px' },

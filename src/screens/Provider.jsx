@@ -50,6 +50,12 @@ function useMediaQuery(query) {
   return matches;
 }
 
+// A single shimmering placeholder block (see .skeleton in global.css). Shaped
+// per-caller via width/height/style to stand in for real content while loading.
+function SkeletonBlock({ width = '100%', height = 12, style }) {
+  return <div className="skeleton" style={{ width, height, ...style }} />;
+}
+
 export default function Provider({ ctx, onLogout }) {
   const { user } = ctx;
   const isMobile = useIsMobile();
@@ -148,7 +154,11 @@ function CompaniesCard({ companies, billing, onChanged }) {
         </div>
       </div>
 
-      {companies === null && <p style={styles.cardSub}>Loading…</p>}
+      {companies === null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <CompanySkeletonCard /><CompanySkeletonCard />
+        </div>
+      )}
       {companies && companies.length === 0 && <p style={styles.cardSub}>No companies yet — create one on the left.</p>}
       {companies && companies.length > 0 && filtered.length === 0 && (
         <p style={styles.cardSub}>No companies match “{query}”.</p>
@@ -158,6 +168,19 @@ function CompaniesCard({ companies, billing, onChanged }) {
         {filtered.map((c) => <CompanyCard key={c.id} company={c} billing={billing} onChanged={onChanged} />)}
       </div>
     </section>
+  );
+}
+
+function CompanySkeletonCard() {
+  return (
+    <div style={styles.companyCard} aria-hidden="true">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <SkeletonBlock width="45%" height={16} />
+        <SkeletonBlock width="60%" height={11} />
+        <SkeletonBlock width="35%" height={11} />
+      </div>
+      <SkeletonBlock height={40} style={{ borderRadius: 9, marginTop: 10 }} />
+    </div>
   );
 }
 
@@ -264,7 +287,11 @@ function OwnersCard({ companies }) {
         </button>
       </form>
 
-      {owners === null && <p style={{ ...styles.cardSub, marginTop: 12, marginBottom: 0 }}>Loading…</p>}
+      {owners === null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          <OwnerSkeletonRow /><OwnerSkeletonRow />
+        </div>
+      )}
       {owners && owners.length === 0 && <p style={{ ...styles.cardSub, marginTop: 12, marginBottom: 0 }}>No owners yet.</p>}
 
       {owners && owners.length > 0 && (
@@ -309,6 +336,17 @@ function OwnersCard({ companies }) {
         </div>
       )}
     </section>
+  );
+}
+
+function OwnerSkeletonRow() {
+  return (
+    <div style={styles.masterRow} aria-hidden="true">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+        <SkeletonBlock width="40%" height={13} />
+        <SkeletonBlock width="55%" height={10} />
+      </div>
+    </div>
   );
 }
 
@@ -393,7 +431,11 @@ function BillingCard({ companies, billing, billingError, onChanged }) {
       </div>
       <p style={styles.cardSub}>Provider-only — never shown to a company's own master, manager or staff.</p>
 
-      {billing === null && <p style={styles.cardSub}>Loading…</p>}
+      {billing === null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <BillingSkeletonRow /><BillingSkeletonRow />
+        </div>
+      )}
       {billing && billingError && (
         <p style={styles.cardSub}>{billingError}</p>
       )}
@@ -412,6 +454,20 @@ function BillingCard({ companies, billing, billingError, onChanged }) {
         </div>
       )}
     </section>
+  );
+}
+
+function BillingSkeletonRow() {
+  return (
+    <div style={styles.billingRow} aria-hidden="true">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 150px' }}>
+        <SkeletonBlock width={22} height={22} style={{ borderRadius: 5, flexShrink: 0 }} />
+        <SkeletonBlock width="60%" height={13} />
+      </div>
+      <SkeletonBlock width={138} height={30} style={{ borderRadius: 7 }} />
+      <SkeletonBlock width={76} height={30} style={{ borderRadius: 7 }} />
+      <SkeletonBlock width={80} height={16} />
+    </div>
   );
 }
 
@@ -821,5 +877,5 @@ const styles = {
   billingField: { display: 'flex', flexDirection: 'column', gap: 3 },
   billingFieldLabel: { fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)' },
   billingDateInput: { padding: '6px 8px', fontSize: 12.5, borderRadius: 7, width: 138 },
-  billingRentInput: { padding: '6px 8px', fontSize: 12.5, borderRadius: 7, width: 76 },
+  billingRentInput: { padding: '6px 8px', fontSize: 12.5, borderRadius: 7, width: 76, fontVariantNumeric: 'tabular-nums' },
 };

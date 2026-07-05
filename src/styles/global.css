@@ -145,6 +145,21 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 .error-text { color: var(--danger); font-size: 13px; margin-top: 4px; }
 .success-text { color: var(--success); font-size: 13px; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
 
+/* Skeleton loading placeholders — shimmering blocks shaped like the content
+   they stand in for, instead of plain "Loading…" text (Provider.jsx). */
+.skeleton {
+  border-radius: 6px;
+  /* border-strong (not border) — in dark mode --border equals --surface-2 exactly,
+     which would make the shimmer's highlight band invisible. */
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border-strong) 50%, var(--surface-2) 75%);
+  background-size: 400px 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+
 .badge {
   font-size: 11px;
   font-weight: 600;

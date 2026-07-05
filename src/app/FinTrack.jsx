@@ -331,7 +331,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
         <tbody>
           {data.length===0&&<tr><td colSpan={10} style={{padding:"24px 10px",textAlign:"center",color:C.muted}}>No entries found.</td></tr>}
           {data.map((t,idx)=>(
-            <tr key={t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
+            <tr key={t.uid || t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
               <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{startIndex+idx+1}</td>
               <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{fmtDate(t.date)} {t.time}</td>
               <td style={{padding:"9px 10px"}}>
@@ -351,9 +351,12 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
                 if(t.buyAud) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#db2777"}}><i className="ti ti-currency-dollar" aria-hidden="true"/>Buy AUD</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                 const holder = (b&&b.holder) || t.bankHolder || "";
+                const isTransferLeg = t.type==="Transfer In"||t.type==="Transfer Out";
+                const bankLabel = isTransferLeg ? (holder||t.bank) : t.bank;
+                const cpLabel = isTransferLeg ? (t.counterpartyHolder||t.counterparty) : t.counterparty;
                 return (<span>
                   <span style={{display:"block"}}>{holder || t.bank}</span>
-                  <span style={{fontSize:11,color:C.muted}}>{t.bank}{t.counterparty?(t.type==="Transfer In"?` ← ${t.counterparty}`:` → ${t.counterparty}`):""}</span>
+                  <span style={{fontSize:11,color:C.muted}}>{bankLabel}{t.counterparty?(t.type==="Transfer In"?` ← ${cpLabel}`:` → ${cpLabel}`):""}</span>
                 </span>);
               })()}</td>
               <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{t.operator?<span style={{display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-user-cog" aria-hidden="true" style={{fontSize:13}}/>{t.operator}</span>:"—"}</td>
@@ -649,7 +652,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summar
                 </thead>
                 <tbody>
                   {rows.map((t,idx)=>(
-                    <tr key={t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
+                    <tr key={t.uid || t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
                       <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",...(isMobile?{position:"sticky",left:0,zIndex:1,background:idx%2?C.surface:C.bg}:null)}}>{idx+1}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{fmtDate(t.date)} {t.time}</td>
                       <td style={{padding:"9px 10px"}}><TxBadge type={t.type}/>{t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}</td>
@@ -665,9 +668,12 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summar
                 if(t.buyAud) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#db2777"}}><i className="ti ti-currency-dollar" aria-hidden="true"/>Buy AUD</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                         const holder = (b&&b.holder) || t.bankHolder || "";
+                        const isTransferLeg = t.type==="Transfer In"||t.type==="Transfer Out";
+                        const bankLabel = isTransferLeg ? (holder||t.bank) : t.bank;
+                        const cpLabel = isTransferLeg ? (t.counterpartyHolder||t.counterparty) : t.counterparty;
                         return (<span>
                           <span style={{display:"block"}}>{holder || t.bank}</span>
-                          <span style={{fontSize:11,color:C.muted}}>{t.bank}{t.counterparty?(t.type==="Transfer In"?` ← ${t.counterparty}`:` → ${t.counterparty}`):""}</span>
+                          <span style={{fontSize:11,color:C.muted}}>{bankLabel}{t.counterparty?(t.type==="Transfer In"?` ← ${cpLabel}`:` → ${cpLabel}`):""}</span>
                         </span>);
                       })()}</td>
                       <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>{t.operator||"—"}</td>
@@ -1216,8 +1222,8 @@ export default function App() {
       if(!srcBank && !destBank){setFormError("Pick a source and/or destination bank.");window.showToast?.("Error , Please Try Again","error");return;}
       const pairId = `TR-${nextId}`;
       const rows = []; let idc = nextId;
-      if(srcBank) rows.push({id:idc++,date:txDate,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",pairId,notes:form.notes||(destBank?`To ${destBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
-      if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",pairId,notes:form.notes||(srcBank?`From ${srcBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
+      if(srcBank) rows.push({id:idc++,date:txDate,time,type:"Transfer Out",amount:amt,memberId:"",memberName:ref||(destBank?`Transfer to ${destBank.name}`:"Transfer out"),bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",counterparty:destBank?destBank.name:"",counterpartyHolder:destBank?(destBank.holder||""):"",pairId,notes:form.notes||(destBank?`To ${destBank.holder||destBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
+      if(destBank) rows.push({id:idc++,date:txDate,time,type:"Transfer In",amount:amt,memberId:"",memberName:ref||(srcBank?`Transfer from ${srcBank.name}`:"Transfer in"),bank:destBank.name,bankId:destBank.id,bankHolder:destBank.holder||"",counterparty:srcBank?srcBank.name:"",counterpartyHolder:srcBank?(srcBank.holder||""):"",pairId,notes:form.notes||(srcBank?`From ${srcBank.holder||srcBank.name}`:""),receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false});
       setTransactions(prev=>[...rows.reverse(),...prev]);
       setNextId(idc);
       done();

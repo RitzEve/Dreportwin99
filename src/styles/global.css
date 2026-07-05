@@ -566,19 +566,19 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
   padding-left: 11px;
 }
 
-/* ---- Login hero: ambient shield glow + sparkle field (src/screens/Login.jsx) ----
-   Pure decoration, no cursor interaction. Sparkles twinkle in place (opacity +
-   scale only, never top/left) and the glow behind the shield breathes slowly. */
-@keyframes login-sparkle-twinkle {
-  0%, 100% { opacity: 0; transform: scale(0.6); }
-  50% { opacity: 0.9; transform: scale(1); }
+/* ---- Login hero: ambient shield glow + beam field (src/screens/Login.jsx) ----
+   Pure decoration, no cursor interaction. Beams pulse in place (opacity only,
+   never position/rotation) and the glow behind the shield breathes slowly. */
+@keyframes login-beam-glow {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.32; }
 }
 @keyframes login-shield-glow {
   0%, 100% { opacity: 0.55; transform: scale(1); }
   50% { opacity: 0.9; transform: scale(1.1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-motion="sparkle"] { animation: none !important; opacity: 0.35 !important; }
+  [data-motion="beam"] { animation: none !important; opacity: 0.18 !important; }
   [data-motion="glow"] { animation: none !important; }
 }
 .guide-tk-ex b { color: var(--text); }

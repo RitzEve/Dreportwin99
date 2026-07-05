@@ -5,23 +5,27 @@ import InstallPrompt from '../components/InstallPrompt.jsx';
 import UpdateBell from '../components/UpdateBell.jsx';
 
 /*
- * Login — email/Name-ID + password, staged over a full-bleed dark hero: a
- * field of small gold sparkles drifting behind a centred glass card (nothing
- * tracks the cursor). Always dark, regardless of the site's light/dark
- * setting — this is a fixed brand moment, not a themed page. No company
- * picker / self-registration: the provider creates companies + master
- * accounts, and email is globally unique.
+ * Login — email/Name-ID + password, staged over a full-bleed dark hero: soft
+ * gold light beams sweeping behind a centred glass card (nothing tracks the
+ * cursor — recreated in CSS from a react-bits "Beams" reference the user
+ * liked, since this project has no Tailwind/shadcn/WebGL dependency to
+ * install it via, see multi-company-portal memory). Always dark, regardless
+ * of the site's light/dark setting — this is a fixed brand moment, not a
+ * themed page. No company picker / self-registration: the provider creates
+ * companies + master accounts, and email is globally unique.
  */
 
-// Deterministic pseudo-random sparkle field, generated once per mount.
-function useSparkles(count) {
+// Deterministic pseudo-random beam field, generated once per mount. Spread
+// wider than the viewport (-15% to 115%) because each beam is rotated, which
+// swings its top/bottom ends sideways — without the extra margin, beams near
+// the edges would rotate their visible portion off-screen.
+function useBeams(count) {
   return useMemo(() => Array.from({ length: count }, (_, i) => ({
     key: i,
-    left: Math.random() * 100,
-    top: Math.random() * 100,
-    size: 1.5 + Math.random() * 2.5,
+    left: -15 + (i / (count - 1)) * 130 + (Math.random() * 4 - 2),
+    width: 2 + Math.random() * 3,
     delay: Math.random() * 5,
-    duration: 2.8 + Math.random() * 3.4,
+    duration: 4.5 + Math.random() * 4,
   })), [count]);
 }
 
@@ -61,7 +65,7 @@ export default function Login({ onAuthed }) {
   const [lockedUntil, setLockedUntil] = useState(() => Number(localStorage.getItem(LOCKOUT_KEY)) || 0);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
-  const sparkles = useSparkles(100);
+  const beams = useBeams(16);
 
   // This screen is always the dark brand look, independent of the site's own
   // light/dark toggle. Force it just while mounted, then hand back whatever
@@ -132,14 +136,17 @@ export default function Login({ onAuthed }) {
         <UpdateBell />
       </div>
 
-      {/* Ambient hero: drifting gold sparkles + a vignette, full-bleed behind the card */}
-      <div style={styles.sparkleField} aria-hidden="true">
-        {sparkles.map((s) => (
-          <div key={s.key} data-motion="sparkle" style={{
-            position: 'absolute', left: `${s.left}%`, top: `${s.top}%`,
-            width: s.size, height: s.size, borderRadius: '50%',
-            background: s.key % 3 === 0 ? '#e3b341' : '#f4ecd8',
-            animation: `login-sparkle-twinkle ${s.duration}s ease-in-out ${s.delay}s infinite`,
+      {/* Ambient hero: sweeping gold light beams + a vignette, full-bleed behind the card */}
+      <div style={styles.beamField} aria-hidden="true">
+        {beams.map((b) => (
+          <div key={b.key} data-motion="beam" style={{
+            position: 'absolute', top: '-25%', left: `${b.left}%`,
+            width: b.width, height: '150%',
+            background: 'linear-gradient(to bottom, transparent 0%, rgba(227,179,65,0.85) 45%, rgba(244,236,216,0.35) 55%, transparent 100%)',
+            filter: 'blur(2.5px)',
+            transform: 'rotate(-25deg)',
+            opacity: 0.1,
+            animation: `login-beam-glow ${b.duration}s ease-in-out ${b.delay}s infinite`,
           }} />
         ))}
       </div>
@@ -187,7 +194,7 @@ export default function Login({ onAuthed }) {
         <InstallPrompt />
 
         <div style={styles.footer}>
-          Secure access · authorised accounts only · V2.3.6
+          Secure access · authorised accounts only · V2.3.7
         </div>
       </div>
     </div>
@@ -201,7 +208,7 @@ const styles = {
     // DRW brand: gold glow over a near-black base — the gold-shield-on-black identity.
     background: 'radial-gradient(120% 85% at 78% 12%, rgba(227,179,65,0.30), transparent 55%), radial-gradient(110% 80% at 12% 92%, rgba(166,124,0,0.20), transparent 52%), linear-gradient(155deg, #14130f 0%, #211d12 52%, #100f0c 100%)',
   },
-  sparkleField: { position: 'absolute', inset: 0, zIndex: 0 },
+  beamField: { position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' },
   vignette: {
     position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
     background: 'radial-gradient(circle at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%)',

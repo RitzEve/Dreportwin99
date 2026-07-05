@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { login } from '../lib/auth.js';
+import { applyTheme } from '../lib/theme.js';
 import InstallPrompt from '../components/InstallPrompt.jsx';
 import UpdateBell from '../components/UpdateBell.jsx';
 
 /*
- * Login — email/Name-ID + password, with the DRW shield as a quiet ambient
- * hero on the left (desktop). A field of small gold sparkles drifts in
- * place behind it; nothing tracks the cursor. No company picker /
- * self-registration: the provider creates companies + master accounts, and
- * email is globally unique.
+ * Login — email/Name-ID + password, staged over a full-bleed dark hero: a
+ * field of small gold sparkles drifting behind a centred glass card (nothing
+ * tracks the cursor). Always dark, regardless of the site's light/dark
+ * setting — this is a fixed brand moment, not a themed page. No company
+ * picker / self-registration: the provider creates companies + master
+ * accounts, and email is globally unique.
  */
 
 // Deterministic pseudo-random sparkle field, generated once per mount.
@@ -56,17 +58,21 @@ export default function Login({ onAuthed }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [isWide, setIsWide] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
   const [lockedUntil, setLockedUntil] = useState(() => Number(localStorage.getItem(LOCKOUT_KEY)) || 0);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
-  const sparkles = useSparkles(55);
+  const sparkles = useSparkles(100);
 
+  // This screen is always the dark brand look, independent of the site's own
+  // light/dark toggle. Force it just while mounted, then hand back whatever
+  // the signed-in app was actually set to — never touches the saved preference.
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const onResize = (e) => setIsWide(e.matches);
-    mq.addEventListener('change', onResize);
-    return () => mq.removeEventListener('change', onResize);
+    const previous = document.documentElement.dataset.theme;
+    applyTheme('dark');
+    return () => {
+      if (previous) document.documentElement.dataset.theme = previous;
+      else delete document.documentElement.dataset.theme;
+    };
   }, []);
 
   // Countdown while locked out; clears itself (and the stored counters) at zero.
@@ -120,79 +126,68 @@ export default function Login({ onAuthed }) {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', display: 'grid', gridTemplateColumns: isWide ? '1fr 1fr' : '1fr', background: 'var(--bg)' }}>
+    <div style={styles.page}>
       {/* Notification bell — fixed top-right so it's on the login screen too */}
       <div style={{ position: 'fixed', top: 'max(14px, env(safe-area-inset-top))', right: 14, zIndex: 50 }}>
         <UpdateBell />
       </div>
-      {/* Left — ambient brand panel (desktop only) */}
-      {isWide && (
-        <div style={styles.left}>
-          <div style={styles.sparkleField} aria-hidden="true">
-            {sparkles.map((s) => (
-              <div key={s.key} data-motion="sparkle" style={{
-                position: 'absolute', left: `${s.left}%`, top: `${s.top}%`,
-                width: s.size, height: s.size, borderRadius: '50%',
-                background: s.key % 3 === 0 ? '#e3b341' : '#f4ecd8',
-                animation: `login-sparkle-twinkle ${s.duration}s ease-in-out ${s.delay}s infinite`,
-              }} />
-            ))}
+
+      {/* Ambient hero: drifting gold sparkles + a vignette, full-bleed behind the card */}
+      <div style={styles.sparkleField} aria-hidden="true">
+        {sparkles.map((s) => (
+          <div key={s.key} data-motion="sparkle" style={{
+            position: 'absolute', left: `${s.left}%`, top: `${s.top}%`,
+            width: s.size, height: s.size, borderRadius: '50%',
+            background: s.key % 3 === 0 ? '#e3b341' : '#f4ecd8',
+            animation: `login-sparkle-twinkle ${s.duration}s ease-in-out ${s.delay}s infinite`,
+          }} />
+        ))}
+      </div>
+      <div style={styles.vignette} aria-hidden="true" />
+
+      {/* Login card */}
+      <div style={styles.card}>
+        <ShieldMark size={56} />
+        <h1 style={styles.heading}>Welcome back</h1>
+        <p style={styles.subheading}>Sign in to continue</p>
+
+        <form onSubmit={submit} style={{ width: '100%' }}>
+          <div style={{ marginBottom: 16 }}>
+            <label htmlFor="identifier" style={styles.label}>Name / ID or Email</label>
+            <input id="identifier" type="text" autoComplete="username"
+              placeholder="e.g. Mario  or  mario@company.com"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              style={styles.input} />
           </div>
-          <ShieldMark size={112} wordmark />
-        </div>
-      )}
 
-      {/* Right — login form */}
-      <div style={styles.right}>
-        <div style={{ width: '100%', maxWidth: 400 }}>
-          {!isWide && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
-              <ShieldMark size={48} />
+          <div style={{ marginBottom: 16 }}>
+            <label htmlFor="password" style={styles.label}>Password</label>
+            <div style={{ position: 'relative' }}>
+              <input id="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ ...styles.input, paddingRight: 42 }} />
+              <button type="button" onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={styles.eyeBtn}>
+                <i className={`ti ti-${showPassword ? 'eye-off' : 'eye'}`} aria-hidden="true" />
+              </button>
             </div>
-          )}
-          <div style={{ textAlign: 'center', marginBottom: 34 }}>
-            <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.03em', margin: '0 0 8px' }}>Welcome back</h1>
-            <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: 0 }}>Sign in to continue</p>
           </div>
 
-          <form onSubmit={submit}>
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="identifier" style={styles.label}>Name / ID or Email</label>
-              <input id="identifier" type="text" autoComplete="username"
-                placeholder="e.g. Mario  or  mario@company.com"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                style={styles.input} />
-            </div>
+          {error && <div className="error-text" style={{ marginBottom: 12, marginTop: 4, textAlign: 'left' }}>{error}</div>}
 
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="password" style={styles.label}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <input id="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={{ ...styles.input, paddingRight: 42 }} />
-                <button type="button" onClick={() => setShowPassword((s) => !s)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  style={styles.eyeBtn}>
-                  <i className={`ti ti-${showPassword ? 'eye-off' : 'eye'}`} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', height: 48, fontSize: 15 }} disabled={busy || locked}>
+            <i className={`ti ti-${locked ? 'lock' : busy ? 'loader-2' : 'login-2'}`} aria-hidden="true" /> {locked ? `Try again in ${secondsLeft}s` : busy ? 'Signing in…' : 'Log in'}
+          </button>
+        </form>
 
-            {error && <div className="error-text" style={{ marginBottom: 12, marginTop: 4 }}>{error}</div>}
+        <InstallPrompt />
 
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', height: 48, fontSize: 15 }} disabled={busy || locked}>
-              <i className={`ti ti-${locked ? 'lock' : busy ? 'loader-2' : 'login-2'}`} aria-hidden="true" /> {locked ? `Try again in ${secondsLeft}s` : busy ? 'Signing in…' : 'Log in'}
-            </button>
-          </form>
-
-          <InstallPrompt />
-
-          <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 26 }}>
-            Secure access · authorised accounts only · V2.3.1
-          </div>
+        <div style={styles.footer}>
+          Secure access · authorised accounts only · V2.3.2
         </div>
       </div>
     </div>
@@ -200,19 +195,32 @@ export default function Login({ onAuthed }) {
 }
 
 const styles = {
-  left: {
-    position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  page: {
+    position: 'relative', minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden', padding: 24,
     // DRW brand: gold glow over a near-black base — the gold-shield-on-black identity.
     background: 'radial-gradient(120% 85% at 78% 12%, rgba(227,179,65,0.30), transparent 55%), radial-gradient(110% 80% at 12% 92%, rgba(166,124,0,0.20), transparent 52%), linear-gradient(155deg, #14130f 0%, #211d12 52%, #100f0c 100%)',
-    padding: 24,
   },
-  sparkleField: { position: 'absolute', inset: 0 },
-  right: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: 'var(--bg)' },
-  label: { display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 7 },
-  input: { padding: '13px 14px', fontSize: 15, borderRadius: 10 },
+  sparkleField: { position: 'absolute', inset: 0, zIndex: 0 },
+  vignette: {
+    position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
+    background: 'radial-gradient(circle at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%)',
+  },
+  card: {
+    position: 'relative', zIndex: 2, width: '100%', maxWidth: 400,
+    background: 'rgba(15,13,10,0.72)', backdropFilter: 'blur(18px) saturate(140%)', WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+    border: '1px solid rgba(227,179,65,0.16)', borderRadius: 18, padding: '2.25rem 2rem',
+    boxShadow: '0 24px 70px -20px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.05)',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+  },
+  heading: { fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', margin: '14px 0 6px', color: '#f4ecd8' },
+  subheading: { fontSize: 13.5, color: 'rgba(244,236,216,0.6)', margin: '0 0 26px' },
+  label: { display: 'block', textAlign: 'left', fontSize: 13, fontWeight: 500, color: 'rgba(244,236,216,0.85)', marginBottom: 7 },
+  input: { padding: '13px 14px', fontSize: 15, borderRadius: 10, width: '100%' },
   eyeBtn: {
     position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-    background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)',
+    background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(244,236,216,0.5)',
     fontSize: 19, padding: 6, display: 'flex', alignItems: 'center',
   },
+  footer: { textAlign: 'center', fontSize: 12, color: 'rgba(244,236,216,0.45)', marginTop: 22 },
 };

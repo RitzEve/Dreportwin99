@@ -11,6 +11,13 @@ const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('./package.json', impo
 // with — see src/components/UpdateBell.jsx). It also carries the "what's new"
 // notes (package.json -> "whatsNew") so a stale tab can show what changed in the
 // version it doesn't have yet. One JSON file, always in sync with pkg.
+//
+// IMPORTANT — "whatsNew" is shown to EVERY logged-in role (provider, owner,
+// master, manager, staff): there is no per-role filtering. Only add a note here
+// for changes a tenant/owner/staff would actually notice or benefit from. A
+// provider-only change (e.g. the Rental fees section, or anything else only the
+// provider's own login can ever see) must NOT get a whatsNew entry — it's noise
+// or confusing to everyone else. Ship those silently (just bump the version).
 function emitVersionJson(version, notes) {
   return {
     name: 'emit-version-json',

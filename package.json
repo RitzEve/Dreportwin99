@@ -1,14 +1,14 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.3.2",
+  "version": "2.3.3",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "Provider page: every company now shows the date it started using the app, and a new \"Rental fees\" section lets you set each company's rent and tick off whether it's been paid — visible only to you, never to a company's own master, manager or staff.",
     "Redesigned the login page: a softly animated field of gold sparkles now drifts behind a glass card with the DRW shield, matching the gold-and-black look used across the rest of the app. Same sign-in form, same security behind it — just a new look.",
     "Fixed a misleading login error: if too many people log in from the same network at once and Supabase's own protection kicks in, the login page used to say \"incorrect password\" — it now says there were too many attempts from your network and to wait a bit, which is what's actually happening.",
-    "Security hardening: the login page now pauses for 30 seconds after 5 failed attempts in a row, the database's public login-lookup can no longer be hammered indefinitely, and the site sends stricter browser security headers (blocks the page from being embedded elsewhere, blocks content-type sniffing tricks, and a content security policy limiting what can load).",
-    "Fixed the Provider page's \"Link companies\" checklist under each owner: the checkboxes were stretched and misaligned, and company logos weren't showing. Each row now shows the company's logo (or a placeholder) next to a properly-aligned checkbox and name."
+    "Security hardening: the login page now pauses for 30 seconds after 5 failed attempts in a row, the database's public login-lookup can no longer be hammered indefinitely, and the site sends stricter browser security headers (blocks the page from being embedded elsewhere, blocks content-type sniffing tricks, and a content security policy limiting what can load)."
   ],
   "scripts": {
     "dev": "vite",

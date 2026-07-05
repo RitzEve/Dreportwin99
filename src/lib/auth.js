@@ -290,6 +290,10 @@ export async function provisionCompany({ companyName, masterName, masterEmail, p
 
   const created = await createCompany(companyName, timezone || 'Australia/Sydney');
   if (!created.ok) return created;
+  // Best-effort: seed a billing row with today as the start date (migration-016).
+  // Never blocks company creation — the provider can still set this later.
+  await supabase.from('company_billing')
+    .upsert({ company_id: created.company.id, started_at: new Date().toISOString().slice(0, 10) }, { onConflict: 'company_id' });
 
   if (!wantsMaster) return { ok: true, company: created.company };
 
@@ -563,4 +567,64 @@ export async function getOwnerSummaries(date) {
     storeCountToday: r.store_count_today, storeBalance: r.store_balance, storeYesterday: r.store_yesterday,
     updatedAt: r.updated_at,
   })) };
+}
+
+// ---- provider-only: company billing (start date + rental fees) ------------
+// Lives in its own table (migration-016) with RLS gated purely on
+// my_role()==='provider' — no master/manager/staff/owner login can ever read
+// or write it, and it is only ever rendered on the Provider page.
+
+function billingRowToObj(r) {
+  return {
+    companyId: r.company_id,
+    startedAt: r.started_at,
+    rentalFee: r.rental_fee,
+    rentalPaid: r.rental_paid,
+    rentalPaidAt: r.rental_paid_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+/** Provider: every company's start date + rental-fee status. */
+export async function listCompanyBilling() {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.', rows: [] };
+  const { data, error } = await supabase.from('company_billing').select('*');
+  if (error) {
+    if (/company_billing|does not exist|could not find|schema cache/i.test(error.message || '')) {
+      return { ok: false, error: 'This needs a one-time database setup (run migration-016.sql in Supabase).', rows: [] };
+    }
+    return { ok: false, error: friendly(error), rows: [] };
+  }
+  return { ok: true, rows: (data || []).map(billingRowToObj) };
+}
+
+/**
+ * Provider sets any subset of a company's billing fields — pass only what
+ * changed. Marking rental_paid true/false also stamps (or clears) rental_paid_at.
+ */
+export async function updateCompanyBilling(companyId, { startedAt, rentalFee, rentalPaid } = {}) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+
+  const fields = { company_id: companyId, updated_at: new Date().toISOString() };
+  if (startedAt !== undefined) fields.started_at = startedAt || null;
+  if (rentalFee !== undefined) {
+    const amount = rentalFee === '' || rentalFee == null ? null : Number(rentalFee);
+    if (amount != null && (Number.isNaN(amount) || amount < 0)) return { ok: false, error: 'Enter a valid rent amount.' };
+    fields.rental_fee = amount;
+  }
+  if (rentalPaid !== undefined) {
+    fields.rental_paid = !!rentalPaid;
+    fields.rental_paid_at = rentalPaid ? new Date().toISOString() : null;
+  }
+
+  const { error } = await supabase.from('company_billing').upsert(fields, { onConflict: 'company_id' });
+  if (error) {
+    if (/company_billing|does not exist|could not find|schema cache/i.test(error.message || '')) {
+      return { ok: false, error: 'This needs a one-time database setup (run migration-016.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
 }

@@ -14,6 +14,8 @@ import {
   createOwner,
   listOwners,
   setOwnerCompanyLink,
+  listCompanyBilling,
+  updateCompanyBilling,
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 import AccountMenu from '../components/AccountMenu.jsx';
@@ -29,15 +31,26 @@ import useIsMobile from '../lib/useIsMobile.js';
  * company (password-confirmed; cascades to its accounts + data).
  * Passwords are self-service: each user changes their own once logged in.
  */
+// Small local date formatter — no library, matches the plain-JS style used elsewhere here.
+function fmtDate(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 export default function Provider({ ctx, onLogout }) {
   const { user } = ctx;
   const isMobile = useIsMobile();
   const [companies, setCompanies] = useState(null); // null = loading
   const [query, setQuery] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
+  const [billing, setBilling] = useState(null); // null = loading; array of {companyId, startedAt, rentalFee, rentalPaid, rentalPaidAt}
+  const [billingError, setBillingError] = useState('');
 
   async function refresh() {
     setCompanies(await listCompaniesWithMasters());
+    const b = await listCompanyBilling();
+    if (b.ok) { setBilling(b.rows); setBillingError(''); }
+    else { setBilling([]); setBillingError(b.error); }
   }
   useEffect(() => { refresh(); }, []);
 
@@ -79,33 +92,37 @@ export default function Provider({ ctx, onLogout }) {
             <MaintenanceCard />
           </div>
 
-          <section style={styles.card}>
-            <div style={styles.companiesHead}>
-              <h3 style={{ ...styles.cardTitle, margin: 0 }}>
-                <i className="ti ti-building" aria-hidden="true" /> Companies {companies ? `(${companies.length})` : ''}
-              </h3>
-              <div style={styles.searchWrap}>
-                <i className="ti ti-search" aria-hidden="true" style={styles.searchIcon} />
-                <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search company or master…" style={styles.searchInput} />
-                {query && (
-                  <button type="button" onClick={() => setQuery('')} style={styles.searchClear} aria-label="Clear search">
-                    <i className="ti ti-x" aria-hidden="true" />
-                  </button>
-                )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <section style={styles.card}>
+              <div style={styles.companiesHead}>
+                <h3 style={{ ...styles.cardTitle, margin: 0 }}>
+                  <i className="ti ti-building" aria-hidden="true" /> Companies {companies ? `(${companies.length})` : ''}
+                </h3>
+                <div style={styles.searchWrap}>
+                  <i className="ti ti-search" aria-hidden="true" style={styles.searchIcon} />
+                  <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search company or master…" style={styles.searchInput} />
+                  {query && (
+                    <button type="button" onClick={() => setQuery('')} style={styles.searchClear} aria-label="Clear search">
+                      <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {companies === null && <p style={styles.cardSub}>Loading…</p>}
-            {companies && companies.length === 0 && <p style={styles.cardSub}>No companies yet — create one on the left.</p>}
-            {companies && companies.length > 0 && filtered.length === 0 && (
-              <p style={styles.cardSub}>No companies match “{query}”.</p>
-            )}
+              {companies === null && <p style={styles.cardSub}>Loading…</p>}
+              {companies && companies.length === 0 && <p style={styles.cardSub}>No companies yet — create one on the left.</p>}
+              {companies && companies.length > 0 && filtered.length === 0 && (
+                <p style={styles.cardSub}>No companies match “{query}”.</p>
+              )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {filtered.map((c) => <CompanyCard key={c.id} company={c} onChanged={refresh} />)}
-            </div>
-          </section>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {filtered.map((c) => <CompanyCard key={c.id} company={c} billing={billing} onChanged={refresh} />)}
+              </div>
+            </section>
+
+            <BillingCard companies={companies || []} billing={billing} billingError={billingError} onChanged={refresh} />
+          </div>
         </div>
       </main>
     </div>
@@ -318,8 +335,116 @@ function MaintenanceCard() {
   );
 }
 
-function CompanyCard({ company, onChanged }) {
+/*
+ * Rental fees — provider-only bookkeeping (migration-016). Never shown to any
+ * other role. One row per company: start date, rent amount, paid/unpaid.
+ */
+function BillingCard({ companies, billing, billingError, onChanged }) {
+  return (
+    <section style={styles.card}>
+      <h3 style={styles.cardTitle}><i className="ti ti-cash" aria-hidden="true" /> Rental fees</h3>
+      <p style={styles.cardSub}>Provider-only — never shown to a company's own master, manager or staff.</p>
+
+      {billing === null && <p style={styles.cardSub}>Loading…</p>}
+      {billing && billingError && (
+        <p style={styles.cardSub}>{billingError}</p>
+      )}
+      {billing && !billingError && companies.length === 0 && (
+        <p style={styles.cardSub}>No companies yet.</p>
+      )}
+
+      {billing && !billingError && companies.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {companies.map((c) => (
+            <BillingRow key={c.id} company={c} billing={billing.find((b) => b.companyId === c.id)} onChanged={onChanged} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BillingRow({ company, billing, onChanged }) {
+  const [rentDraft, setRentDraft] = useState(billing?.rentalFee != null ? String(billing.rentalFee) : '');
+  const [savingField, setSavingField] = useState(null); // 'started' | 'rent' | 'paid' | null
+  const [err, setErr] = useState('');
+
+  // Keep the draft in sync if the underlying data changes (e.g. after a refresh).
+  useEffect(() => {
+    setRentDraft(billing?.rentalFee != null ? String(billing.rentalFee) : '');
+  }, [billing?.rentalFee]);
+
+  async function saveStarted(value) {
+    setSavingField('started'); setErr('');
+    const res = await updateCompanyBilling(company.id, { startedAt: value });
+    setSavingField(null);
+    if (!res.ok) { setErr(res.error); return; }
+    onChanged?.();
+  }
+
+  async function saveRent() {
+    const current = billing?.rentalFee != null ? String(billing.rentalFee) : '';
+    if (rentDraft.trim() === current) return; // unchanged — skip the round trip
+    setSavingField('rent'); setErr('');
+    const res = await updateCompanyBilling(company.id, { rentalFee: rentDraft.trim() });
+    setSavingField(null);
+    if (!res.ok) { setErr(res.error); setRentDraft(current); return; }
+    onChanged?.();
+  }
+
+  async function togglePaid(paid) {
+    setSavingField('paid'); setErr('');
+    const res = await updateCompanyBilling(company.id, { rentalPaid: paid });
+    setSavingField(null);
+    if (!res.ok) { setErr(res.error); return; }
+    onChanged?.();
+  }
+
+  return (
+    <div style={styles.billingRow}>
+      <div style={styles.billingCompanyCell}>
+        {company.logo
+          ? <img src={company.logo} alt="" style={{ height: 20, maxWidth: 64, objectFit: 'contain', borderRadius: 4, flexShrink: 0 }} />
+          : <div style={styles.billingLogoPlaceholder}><i className="ti ti-building" aria-hidden="true" style={{ fontSize: 12, color: 'var(--muted)' }} /></div>}
+        <span style={styles.billingCompanyName}>{company.name}</span>
+      </div>
+
+      <label style={styles.billingField}>
+        <span style={styles.billingFieldLabel}>Started</span>
+        <input type="date" value={billing?.startedAt || ''} max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => saveStarted(e.target.value)} disabled={savingField === 'started'} style={styles.billingDateInput} />
+      </label>
+
+      <label style={styles.billingField}>
+        <span style={styles.billingFieldLabel}>Rent</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>$</span>
+          <input type="number" min="0" step="0.01" placeholder="0.00" value={rentDraft}
+            onChange={(e) => setRentDraft(e.target.value)} onBlur={saveRent} disabled={savingField === 'rent'}
+            style={styles.billingRentInput} />
+        </div>
+      </label>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: savingField === 'paid' ? 'wait' : 'pointer' }}>
+        {/* Global `input, select { width:100% }` rule stretches plain checkboxes — reset it here (same fix as the Owners "Link companies" row). */}
+        <input type="checkbox" checked={!!billing?.rentalPaid} disabled={savingField === 'paid'}
+          onChange={(e) => togglePaid(e.target.checked)}
+          style={{ width: 16, height: 16, minWidth: 16, padding: 0, border: 'revert', borderRadius: 'revert', background: 'revert', flexShrink: 0, accentColor: 'var(--accent)' }} />
+        <span style={{ fontSize: 12.5 }}>
+          {billing?.rentalPaid
+            ? <span style={{ color: 'var(--success)' }}>Paid{billing.rentalPaidAt ? ` · ${fmtDate(billing.rentalPaidAt)}` : ''}</span>
+            : <span style={{ color: 'var(--muted)' }}>Unpaid</span>}
+        </span>
+      </label>
+
+      {err && <div className="error-text" style={{ width: '100%', margin: 0 }}>{err}</div>}
+    </div>
+  );
+}
+
+function CompanyCard({ company, billing, onChanged }) {
   const isMobile = useIsMobile();
+  const myBilling = billing?.find((b) => b.companyId === company.id);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [adding, setAdding] = useState(false);
@@ -422,6 +547,9 @@ function CompanyCard({ company, onChanged }) {
               </div>
               <div style={styles.sub}>{company.masters.length} master · {company.managerCount} manager · {company.staffCount} staff</div>
               <div style={styles.sub}><i className="ti ti-clock-hour-4" aria-hidden="true" /> {tzLabel(company.timezone)}</div>
+              {myBilling?.startedAt && (
+                <div style={styles.sub}><i className="ti ti-calendar-event" aria-hidden="true" /> Started {fmtDate(myBilling.startedAt)}</div>
+              )}
             </>
           )}
         </div>
@@ -634,4 +762,12 @@ const styles = {
   editBox: { display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border)' },
   nameEditRow: { display: 'flex', gap: 8, alignItems: 'center', width: '100%' },
   addBox: { marginTop: 10, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
+  billingRow: { display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', padding: '10px 12px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 },
+  billingCompanyCell: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 150px' },
+  billingCompanyName: { fontSize: 13, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  billingLogoPlaceholder: { width: 22, height: 22, borderRadius: 5, background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  billingField: { display: 'flex', flexDirection: 'column', gap: 3 },
+  billingFieldLabel: { fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)' },
+  billingDateInput: { padding: '6px 8px', fontSize: 12.5, borderRadius: 7, width: 138 },
+  billingRentInput: { padding: '6px 8px', fontSize: 12.5, borderRadius: 7, width: 76 },
 };

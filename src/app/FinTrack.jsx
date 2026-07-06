@@ -993,7 +993,7 @@ export default function App() {
       deposits:f("Regular Deposit"),withdrawals:f("Regular Withdrawal"),
       unclaimed:f("Unclaimed Credit"),mistakes:f("Mistake"),
       rentals:f("Rental"),store:f("Store"),transfers:f("Transfer Out"),adjustments:f("Adjust"),
-      bankBlocked:f("Bank Block"),buySellAud:f("Buy/Sell AUD"),
+      other:f("Other"),bankBlocked:f("Bank Block"),buySellAud:f("Buy/Sell AUD"),
       newMembers:active.filter(t=>t.isNew),sum,active
     };
   };
@@ -1237,7 +1237,7 @@ export default function App() {
     if(form.type==="Bank Block"){
       if(!srcBank){ setFormError("Pick the bank to clear."); window.showToast?.("Error , Please Try Again","error"); return; }
       const pairId = `BB-${nextId}`;
-      const common = {memberId:"",memberName:ref||"Bank Block",notes:form.notes,receipt:rcpt,operator:op,pairId,isNew:false,deleted:false};
+      const common = {memberId:"",memberName:ref||(srcBank.holder||"Bank Block"),notes:form.notes,receipt:rcpt,operator:op,pairId,isNew:false,deleted:false};
       const bankLeg   = {id:nextId,  date:txDate,time,type:"Bank Block",amount:-amt,bank:srcBank.name,bankId:srcBank.id,bankHolder:srcBank.holder||"",uid:mkUid(),fundLeg:true,...common};
       const bucketLeg = {id:nextId+1,date:txDate,time,type:"Bank Block",amount:amt, bank:"Bank Block",bankId:null,bankHolder:"",uid:mkUid(),bucketLeg:true,...common};
       setTransactions(prev=>[bucketLeg,bankLeg,...prev]);
@@ -1712,7 +1712,7 @@ export default function App() {
   // operator sees how much is in the account before recording a deposit/withdrawal/transfer.
   const bankBalanceHint = (bankId) => {
     if(bankId==null) return null;
-    const b = activeBanks.find(x=>x.id===bankId);
+    const b = banksLive.find(x=>x.id===bankId);
     if(!b) return null;
     return (
       <div style={{marginTop:6,fontSize:12,display:"flex",alignItems:"center",gap:6,color:C.muted}}>
@@ -1785,6 +1785,7 @@ export default function App() {
     {label:"Store entries", count:stats.store.length, amount:stats.sum(storeAllTime), color:"#FFDE63", note:`Running store credit · yest. ${fmt(storeYesterday)}`, onClick:()=>openStatDetail("Store entries", stats.store, undefined, undefined, {store:true})},
     {label:"Transfers", count:stats.transfers.length, amount:stats.sum(stats.transfers), color:"#6366f1", onClick:()=>openStatDetail("Transfers", stats.transfers)},
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
+    {label:"Other", count:stats.other.length, amount:stats.sum(stats.other), color:"#64748b", onClick:()=>openStatDetail("Other", stats.other)},
     {label:"Bank Blocked", count:stats.bankBlocked.length, amount:stats.sum(stats.bankBlocked), color:"#5b7a99", onClick:()=>openStatDetail("Bank Blocked", stats.bankBlocked)},
     {label:"Buy/Sell AUD", count:stats.buySellAud.length, amount:stats.sum(stats.buySellAud), color:"#db2777", onClick:()=>openStatDetail("Buy/Sell AUD", stats.buySellAud)},
   ];

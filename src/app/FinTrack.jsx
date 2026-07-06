@@ -121,7 +121,14 @@ const downloadBlob = (content,filename,mime) => {
   a.href=url; a.download=filename; document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 };
-const TX_COLS = ["date","time","type","amount","memberId","memberName","bank","operator","receipt","notes","deleted"];
+const TX_COLS = ["date","time","type","amount","memberId","memberName","memberPhone","bank","operator","receipt","notes","deleted"];
+// Transactions don't carry a phone number themselves (only the member record does) —
+// look it up by memberId, falling back to a name match, same pairing rule used
+// everywhere else in this file (e.g. the entry form's own member lookup).
+const phoneForTx = (t, members) => {
+  const m = (members||[]).find(x => (t.memberId && x.id===t.memberId) || (t.memberName && x.name && x.name.toLowerCase()===t.memberName.toLowerCase()));
+  return m ? (m.phone||"") : "";
+};
 
 // A short, globally-unique id stamped on every transaction leg the moment it's
 // created. Because the whole company shares ONE data record, two devices used at the
@@ -198,22 +205,22 @@ function ftBankBalanceAsOf(bank, txs, asOf){
 const ftHelpersDefined = true;
 // Live balance for a bank = its opening balance + all active transaction effects.
 const _removedDupA = null;
-const exportCSV = (rows,name) => {
+const exportCSV = (rows,name,members) => {
   const header = TX_COLS.join(",");
-  const lines = rows.map(r=>TX_COLS.map(c=>csvEscape(c==="date"?fmtDate(r.date):r[c])).join(","));
+  const lines = rows.map(r=>TX_COLS.map(c=>csvEscape(c==="date"?fmtDate(r.date):c==="memberPhone"?phoneForTx(r,members):r[c])).join(","));
   downloadBlob([header,...lines].join("\n"),`${name}.csv`,"text/csv;charset=utf-8;");
 };
-const exportExcel = (rows,name) => {
+const exportExcel = (rows,name,members) => {
   const head = "<tr>"+TX_COLS.map(c=>`<th>${c}</th>`).join("")+"</tr>";
-  const body = rows.map(r=>"<tr>"+TX_COLS.map(c=>`<td>${String((c==="date"?fmtDate(r.date):r[c])??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
+  const body = rows.map(r=>"<tr>"+TX_COLS.map(c=>`<td>${String((c==="date"?fmtDate(r.date):c==="memberPhone"?phoneForTx(r,members):r[c])??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1">${head}${body}</table></body></html>`;
   downloadBlob(html,`${name}.xls`,"application/vnd.ms-excel");
 };
-const exportPDF = (rows,title) => {
+const exportPDF = (rows,title,members) => {
   const w = window.open("","_blank");
   if(!w) return;
-  const head = "<tr>"+["Date","Time","Type","Amount","ID","Member/Ref","Bank","Operator","Receipt","Notes"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
-  const body = rows.map(r=>"<tr>"+[fmtDate(r.date),r.time,r.type,amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,r.bank,r.operator||"",r.receipt||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
+  const head = "<tr>"+["Date","Time","Type","Amount","ID","Member/Ref","Phone","Bank","Operator","Receipt","Notes"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
+  const body = rows.map(r=>"<tr>"+[fmtDate(r.date),r.time,r.type,amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,phoneForTx(r,members),r.bank,r.operator||"",r.receipt||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
   w.document.write(`<html><head><title>${title}</title><style>body{font-family:sans-serif;padding:20px}h2{font-weight:500}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0}</style></head><body><h2>${title}</h2><table>${head}${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 };
@@ -1641,14 +1648,14 @@ export default function App() {
   const exportMembersExcel = () => {
     const rows = memberRows();
     const head = "<tr>"+M_COLS.map(c=>`<th>${c}</th>`).join("")+"</tr>";
-    const body = rows.map(r=>"<tr>"+M_COLS.map(c=>`<td>${String((c==="joined"||c==="lastActivity"?fmtDate(r[c]):r[c])??"")}</td>`).join("")+"</tr>").join("");
+    const body = rows.map(r=>"<tr>"+M_COLS.map(c=>`<td>${String((c==="joined"||c==="lastActivity"?fmtDate(r[c]):r[c])??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
     downloadBlob(`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1">${head}${body}</table></body></html>`,"fintrack_members.xls","application/vnd.ms-excel");
   };
   const exportMembersPDF = () => {
     const rows = memberRows();
     const w = window.open("","_blank"); if(!w) return;
     const head = "<tr>"+["Member ID","Name","Phone","Joined","Transactions","Total deposits","Last activity"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
-    const body = rows.map(r=>"<tr>"+[r.id,r.name,r.phone,fmtDate(r.joined),r.transactions,fmt(r.totalDeposits),fmtDate(r.lastActivity)].map(c=>`<td>${String(c)}</td>`).join("")+"</tr>").join("");
+    const body = rows.map(r=>"<tr>"+[r.id,r.name,r.phone,fmtDate(r.joined),r.transactions,fmt(r.totalDeposits),fmtDate(r.lastActivity)].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
     w.document.write(`<html><head><title>FinTrack — Members</title><style>body{font-family:sans-serif;padding:20px}h2{font-weight:500}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0}</style></head><body><h2>FinTrack — Members directory</h2><table>${head}${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
     w.document.close();
   };
@@ -1820,9 +1827,9 @@ export default function App() {
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
       <span style={{fontSize:12,color:C.muted,marginRight:2}}>Export this view:</span>
-      <button onClick={()=>exportCSV(dashTx,`fintrack_${scopeName}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
-      <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
-      <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
+      <button onClick={()=>exportCSV(dashTx,`fintrack_${scopeName}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
+      <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
+      <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
     </div>
   </>);
 
@@ -2728,9 +2735,9 @@ export default function App() {
             <div style={sectionStyle}>
               <SectionTitle icon="ti-list" right={
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button onClick={()=>exportCSV(filteredTx,"fintrack_search")} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
-                  <button onClick={()=>exportExcel(filteredTx,"fintrack_search")} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
-                  <button onClick={()=>exportPDF(filteredTx,"FinTrack — Search results")} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
+                  <button onClick={()=>exportCSV(filteredTx,"fintrack_search",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
+                  <button onClick={()=>exportExcel(filteredTx,"fintrack_search",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
+                  <button onClick={()=>exportPDF(filteredTx,"FinTrack — Search results",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
                 </div>
               }>Results</SectionTitle>
               {(search.bank||search.member)&&(

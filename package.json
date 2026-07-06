@@ -1,10 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.4.1",
+  "version": "2.4.2",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "Transaction exports (CSV/Excel/PDF) now include the member's phone number alongside their ID, so a printed or downloaded report has enough detail to follow up without going back into the app.",
+    "Tightened some behind-the-scenes safety checks: printed/exported reports handle unusual characters in a name more carefully, and a few admin-only actions (like resetting a password or deleting an account) are now double-checked before they can even be attempted.",
     "Behind-the-scenes speed-up: signing in and loading the team/console screens now fetch only the account details actually needed, so those pages load a little lighter and faster. Nothing about how the app works has changed."
   ],
   "scripts": {

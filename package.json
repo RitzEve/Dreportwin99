@@ -1,13 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.4.0",
+  "version": "2.4.1",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Three fixes to the financial app: a frozen/inactive bank's current balance now shows in the entry form (it used to stay blank), the missing \"Other\" stat card is back on the Dashboard, and Bank Blocked log entries now show the account holder's name instead of the words \"Bank Block\" in the Member/Ref column, so it's clear whose account was involved.",
-    "Transfer entries are clearer: the auto-written note (\"From ...\" / \"To ...\") and the small grey text under the Bank column now name the account holder instead of the bank brand, so it's obvious at a glance whose account the money moved to or from.",
-    "Login page background refined further: the gold light beams behind the glass card now flow and ripple with a subtle woven texture, matching the gold-and-black look used across the rest of the app. Same sign-in form, same security behind it — just a new look."
+    "Behind-the-scenes speed-up: signing in and loading the team/console screens now fetch only the account details actually needed, so those pages load a little lighter and faster. Nothing about how the app works has changed."
   ],
   "scripts": {
     "dev": "vite",

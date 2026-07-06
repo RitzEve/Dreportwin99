@@ -45,6 +45,11 @@ export function canActOn(actor, target) {
 
 // ---- mapping + small helpers ----------------------------------------------
 
+// The exact profile columns profileToUser() reads. Select these explicitly instead
+// of '*' so profile queries don't ship unused columns over the wire (Supabase egress).
+// Keep this list in sync with profileToUser below if you add or remove a field.
+const PROFILE_COLUMNS = 'id, company_id, name, username, email, operator_id, role, active, nationality';
+
 function profileToUser(p, email) {
   return {
     id: p.id,
@@ -91,7 +96,7 @@ async function createAuthUser(email, password) {
 export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  const { data: profile } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', user.id).maybeSingle();
   if (!profile || !profile.active) return null;
   return profileToUser(profile, user.email);
 }
@@ -164,7 +169,7 @@ export async function changeOwnPassword(currentPassword, newPassword) {
 export async function listCompaniesWithMasters() {
   const { data: companies, error } = await supabase.from('companies').select('*').order('name');
   if (error) return [];
-  const { data: profiles } = await supabase.from('profiles').select('*');
+  const { data: profiles } = await supabase.from('profiles').select(PROFILE_COLUMNS);
   const all = profiles || [];
   return companies.map((c) => {
     const team = all.filter((p) => p.company_id === c.id);
@@ -412,7 +417,7 @@ export async function purgeOrphanLogins() {
 // ---- company team management (master / manager) ---------------------------
 
 export async function listTeam(companyId) {
-  const { data, error } = await supabase.from('profiles').select('*').eq('company_id', companyId).order('created_at');
+  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('company_id', companyId).order('created_at');
   if (error) return [];
   return data.map((p) => profileToUser(p));
 }

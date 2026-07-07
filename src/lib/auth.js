@@ -574,6 +574,38 @@ export async function getOwnerSummaries(date) {
   })) };
 }
 
+// ---- provider accounts (other super-admin logins) --------------------------
+
+/** Provider creates another "provider" login. Re-checks the CURRENT provider's own
+ * password first (same safety step as deleteCompany) since this mints a second
+ * full super-admin with no restrictions at all — the highest-privilege action here. */
+export async function createProvider({ name, email, password, currentPassword }) {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!name || !name.trim()) return { ok: false, error: 'Enter a name.' };
+  if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email.' };
+  if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
+  const { error: authErr } = await supabase.auth.signInWithPassword({ email: me.email, password: currentPassword });
+  if (authErr) return { ok: false, error: 'Your current password is incorrect.' };
+
+  const a = await createAuthUser(email, password);
+  if (!a.ok) return a;
+  const { data, error } = await supabase.from('profiles')
+    .insert({ id: a.userId, company_id: null, role: ROLES.PROVIDER, name: name.trim(), username: name.trim(), email: email.trim(), active: true })
+    .select().single();
+  if (error) return { ok: false, error: friendly(error) };
+  return { ok: true, user: profileToUser(data) };
+}
+
+/** Provider: every provider login (including self). */
+export async function listProviders() {
+  const me = await getCurrentUser();
+  if (!me || me.role !== ROLES.PROVIDER) return [];
+  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('role', ROLES.PROVIDER).order('created_at');
+  if (error) return [];
+  return data.map((p) => profileToUser(p));
+}
+
 // ---- provider-only: company billing (start date + rental fees) ------------
 // Lives in its own table (migration-016) with RLS gated purely on
 // my_role()==='provider' — no master/manager/staff/owner login can ever read

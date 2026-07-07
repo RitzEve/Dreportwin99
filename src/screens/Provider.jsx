@@ -14,6 +14,8 @@ import {
   createOwner,
   listOwners,
   setOwnerCompanyLink,
+  createProvider,
+  listProviders,
   listCompanyBilling,
   updateCompanyBilling,
 } from '../lib/auth.js';
@@ -77,6 +79,7 @@ export default function Provider({ ctx, onLogout }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <CreateCompany onCreated={refresh} />
       <OwnersCard companies={companies || []} />
+      <ProvidersCard user={user} />
       <MaintenanceCard />
     </div>
   );
@@ -347,6 +350,102 @@ function OwnerSkeletonRow() {
         <SkeletonBlock width="55%" height={10} />
       </div>
     </div>
+  );
+}
+
+function ProvidersCard({ user }) {
+  const blank = { name: '', email: '', password: '', currentPassword: '' };
+  const [providers, setProviders] = useState(null);
+  const [form, setForm] = useState(blank);
+  const [error, setError] = useState('');
+  const [ok, setOk] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [resettingId, setResettingId] = useState(null);
+  const [resetPw, setResetPw] = useState('');
+
+  async function refresh() {
+    setProviders(await listProviders());
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(''); setOk(''); setBusy(true);
+    const res = await createProvider(form);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOk(`Created provider login for ${res.user.name}.`);
+    setForm(blank);
+    refresh();
+  }
+
+  async function doReset(e, userId, label) {
+    e.preventDefault();
+    setError(''); setOk(''); setBusy(true);
+    const res = await adminResetPassword(userId, resetPw);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setOk(`Password reset for ${label}.`);
+    setResettingId(null); setResetPw('');
+  }
+
+  return (
+    <section style={styles.card}>
+      <h3 style={styles.cardTitle}><i className="ti ti-shield-lock" aria-hidden="true" /> Providers</h3>
+      <p style={styles.cardSub}>
+        Full access — a provider can create, edit, and delete anything, including every
+        company and every other provider login. Only add someone you fully trust with everything.
+      </p>
+      <form onSubmit={submit}>
+        <div className="field"><label>Name / ID</label>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Alex" /></div>
+        <div className="field"><label>Email</label>
+          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="alex@example.com" /></div>
+        <div className="field"><label>Temp password (for the new login)</label>
+          <input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="≥ 6 characters" /></div>
+        <div className="field"><label>Your own password (confirms it's really you)</label>
+          <input type="password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} placeholder="Re-enter your password" /></div>
+        {error && <div className="error-text">{error}</div>}
+        {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
+        <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 6 }} disabled={busy}>
+          <i className={`ti ti-${busy ? 'loader-2' : 'plus'}`} aria-hidden="true" /> {busy ? 'Creating…' : 'Create provider'}
+        </button>
+      </form>
+
+      {providers === null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          <OwnerSkeletonRow /><OwnerSkeletonRow />
+        </div>
+      )}
+
+      {providers && providers.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          {providers.map((p) => (
+            <div key={p.id} style={styles.masterRow}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>
+                  {p.name} <span className="badge badge-provider" style={{ marginLeft: 4 }}>Provider</span>
+                  {p.id === user.id && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--muted)' }}>(you)</span>}
+                </div>
+                <div style={styles.sub}>{p.email}</div>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm"
+                onClick={() => { setResettingId(resettingId === p.id ? null : p.id); setResetPw(''); setError(''); setOk(''); }}>
+                <i className="ti ti-key" aria-hidden="true" /> Reset password
+              </button>
+              {resettingId === p.id && (
+                <form onSubmit={(e) => doReset(e, p.id, p.name)} style={styles.resetRow}>
+                  <input type="text" value={resetPw} onChange={(e) => setResetPw(e.target.value)}
+                    placeholder={`New password for ${p.name}`} style={{ flex: 1 }} />
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={!resetPw || busy}>Set</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setResettingId(null); setResetPw(''); }}>Cancel</button>
+                </form>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

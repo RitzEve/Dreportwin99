@@ -16,7 +16,13 @@
 
 import { supabase, makeSignupClient } from './supabaseClient.js';
 
-export const ROLES = { PROVIDER: 'provider', MASTER: 'master', MANAGER: 'manager', STAFF: 'staff', OWNER: 'owner' };
+export const ROLES = { PROVIDER: 'provider', SUB_PROVIDER: 'sub-provider', MASTER: 'master', MANAGER: 'manager', STAFF: 'staff', OWNER: 'owner' };
+
+// Sub-provider can do everything a provider can EXCEPT delete a company (see
+// deleteCompany/createProvider below, which stay provider-ONLY on purpose).
+export function isProviderTier(role) {
+  return role === ROLES.PROVIDER || role === ROLES.SUB_PROVIDER;
+}
 
 // ---- validation ------------------------------------------------------------
 
@@ -105,7 +111,7 @@ export async function getCurrentUser() {
 export async function loadContext() {
   const me = await getCurrentUser();
   if (!me) return null;
-  if (me.role === ROLES.PROVIDER || me.role === ROLES.OWNER) return { user: me, company: null };
+  if (isProviderTier(me.role) || me.role === ROLES.OWNER) return { user: me, company: null };
   const { data: company } = await supabase.from('companies').select('*').eq('id', me.companyId).maybeSingle();
   if (!company) return null;
   return { user: me, company };
@@ -199,7 +205,7 @@ export async function createCompany(name, timezone) {
 /** Provider edits a company's name and/or time zone. Pass only what changed. */
 export async function updateCompany(companyId, { name, timezone } = {}) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   const fields = {};
   if (name != null) {
     if (!name.trim()) return { ok: false, error: 'Enter a company name.' };
@@ -253,7 +259,7 @@ export async function setOwnNationality(nationality) {
 /** Provider sets (or clears, with null/'') a company's logo. */
 export async function setCompanyLogo(companyId, logo) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   const value = logo ? String(logo) : null;
   const { error } = await supabase.from('companies').update({ logo: value }).eq('id', companyId);
   if (error) {
@@ -283,7 +289,7 @@ export async function setOwnCompanyLogo(logo) {
 /** Create a company, and (optionally) its first master account in one go. */
 export async function provisionCompany({ companyName, masterName, masterEmail, password, timezone }) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   if (!companyName || !companyName.trim()) return { ok: false, error: 'Enter a company name.' };
 
   const wantsMaster = masterName?.trim() || masterEmail?.trim() || password;
@@ -309,7 +315,7 @@ export async function provisionCompany({ companyName, masterName, masterEmail, p
 
 export async function providerAddMaster({ companyId, name, email, password }) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   if (!name || !name.trim()) return { ok: false, error: 'Enter a name.' };
   if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email.' };
   if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
@@ -327,7 +333,7 @@ export async function providerAddMaster({ companyId, name, email, password }) {
 /** Provider renames a company. */
 export async function renameCompany(companyId, name) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   if (!name || !name.trim()) return { ok: false, error: 'Enter a company name.' };
   const { error } = await supabase.from('companies').update({ name: name.trim() }).eq('id', companyId);
   if (error) return { ok: false, error: friendly(error) };
@@ -403,7 +409,7 @@ export async function deleteCompany(companyId, password) {
  */
 export async function purgeOrphanLogins() {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   const { data, error } = await supabase.rpc('admin_purge_orphan_logins');
   if (error) {
     if (/admin_purge_orphan_logins|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
@@ -493,7 +499,7 @@ export async function adminResetPassword(userId, newPassword) {
 /** Provider creates an "owner" login — not tied to a single company. */
 export async function createOwner({ name, email, password }) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   if (!name || !name.trim()) return { ok: false, error: 'Enter a name.' };
   if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email.' };
   if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
@@ -515,7 +521,7 @@ export async function createOwner({ name, email, password }) {
 /** Provider: every owner login, each with the list of company IDs it's linked to. */
 export async function listOwners() {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return [];
+  if (!me || !isProviderTier(me.role)) return [];
   const { data: owners, error } = await supabase.from('profiles').select('*').eq('role', ROLES.OWNER).order('created_at');
   if (error) return [];
   const { data: links } = await supabase.from('company_owners').select('owner_id, company_id');
@@ -526,7 +532,7 @@ export async function listOwners() {
 /** Provider links (linked=true) or unlinks (linked=false) a company to an owner. */
 export async function setOwnerCompanyLink(ownerId, companyId, linked) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   if (linked) {
     const { error } = await supabase.from('company_owners').insert({ owner_id: ownerId, company_id: companyId });
     if (error && !/duplicate key/i.test(error.message || '')) {
@@ -576,12 +582,16 @@ export async function getOwnerSummaries(date) {
 
 // ---- provider accounts (other super-admin logins) --------------------------
 
-/** Provider creates another "provider" login. Re-checks the CURRENT provider's own
- * password first (same safety step as deleteCompany) since this mints a second
- * full super-admin with no restrictions at all — the highest-privilege action here. */
-export async function createProvider({ name, email, password, currentPassword }) {
+/** Provider creates another provider-tier login (full provider or sub-provider —
+ * pass role: ROLES.PROVIDER or ROLES.SUB_PROVIDER). Stays PROVIDER-ONLY on purpose
+ * — a sub-provider must never be able to mint more provider-tier accounts, even
+ * another sub-provider, or access could quietly proliferate beyond one person's
+ * control. Also re-checks the CURRENT provider's own password first (same safety
+ * step as deleteCompany) since this is one of the highest-privilege actions here. */
+export async function createProvider({ name, email, password, currentPassword, role }) {
   const me = await getCurrentUser();
   if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  const targetRole = role === ROLES.SUB_PROVIDER ? ROLES.SUB_PROVIDER : ROLES.PROVIDER;
   if (!name || !name.trim()) return { ok: false, error: 'Enter a name.' };
   if (!validateEmail(email)) return { ok: false, error: 'Enter a valid email.' };
   if (!validatePassword(password)) return { ok: false, error: 'Password must be at least 6 characters.' };
@@ -591,41 +601,48 @@ export async function createProvider({ name, email, password, currentPassword })
   const a = await createAuthUser(email, password);
   if (!a.ok) return a;
   const { data, error } = await supabase.from('profiles')
-    .insert({ id: a.userId, company_id: null, role: ROLES.PROVIDER, name: name.trim(), username: name.trim(), email: email.trim(), active: true })
+    .insert({ id: a.userId, company_id: null, role: targetRole, name: name.trim(), username: name.trim(), email: email.trim(), active: true })
     .select().single();
   if (error) return { ok: false, error: friendly(error) };
   return { ok: true, user: profileToUser(data) };
 }
 
-/** Provider: every provider login (including self). */
+/** Every provider-tier login (full providers + sub-providers), readable by both tiers. */
 export async function listProviders() {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return [];
-  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('role', ROLES.PROVIDER).order('created_at');
+  if (!me || !isProviderTier(me.role)) return [];
+  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS)
+    .in('role', [ROLES.PROVIDER, ROLES.SUB_PROVIDER]).order('created_at');
   if (error) return [];
   return data.map((p) => profileToUser(p));
 }
 
-// ---- provider-only: company billing (start date + rental fees) ------------
-// Lives in its own table (migration-016) with RLS gated purely on
-// my_role()==='provider' — no master/manager/staff/owner login can ever read
-// or write it, and it is only ever rendered on the Provider page.
+// ---- provider-tier: company billing (start date + rental fees) ------------
+// Lives in its own tables (migration-016 + migration-020) with RLS gated on
+// is_provider_tier() — no master/manager/staff/owner login can ever read or
+// write any of this, and it is only ever rendered on the Provider page.
+// "Paid" isn't a sticky flag any more — it's a real per-month log
+// (company_billing_payments), so past months stay on record instead of
+// being overwritten every time this month's status changes.
 
-function billingRowToObj(r) {
-  return {
-    companyId: r.company_id,
-    startedAt: r.started_at,
-    rentalFee: r.rental_fee,
-    rentalPaid: r.rental_paid,
-    rentalPaidAt: r.rental_paid_at,
-    updatedAt: r.updated_at,
-  };
+/** 'YYYY-MM' for the current calendar month, in the browser's local time. */
+export function currentBillingPeriod() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/** Provider: every company's start date + rental-fee status. */
+function billingRowToObj(r) {
+  return { companyId: r.company_id, startedAt: r.started_at, rentalFee: r.rental_fee, updatedAt: r.updated_at };
+}
+
+function paymentRowToObj(r) {
+  return { id: r.id, companyId: r.company_id, period: r.period, amount: r.amount, paidAt: r.paid_at, recordedBy: r.recorded_by };
+}
+
+/** Provider-tier: every company's start date + rental-fee amount (not paid-status — see listBillingPayments). */
 export async function listCompanyBilling() {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.', rows: [] };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
   const { data, error } = await supabase.from('company_billing').select('*');
   if (error) {
     if (/company_billing|does not exist|could not find|schema cache/i.test(error.message || '')) {
@@ -636,13 +653,10 @@ export async function listCompanyBilling() {
   return { ok: true, rows: (data || []).map(billingRowToObj) };
 }
 
-/**
- * Provider sets any subset of a company's billing fields — pass only what
- * changed. Marking rental_paid true/false also stamps (or clears) rental_paid_at.
- */
-export async function updateCompanyBilling(companyId, { startedAt, rentalFee, rentalPaid } = {}) {
+/** Provider-tier sets a company's start date and/or rental-fee amount. Pass only what changed. */
+export async function updateCompanyBilling(companyId, { startedAt, rentalFee } = {}) {
   const me = await getCurrentUser();
-  if (!me || me.role !== ROLES.PROVIDER) return { ok: false, error: 'Not authorised.' };
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
 
   const fields = { company_id: companyId, updated_at: new Date().toISOString() };
   if (startedAt !== undefined) fields.started_at = startedAt || null;
@@ -651,15 +665,58 @@ export async function updateCompanyBilling(companyId, { startedAt, rentalFee, re
     if (amount != null && (Number.isNaN(amount) || amount < 0)) return { ok: false, error: 'Enter a valid rent amount.' };
     fields.rental_fee = amount;
   }
-  if (rentalPaid !== undefined) {
-    fields.rental_paid = !!rentalPaid;
-    fields.rental_paid_at = rentalPaid ? new Date().toISOString() : null;
-  }
 
   const { error } = await supabase.from('company_billing').upsert(fields, { onConflict: 'company_id' });
   if (error) {
     if (/company_billing|does not exist|could not find|schema cache/i.test(error.message || '')) {
       return { ok: false, error: 'This needs a one-time database setup (run migration-016.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
+}
+
+/** Provider-tier: the payment log, optionally filtered to one company and/or one period ('YYYY-MM'). Most recent period first. */
+export async function listBillingPayments({ companyId, period } = {}) {
+  const me = await getCurrentUser();
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
+  let q = supabase.from('company_billing_payments').select('*').order('period', { ascending: false });
+  if (companyId) q = q.eq('company_id', companyId);
+  if (period) q = q.eq('period', period);
+  const { data, error } = await q;
+  if (error) {
+    if (/company_billing_payments|does not exist|could not find|schema cache/i.test(error.message || '')) {
+      return { ok: false, error: 'This needs a one-time database setup (run migration-020.sql in Supabase).', rows: [] };
+    }
+    return { ok: false, error: friendly(error), rows: [] };
+  }
+  return { ok: true, rows: (data || []).map(paymentRowToObj) };
+}
+
+/** Provider-tier: mark one or many companies' CURRENT month rent as paid, using
+ * each company's own configured rental_fee automatically. Pass an array of
+ * company IDs even for a single company. */
+export async function markRentPaid(companyIds) {
+  const me = await getCurrentUser();
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.rpc('mark_rent_paid', { company_ids: companyIds });
+  if (error) {
+    if (/mark_rent_paid|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      return { ok: false, error: 'This needs a one-time database setup (run migration-020.sql in Supabase).' };
+    }
+    return { ok: false, error: friendly(error) };
+  }
+  return { ok: true };
+}
+
+/** Provider-tier: clear the CURRENT month's paid record for one or many companies. */
+export async function markRentUnpaid(companyIds) {
+  const me = await getCurrentUser();
+  if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.rpc('mark_rent_unpaid', { company_ids: companyIds });
+  if (error) {
+    if (/mark_rent_unpaid|does not exist|could not find|schema cache|PGRST202/i.test(error.message || '')) {
+      return { ok: false, error: 'This needs a one-time database setup (run migration-020.sql in Supabase).' };
     }
     return { ok: false, error: friendly(error) };
   }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import FluidDropdown from '../components/FluidDropdown.jsx';
 import { useEsc } from '../lib/useEsc.js';
 import {
@@ -16,6 +16,10 @@ import {
   setOwnerCompanyLink,
   createProvider,
   listProviders,
+  listBillingPayments,
+  markRentPaid,
+  markRentUnpaid,
+  currentBillingPeriod,
   listCompanyBilling,
   updateCompanyBilling,
 } from '../lib/auth.js';
@@ -33,6 +37,15 @@ import useIsMobile from '../lib/useIsMobile.js';
  * company (password-confirmed; cascades to its accounts + data).
  * Passwords are self-service: each user changes their own once logged in.
  */
+// 'YYYY-MM' -> "July 2026".
+function monthLabel(period) {
+  if (!period) return '';
+  const [y, m] = period.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+}
+function fmtMoney(n) {
+  return n == null ? '' : `$${Number(n).toFixed(2)}`;
+}
 // Small local date formatter — no library, matches the plain-JS style used elsewhere here.
 function fmtDate(d) {
   if (!d) return '';
@@ -64,14 +77,19 @@ export default function Provider({ ctx, onLogout }) {
   const isWide = useMediaQuery('(min-width: 1200px)');
   const [companies, setCompanies] = useState(null); // null = loading
   const [guideOpen, setGuideOpen] = useState(false);
-  const [billing, setBilling] = useState(null); // null = loading; array of {companyId, startedAt, rentalFee, rentalPaid, rentalPaidAt}
+  const [billing, setBilling] = useState(null); // null = loading; array of {companyId, startedAt, rentalFee}
   const [billingError, setBillingError] = useState('');
+  const [payments, setPayments] = useState(null); // null = loading; full payment log, every company/period
+  const [paymentsError, setPaymentsError] = useState('');
 
   async function refresh() {
     setCompanies(await listCompaniesWithMasters());
     const b = await listCompanyBilling();
     if (b.ok) { setBilling(b.rows); setBillingError(''); }
     else { setBilling([]); setBillingError(b.error); }
+    const p = await listBillingPayments();
+    if (p.ok) { setPayments(p.rows); setPaymentsError(''); }
+    else { setPayments([]); setPaymentsError(p.error); }
   }
   useEffect(() => { refresh(); }, []);
 
@@ -83,8 +101,20 @@ export default function Provider({ ctx, onLogout }) {
       <MaintenanceCard />
     </div>
   );
-  const companiesSection = <CompaniesCard companies={companies} billing={billing} onChanged={refresh} />;
-  const billingSection = <BillingCard companies={companies || []} billing={billing} billingError={billingError} onChanged={refresh} />;
+  const companiesSection = <CompaniesCard companies={companies} billing={billing} isFullProvider={user.role === 'provider'} onChanged={refresh} />;
+  const billingSection = (
+    <BillingCard companies={companies || []} billing={billing} billingError={billingError}
+      payments={payments || []} paymentsError={paymentsError} onChanged={refresh} />
+  );
+  const historySection = <PaymentHistoryCard companies={companies || []} payments={payments} paymentsError={paymentsError} />;
+  // billingSection + historySection share ONE grid column (the 340px slot on wide
+  // screens) stacked vertically, rather than each being a separate grid cell.
+  const billingColumn = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {billingSection}
+      {historySection}
+    </div>
+  );
 
   return (
     <div style={styles.page}>
@@ -102,8 +132,10 @@ export default function Provider({ ctx, onLogout }) {
             <i className="ti ti-help" aria-hidden="true" style={{ fontSize: 18 }} />
           </button>
           <ThemeToggle />
-          <span className="badge badge-provider"><i className="ti ti-shield-lock" aria-hidden="true" /> Provider</span>
-          <AccountMenu user={user} roleLabel="Provider" onLogout={onLogout} onOpenGuide={() => setGuideOpen(true)} />
+          <span className={`badge ${user.role === 'provider' ? 'badge-provider' : 'badge-subprovider'}`}>
+            <i className="ti ti-shield-lock" aria-hidden="true" /> {user.role === 'provider' ? 'Provider' : 'Sub-provider'}
+          </span>
+          <AccountMenu user={user} roleLabel={user.role === 'provider' ? 'Provider' : 'Sub-provider'} onLogout={onLogout} onOpenGuide={() => setGuideOpen(true)} />
         </div>
       </header>
       <Guide open={guideOpen} role={user.role} onClose={() => setGuideOpen(false)} />
@@ -114,12 +146,12 @@ export default function Provider({ ctx, onLogout }) {
           {isWide ? (
             <>
               {companiesSection}
-              {billingSection}
+              {billingColumn}
             </>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {companiesSection}
-              {billingSection}
+              {billingColumn}
             </div>
           )}
         </div>
@@ -129,7 +161,7 @@ export default function Provider({ ctx, onLogout }) {
 }
 
 /* Companies list + its own search box (name or master name/email). */
-function CompaniesCard({ companies, billing, onChanged }) {
+function CompaniesCard({ companies, billing, isFullProvider, onChanged }) {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const filtered = !companies ? [] : q
@@ -168,7 +200,7 @@ function CompaniesCard({ companies, billing, onChanged }) {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filtered.map((c) => <CompanyCard key={c.id} company={c} billing={billing} onChanged={onChanged} />)}
+        {filtered.map((c) => <CompanyCard key={c.id} company={c} billing={billing} isFullProvider={isFullProvider} onChanged={onChanged} />)}
       </div>
     </section>
   );
@@ -354,7 +386,8 @@ function OwnerSkeletonRow() {
 }
 
 function ProvidersCard({ user }) {
-  const blank = { name: '', email: '', password: '', currentPassword: '' };
+  const blank = { name: '', email: '', password: '', currentPassword: '', role: 'sub-provider' };
+  const isFullProvider = user.role === 'provider';
   const [providers, setProviders] = useState(null);
   const [form, setForm] = useState(blank);
   const [error, setError] = useState('');
@@ -374,7 +407,7 @@ function ProvidersCard({ user }) {
     const res = await createProvider(form);
     setBusy(false);
     if (!res.ok) return setError(res.error);
-    setOk(`Created provider login for ${res.user.name}.`);
+    setOk(`Created ${form.role === 'provider' ? 'provider' : 'sub-provider'} login for ${res.user.name}.`);
     setForm(blank);
     refresh();
   }
@@ -393,24 +426,42 @@ function ProvidersCard({ user }) {
     <section style={styles.card}>
       <h3 style={styles.cardTitle}><i className="ti ti-shield-lock" aria-hidden="true" /> Providers</h3>
       <p style={styles.cardSub}>
-        Full access — a provider can create, edit, and delete anything, including every
-        company and every other provider login. Only add someone you fully trust with everything.
+        A provider has full access to everything. A sub-provider can do everything EXCEPT
+        delete a company, and can never touch another provider or sub-provider's login
+        (edit, deactivate, delete, or reset its password) — only a full provider can do that.
       </p>
-      <form onSubmit={submit}>
-        <div className="field"><label>Name / ID</label>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Alex" /></div>
-        <div className="field"><label>Email</label>
-          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="alex@example.com" /></div>
-        <div className="field"><label>Temp password (for the new login)</label>
-          <input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="≥ 6 characters" /></div>
-        <div className="field"><label>Your own password (confirms it's really you)</label>
-          <input type="password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} placeholder="Re-enter your password" /></div>
-        {error && <div className="error-text">{error}</div>}
-        {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
-        <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 6 }} disabled={busy}>
-          <i className={`ti ti-${busy ? 'loader-2' : 'plus'}`} aria-hidden="true" /> {busy ? 'Creating…' : 'Create provider'}
-        </button>
-      </form>
+
+      {isFullProvider ? (
+        <form onSubmit={submit}>
+          <div className="field"><label>Access level</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className={`btn btn-sm ${form.role === 'sub-provider' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ flex: 1 }} onClick={() => setForm({ ...form, role: 'sub-provider' })}>
+                <i className="ti ti-shield" aria-hidden="true" /> Sub-provider
+              </button>
+              <button type="button" className={`btn btn-sm ${form.role === 'provider' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ flex: 1 }} onClick={() => setForm({ ...form, role: 'provider' })}>
+                <i className="ti ti-shield-lock" aria-hidden="true" /> Full provider
+              </button>
+            </div>
+          </div>
+          <div className="field"><label>Name / ID</label>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Alex" /></div>
+          <div className="field"><label>Email</label>
+            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="alex@example.com" /></div>
+          <div className="field"><label>Temp password (for the new login)</label>
+            <input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="≥ 6 characters" /></div>
+          <div className="field"><label>Your own password (confirms it's really you)</label>
+            <input type="password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} placeholder="Re-enter your password" /></div>
+          {error && <div className="error-text">{error}</div>}
+          {ok && <div className="success-text"><i className="ti ti-circle-check" aria-hidden="true" />{ok}</div>}
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 6 }} disabled={busy}>
+            <i className={`ti ti-${busy ? 'loader-2' : 'plus'}`} aria-hidden="true" /> {busy ? 'Creating…' : `Create ${form.role === 'provider' ? 'provider' : 'sub-provider'}`}
+          </button>
+        </form>
+      ) : (
+        <p style={{ ...styles.cardSub, marginBottom: 0 }}>Only a full provider can create or manage provider-tier logins.</p>
+      )}
 
       {providers === null && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
@@ -424,16 +475,21 @@ function ProvidersCard({ user }) {
             <div key={p.id} style={styles.masterRow}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>
-                  {p.name} <span className="badge badge-provider" style={{ marginLeft: 4 }}>Provider</span>
+                  {p.name}{' '}
+                  <span className={`badge ${p.role === 'provider' ? 'badge-provider' : 'badge-subprovider'}`} style={{ marginLeft: 4 }}>
+                    {p.role === 'provider' ? 'Provider' : 'Sub-provider'}
+                  </span>
                   {p.id === user.id && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--muted)' }}>(you)</span>}
                 </div>
                 <div style={styles.sub}>{p.email}</div>
               </div>
-              <button type="button" className="btn btn-ghost btn-sm"
-                onClick={() => { setResettingId(resettingId === p.id ? null : p.id); setResetPw(''); setError(''); setOk(''); }}>
-                <i className="ti ti-key" aria-hidden="true" /> Reset password
-              </button>
-              {resettingId === p.id && (
+              {isFullProvider && (
+                <button type="button" className="btn btn-ghost btn-sm"
+                  onClick={() => { setResettingId(resettingId === p.id ? null : p.id); setResetPw(''); setError(''); setOk(''); }}>
+                  <i className="ti ti-key" aria-hidden="true" /> Reset password
+                </button>
+              )}
+              {isFullProvider && resettingId === p.id && (
                 <form onSubmit={(e) => doReset(e, p.id, p.name)} style={styles.resetRow}>
                   <input type="text" value={resetPw} onChange={(e) => setResetPw(e.target.value)}
                     placeholder={`New password for ${p.name}`} style={{ flex: 1 }} />
@@ -508,10 +564,41 @@ function MaintenanceCard() {
  * Rental fees — provider-only bookkeeping (migration-016). Never shown to any
  * other role. One row per company: start date, rent amount, paid/unpaid.
  */
-function BillingCard({ companies, billing, billingError, onChanged }) {
+function BillingCard({ companies, billing, billingError, payments, paymentsError, onChanged }) {
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkErr, setBulkErr] = useState('');
   const q = query.trim().toLowerCase();
   const filtered = q ? companies.filter((c) => c.name.toLowerCase().includes(q)) : companies;
+  const period = currentBillingPeriod();
+  const thisMonth = useMemo(
+    () => new Map((payments || []).filter((p) => p.period === period).map((p) => [p.companyId, p])),
+    [payments, period]
+  );
+  const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id));
+
+  function toggleOne(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(filtered.map((c) => c.id)));
+  }
+
+  async function bulkMark(paid) {
+    setBulkErr(''); setBulkBusy(true);
+    const res = paid ? await markRentPaid([...selected]) : await markRentUnpaid([...selected]);
+    setBulkBusy(false);
+    if (!res.ok) { setBulkErr(res.error); return; }
+    setSelected(new Set());
+    onChanged?.();
+  }
+
+  const ready = billing && !billingError && !paymentsError;
 
   return (
     <section style={styles.card}>
@@ -528,29 +615,50 @@ function BillingCard({ companies, billing, billingError, onChanged }) {
           )}
         </div>
       </div>
-      <p style={styles.cardSub}>Provider-only — never shown to a company's own master, manager or staff.</p>
+      <p style={styles.cardSub}>Provider-only. Paid / unpaid below is for {monthLabel(period)}.</p>
 
       {billing === null && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <BillingSkeletonRow /><BillingSkeletonRow />
         </div>
       )}
-      {billing && billingError && (
-        <p style={styles.cardSub}>{billingError}</p>
-      )}
-      {billing && !billingError && companies.length === 0 && (
-        <p style={styles.cardSub}>No companies yet.</p>
-      )}
-      {billing && !billingError && companies.length > 0 && filtered.length === 0 && (
+      {billing && billingError && <p style={styles.cardSub}>{billingError}</p>}
+      {billing && !billingError && paymentsError && <p style={styles.cardSub}>{paymentsError}</p>}
+      {ready && companies.length === 0 && <p style={styles.cardSub}>No companies yet.</p>}
+      {ready && companies.length > 0 && filtered.length === 0 && (
         <p style={styles.cardSub}>No companies match “{query}”.</p>
       )}
 
-      {billing && !billingError && filtered.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map((c) => (
-            <BillingRow key={c.id} company={c} billing={billing.find((b) => b.companyId === c.id)} onChanged={onChanged} />
-          ))}
-        </div>
+      {ready && filtered.length > 0 && (
+        <>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={allSelected} onChange={toggleAll}
+              style={{ width: 16, height: 16, minWidth: 16, padding: 0, border: 'revert', borderRadius: 'revert', background: 'revert', flexShrink: 0, accentColor: 'var(--accent)' }} />
+            <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>Select all</span>
+          </label>
+
+          {selected.size > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', marginBottom: 10, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{selected.size} selected</span>
+              <button type="button" className="btn btn-success btn-sm" disabled={bulkBusy} onClick={() => bulkMark(true)}>
+                <i className={`ti ti-${bulkBusy ? 'loader-2' : 'check'}`} aria-hidden="true" /> Mark paid
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={bulkBusy} onClick={() => bulkMark(false)}>
+                <i className={`ti ti-${bulkBusy ? 'loader-2' : 'x'}`} aria-hidden="true" /> Mark unpaid
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={bulkBusy} onClick={() => setSelected(new Set())}>Clear</button>
+              {bulkErr && <div className="error-text" style={{ width: '100%', margin: 0 }}>{bulkErr}</div>}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {filtered.map((c) => (
+              <BillingRow key={c.id} company={c} billing={billing.find((b) => b.companyId === c.id)}
+                payment={thisMonth.get(c.id)} selected={selected.has(c.id)} onToggleSelect={() => toggleOne(c.id)}
+                onChanged={onChanged} />
+            ))}
+          </div>
+        </>
       )}
     </section>
   );
@@ -565,15 +673,16 @@ function BillingSkeletonRow() {
       </div>
       <SkeletonBlock width={138} height={30} style={{ borderRadius: 7 }} />
       <SkeletonBlock width={76} height={30} style={{ borderRadius: 7 }} />
-      <SkeletonBlock width={80} height={16} />
+      <SkeletonBlock width={120} height={28} style={{ borderRadius: 7 }} />
     </div>
   );
 }
 
-function BillingRow({ company, billing, onChanged }) {
+function BillingRow({ company, billing, payment, selected, onToggleSelect, onChanged }) {
   const [rentDraft, setRentDraft] = useState(billing?.rentalFee != null ? String(billing.rentalFee) : '');
   const [savingField, setSavingField] = useState(null); // 'started' | 'rent' | 'paid' | null
   const [err, setErr] = useState('');
+  const isPaid = !!payment;
 
   // Keep the draft in sync if the underlying data changes (e.g. after a refresh).
   useEffect(() => {
@@ -598,9 +707,9 @@ function BillingRow({ company, billing, onChanged }) {
     onChanged?.();
   }
 
-  async function togglePaid(paid) {
+  async function markOne(paid) {
     setSavingField('paid'); setErr('');
-    const res = await updateCompanyBilling(company.id, { rentalPaid: paid });
+    const res = paid ? await markRentPaid([company.id]) : await markRentUnpaid([company.id]);
     setSavingField(null);
     if (!res.ok) { setErr(res.error); return; }
     onChanged?.();
@@ -608,6 +717,10 @@ function BillingRow({ company, billing, onChanged }) {
 
   return (
     <div style={styles.billingRow}>
+      {/* Global `input, select { width:100% }` rule stretches plain checkboxes — reset it here (same fix as the Owners "Link companies" row). */}
+      <input type="checkbox" checked={selected} onChange={onToggleSelect}
+        style={{ width: 16, height: 16, minWidth: 16, padding: 0, border: 'revert', borderRadius: 'revert', background: 'revert', flexShrink: 0, accentColor: 'var(--accent)' }} />
+
       <div style={styles.billingCompanyCell}>
         {company.logo
           ? <img src={company.logo} alt="" style={{ height: 20, maxWidth: 64, objectFit: 'contain', borderRadius: 4, flexShrink: 0 }} />
@@ -631,24 +744,80 @@ function BillingRow({ company, billing, onChanged }) {
         </div>
       </label>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: savingField === 'paid' ? 'wait' : 'pointer' }}>
-        {/* Global `input, select { width:100% }` rule stretches plain checkboxes — reset it here (same fix as the Owners "Link companies" row). */}
-        <input type="checkbox" checked={!!billing?.rentalPaid} disabled={savingField === 'paid'}
-          onChange={(e) => togglePaid(e.target.checked)}
-          style={{ width: 16, height: 16, minWidth: 16, padding: 0, border: 'revert', borderRadius: 'revert', background: 'revert', flexShrink: 0, accentColor: 'var(--accent)' }} />
-        <span style={{ fontSize: 12.5 }}>
-          {billing?.rentalPaid
-            ? <span style={{ color: 'var(--success)' }}>Paid{billing.rentalPaidAt ? ` · ${fmtDate(billing.rentalPaidAt)}` : ''}</span>
-            : <span style={{ color: 'var(--muted)' }}>Unpaid</span>}
-        </span>
-      </label>
+      <div style={styles.billingField}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="button" className={`btn btn-sm ${isPaid ? 'btn-success' : 'btn-ghost'}`}
+            disabled={savingField === 'paid'} onClick={() => markOne(true)}>
+            <i className="ti ti-check" aria-hidden="true" /> Paid
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm"
+            disabled={savingField === 'paid'} onClick={() => markOne(false)}>
+            <i className="ti ti-x" aria-hidden="true" /> Unpaid
+          </button>
+        </div>
+        {isPaid && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtMoney(payment.amount)} · {fmtDate(payment.paidAt)}</span>}
+      </div>
 
       {err && <div className="error-text" style={{ width: '100%', margin: 0 }}>{err}</div>}
     </div>
   );
 }
 
-function CompanyCard({ company, billing, onChanged }) {
+/* Full month-by-month log across every company — the "previous record" view.
+ * Marking paid/unpaid above writes into this same log, so nothing extra to do
+ * to keep it current. */
+function PaymentHistoryCard({ companies, payments, paymentsError }) {
+  const [showAll, setShowAll] = useState(false);
+  const CAP = 15;
+  const companyName = (id) => companies.find((c) => c.id === id)?.name || 'Unknown company';
+  const sorted = [...(payments || [])].sort((a, b) => {
+    if (a.period !== b.period) return b.period.localeCompare(a.period);
+    return companyName(a.companyId).localeCompare(companyName(b.companyId));
+  });
+  const rows = showAll ? sorted : sorted.slice(0, CAP);
+
+  return (
+    <section style={styles.card}>
+      <h3 style={{ ...styles.cardTitle, margin: 0 }}><i className="ti ti-history" aria-hidden="true" /> Payment history</h3>
+      <p style={styles.cardSub}>Every rental payment ever recorded, newest month first — the permanent record behind the paid/unpaid buttons above.</p>
+
+      {payments === null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <SkeletonBlock height={32} style={{ borderRadius: 7 }} />
+          <SkeletonBlock height={32} style={{ borderRadius: 7 }} />
+          <SkeletonBlock height={32} style={{ borderRadius: 7 }} />
+        </div>
+      )}
+      {payments && paymentsError && <p style={{ ...styles.cardSub, marginBottom: 0 }}>{paymentsError}</p>}
+      {payments && !paymentsError && sorted.length === 0 && (
+        <p style={{ ...styles.cardSub, marginBottom: 0 }}>No payments recorded yet — mark a company paid above and it'll show up here.</p>
+      )}
+
+      {payments && !paymentsError && sorted.length > 0 && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {rows.map((p) => (
+              <div key={p.id} style={styles.historyRow}>
+                <span style={styles.historyCompany}>{companyName(p.companyId)}</span>
+                <span style={styles.historyPeriod}>{monthLabel(p.period)}</span>
+                <span style={styles.historyAmount}>{fmtMoney(p.amount)}</span>
+                <span style={styles.sub}>{fmtDate(p.paidAt)}</span>
+              </div>
+            ))}
+          </div>
+          {sorted.length > CAP && (
+            <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 10, width: '100%' }}
+              onClick={() => setShowAll((s) => !s)}>
+              {showAll ? 'Show less' : `Show all ${sorted.length}`}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function CompanyCard({ company, billing, isFullProvider, onChanged }) {
   const isMobile = useIsMobile();
   const myBilling = billing?.find((b) => b.companyId === company.id);
   const [error, setError] = useState('');
@@ -770,9 +939,11 @@ function CompanyCard({ company, billing, onChanged }) {
             <button className="btn btn-ghost btn-sm" onClick={() => { setAdding((a) => !a); setError(''); setOk(''); }}>
               <i className="ti ti-user-plus" aria-hidden="true" /> Add master
             </button>
-            <button className="btn btn-danger btn-sm" onClick={() => setShowDelete(true)}>
-              <i className="ti ti-trash" aria-hidden="true" /> Delete
-            </button>
+            {isFullProvider && (
+              <button className="btn btn-danger btn-sm" onClick={() => setShowDelete(true)}>
+                <i className="ti ti-trash" aria-hidden="true" /> Delete
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -977,4 +1148,8 @@ const styles = {
   billingFieldLabel: { fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)' },
   billingDateInput: { padding: '6px 8px', fontSize: 12.5, borderRadius: 7, width: 138 },
   billingRentInput: { padding: '6px 8px', fontSize: 12.5, borderRadius: 7, width: 76, fontVariantNumeric: 'tabular-nums' },
+  historyRow: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '7px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 12.5 },
+  historyCompany: { flex: '1 1 120px', minWidth: 0, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  historyPeriod: { flex: '0 0 auto', color: 'var(--muted)' },
+  historyAmount: { flex: '0 0 auto', fontVariantNumeric: 'tabular-nums', fontWeight: 500 },
 };

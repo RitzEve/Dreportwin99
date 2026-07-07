@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabaseClient.js';
-import { ROLES, loadContext, logout, canAccessConsole } from './lib/auth.js';
+import { ROLES, loadContext, logout, canAccessConsole, isProviderTier } from './lib/auth.js';
 import Login from './screens/Login.jsx';
 import Provider from './screens/Provider.jsx';
 import Console from './screens/Console.jsx';
@@ -55,7 +55,7 @@ export default function Root() {
   let content;
   if (loading) content = <Splash />;
   else if (!ctx) content = <Login onAuthed={handleAuthed} />;
-  else if (ctx.user.role === ROLES.PROVIDER) content = <Provider ctx={ctx} onLogout={handleLogout} />;
+  else if (isProviderTier(ctx.user.role)) content = <Provider ctx={ctx} onLogout={handleLogout} />;
   else if (ctx.user.role === ROLES.OWNER) {
     content = ownerCompany
       ? <AppScreen ctx={{ user: ctx.user, company: ownerCompany }} onExit={() => setOwnerCompany(null)} onLogout={handleLogout} backLabel="Overview" />

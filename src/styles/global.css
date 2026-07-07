@@ -127,6 +127,8 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 .btn-ghost:hover:not(:disabled) { border-color: var(--border-strong); }
 .btn-danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.btn-success { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); border-color: var(--success); }
+.btn-success:hover:not(:disabled) { background: var(--success); color: #fff; }
 .btn-sm { padding: 6px 12px; font-size: 12.5px; border-radius: 7px; }
 
 /* ---- keyboard focus ring (consistent + on-brand) ----
@@ -172,6 +174,7 @@ input::placeholder { color: var(--muted); opacity: 0.7; }
 .badge-master { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .badge-manager { background: color-mix(in srgb, #7c3aed 16%, transparent); color: #7c3aed; }
 .badge-provider { background: color-mix(in srgb, #0d9488 18%, transparent); color: #0d9488; }
+.badge-subprovider { background: color-mix(in srgb, #0891b2 16%, transparent); color: #0891b2; }
 .badge-owner { background: color-mix(in srgb, #2563eb 16%, transparent); color: #2563eb; }
 .badge-staff { background: var(--surface-2); color: var(--muted); }
 .badge-off { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }

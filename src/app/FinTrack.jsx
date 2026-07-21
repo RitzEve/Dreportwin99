@@ -1667,7 +1667,7 @@ export default function App() {
   };
   const openBankDetail = b => {
     const tx = transactions.filter(t=>txInBank(t,b)).sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time));
-    setDetailModal({title:b.name,subtitle:`Holder: ${b.holder} · BSB: ${b.bsb||"—"} · Acc: ${b.account} · ${tx.length} transactions · Balance: ${fmt(b.balance)}`,transactions:tx,yesterday:b.yBalance});
+    setDetailModal({title:b.name,subtitle:`Holder: ${b.holder} · BSB: ${b.bsb||"—"} · Acc: ${b.account||"—"} · PayID: ${b.payid||"—"} · ${tx.length} transactions · Balance: ${fmt(b.balance)}`,transactions:tx,yesterday:b.yBalance});
   };
 
   const nav = [

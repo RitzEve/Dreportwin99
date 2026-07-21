@@ -1,8 +1,12 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { login } from '../lib/auth.js';
 import { applyTheme } from '../lib/theme.js';
 import InstallPrompt from '../components/InstallPrompt.jsx';
 import UpdateBell from '../components/UpdateBell.jsx';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
+
+gsap.registerPlugin(useGSAP);
 
 // Lazy-loaded: Three.js + @react-three/fiber + @react-three/drei add ~230KB
 // gzipped, which would otherwise bloat EVERY page's bundle (Provider/Console/
@@ -64,6 +68,17 @@ export default function Login({ onAuthed }) {
   // Skip the WebGL canvas entirely for reduced-motion users — no motion, no
   // GPU/battery cost, just the plain gradient background underneath it.
   const [reducedMotion] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  // Gentle entrance for the login card — a soft fade-and-rise on mount (GSAP via
+  // the useGSAP hook, which auto-reverts on unmount). Honors reduced-motion by
+  // simply not running, and by skipping when the tab is hidden at mount (GSAP is
+  // rAF-driven and pauses while hidden, which would otherwise leave the card blank
+  // until the tab regains focus) — either way the card just shows at its natural state.
+  const cardRef = useRef(null);
+  useGSAP(() => {
+    if (reducedMotion || document.hidden) return;
+    gsap.from(cardRef.current, { opacity: 0, y: 24, duration: 0.7, ease: 'power3.out' });
+  }, { scope: cardRef });
 
   // This screen is always the dark brand look, independent of the site's own
   // light/dark toggle. Force it just while mounted, then hand back whatever
@@ -145,7 +160,7 @@ export default function Login({ onAuthed }) {
       <div style={styles.vignette} aria-hidden="true" />
 
       {/* Login card */}
-      <div style={styles.card}>
+      <div ref={cardRef} style={styles.card}>
         <ShieldMark size={56} />
         <h1 style={styles.heading}>Welcome back</h1>
         <p style={styles.subheading}>Sign in to continue</p>
@@ -186,7 +201,7 @@ export default function Login({ onAuthed }) {
         <InstallPrompt />
 
         <div style={styles.footer}>
-          Secure access · authorised accounts only · V2.4.4
+          Secure access · authorised accounts only · V2.4.5
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ vite-dev.log
 
 # Test/automation artifacts
 .playwright-mcp/
+.superpowers/
 
 # OS / editor noise
 .DS_Store

@@ -4,10 +4,18 @@ import UpdateBell from "../components/UpdateBell.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
+
+gsap.registerPlugin(useGSAP);
 
 // Short labels for the mobile bottom tab bar (the desktop sidebar uses the full
 // nav labels, but "Bank Accounts" / "Transactions" are too wide for a phone tab).
-const MOBILE_TAB_LABEL = { dashboard:"Home", transactions:"Record", banks:"Banks", members:"Members", search:"Search", offdays:"Shifts" };
+const MOBILE_TAB_LABEL = { dashboard:"Home", transactions:"Record", banks:"Banks", bankdetails:"Details", members:"Members", search:"Search", offdays:"Shifts" };
+// The bottom tab bar has room for 6 slots. These 5 always stay as their own tab;
+// everything else (Off Days, and Bank Details for master/manager) collapses into
+// a 6th "More" tab instead of cramming a 7th+ item into the bar.
+const MOBILE_PRIMARY_IDS = ["dashboard","transactions","banks","members","search"];
 
 // ============================================================================
 // SESSION — when this goes online, your login frontend/backend injects the
@@ -437,6 +445,138 @@ function BankTotals({banksLive, asOf, isPast}) {
   );
 }
 
+// ---- Bank Details: master/manager-only drop-account records ----------------
+// Separate from `banks` (used for live entry) — this is just a record, not
+// wired to transactions unless explicitly copied over via "Add to bank
+// accounts". Lives in its own Supabase table (migration-021), reached through
+// window.FINTRACK_BANK_DETAILS_API (null for staff — see AppScreen.jsx).
+// One field-list drives the add/edit form AND the read-only record panel, so
+// the two stay in sync automatically instead of being maintained twice.
+const BD_GROUPS = [
+  {title:"Identity", fields:[
+    ["phoneModel","Phone model","text"],["bankName","Bank name","bankSelect"],["holderName","Holder name","text"],
+    ["dateOfBirth","Date of birth","date"],["phoneNumber","Phone number","text"],["agent","Agent","text"],
+  ]},
+  {title:"Access & security", fields:[
+    ["email","Email","text"],["customerLoginId","Customer / login ID","text"],["emailPassword","Email password","password"],
+    ["internetPassword","Internet / login password","password"],["loginPin","Login PIN","password"],["vpn","VPN","text"],
+  ]},
+  {title:"Card", fields:[
+    ["cardLast4","Card last 4 digits","text"],["cardPin","Card PIN","password"],
+  ]},
+  {title:"Banking details", fields:[
+    ["bsb","BSB","text"],["account","Account number","text"],["payid","PayID","text"],["otpLink","OTP link","text"],
+  ]},
+  {title:"Notes", fields:[
+    ["openDate","Open date","date"],["others","Others","text"],["remarks","Remarks","textarea"],
+  ]},
+];
+const BD_FIELDS = BD_GROUPS.flatMap(g=>g.fields.map(([key])=>key));
+const BD_BLANK = Object.fromEntries(BD_FIELDS.map(k=>[k,""]));
+// The 8 fields shown on the compact card face (everything else lives in the record panel).
+const BD_CARD_FIELDS = [["phoneModel","Phone model"],["agent","Agent"],["bsb","BSB"],["account","Account"],["vpn","VPN"],["loginPin","Login PIN",true]];
+
+// Masked value with a one-tap reveal — used for every credential-shaped field
+// (Login PIN, Card PIN, Email/Internet password), both on the compact card and
+// in the full record panel. stopPropagation so tapping it never also opens/
+// closes whatever card or panel it's sitting inside.
+function Masked({value}) {
+  const [show,setShow] = useState(false);
+  if(!value) return <span style={{color:C.muted,fontWeight:400}}>—</span>;
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}>
+      <span style={{fontFamily:"ui-monospace,Consolas,monospace",letterSpacing:show?0:2}}>{show?value:"•".repeat(Math.min(value.length,8))}</span>
+      <button type="button" onClick={()=>setShow(s=>!s)} style={{cursor:"pointer",fontSize:9.5,fontWeight:700,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:4,padding:"1px 5px",lineHeight:1.6}}>{show?"HIDE":"SHOW"}</button>
+    </span>
+  );
+}
+
+// Read-only rendering for one field in the record panel: masked for credentials,
+// date-formatted for dates, a clickable chip for the OTP link, plain text otherwise.
+function BdFieldValue({fieldKey,type,value}) {
+  if(type==="password") return <Masked value={value}/>;
+  if(!value) return <span style={{color:C.muted,fontWeight:400}}>—</span>;
+  if(type==="date") return fmtDate(value);
+  if(fieldKey==="otpLink") return <a href={value} target="_blank" rel="noopener noreferrer" style={{color:C.accent,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4,wordBreak:"break-all"}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12,flexShrink:0}}/>{value}</a>;
+  return <span style={{wordBreak:"break-word"}}>{value}</span>;
+}
+
+function BankDetailCard({bd, onOpen, onEdit, onDelete, onToggleFrozen, onAddToBankAccounts}) {
+  const added = !!bd.addedToBankAccountsAt;
+  return (
+    <GlowCard className="bd-card" color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:"pointer",...(bd.frozen?frozenCardStyle:null)}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=bd.frozen?FROST_BORDER:C.border;}}
+      onClick={onOpen}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:2}}>
+        <span style={{fontSize:12.5,fontWeight:600,color:C.accent,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{bd.bankName||"—"}</span>
+        {bd.frozen&&<span style={{flexShrink:0,fontSize:10,fontWeight:600,color:dark?"#7dd3fc":"#0369a1",background:dark?"#0e2a3a":"#e0f2fe",border:"1px solid #38bdf8",borderRadius:4,padding:"1px 6px",display:"inline-flex",alignItems:"center",gap:3}}><i className="ti ti-snowflake" aria-hidden="true" style={{fontSize:11}}/>Frozen</span>}
+      </div>
+      <div title={bd.holderName} style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:added?6:11,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{bd.holderName||"Unnamed record"}</div>
+      {added&&<div style={{marginBottom:9}}><span style={{fontSize:10,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:20,padding:"2px 8px",display:"inline-flex",alignItems:"center",gap:3}}><i className="ti ti-check" aria-hidden="true" style={{fontSize:11}}/>Added to Bank Accounts</span></div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px 12px",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 10px",marginBottom:11,fontSize:12}}>
+        {BD_CARD_FIELDS.map(([key,label,masked])=>(
+          <div key={key}><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>{label}</div>
+            <div style={{color:C.text,fontWeight:500}}>{masked?<Masked value={bd[key]}/>:(bd[key]||"—")}</div></div>
+        ))}
+        <div style={{gridColumn:"1/-1"}}><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>PayID</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-all"}}>{bd.payid||"—"}</div></div>
+        <div style={{gridColumn:"1/-1"}}>
+          <div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>OTP link</div>
+          {bd.otpLink
+            ? <a href={bd.otpLink} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:C.accent,fontWeight:500,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12}}/>Open</a>
+            : <span style={{color:C.text,fontWeight:500}}>—</span>}
+        </div>
+      </div>
+      <div onClick={e=>e.stopPropagation()} style={{display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
+          <button onClick={onDelete} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
+        </div>
+        <button onClick={onToggleFrozen} style={{...(bd.frozen?bankBlockedBtnStyle:bankBlockBtnStyle),justifyContent:"center"}}
+          title={bd.frozen?"Frozen — click to unfreeze":"Click to freeze this record"}>
+          <i className={`ti ti-${bd.frozen?"snowflake-off":"snowflake"}`} aria-hidden="true"/> {bd.frozen?"Unfreeze":"Freeze"}
+        </button>
+        <button onClick={onAddToBankAccounts} style={{cursor:"pointer",padding:"5px 10px",minHeight:32,fontSize:11,fontWeight:600,border:`1px solid ${C.accent}`,borderRadius:6,background:C.accent,color:C.onAccent,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:4}}>
+          <i className="ti ti-building-bank" aria-hidden="true"/> {added?"Add again":"Add to bank accounts"}
+        </button>
+      </div>
+    </GlowCard>
+  );
+}
+
+function BankDetailPanel({bd, onClose, panelRef}) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998,padding:"24px 16px"}} onClick={onClose}>
+      <div ref={panelRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:720,maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+          <div>
+            <div style={{fontWeight:500,fontSize:17}}>{bd.bankName||"—"} — {bd.holderName||"Unnamed record"}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:3}}>{bd.frozen?"Frozen":"Active"}{bd.addedToBankAccountsAt?" · Added to Bank Accounts":""}</div>
+          </div>
+          <button onClick={onClose} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}>
+            <i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/> Close
+          </button>
+        </div>
+        <div style={{padding:"18px 20px",overflowY:"auto",background:C.bg}}>
+          {BD_GROUPS.map(g=>(
+            <div key={g.title} style={{marginBottom:16}}>
+              <div style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:8}}>{g.title}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"9px 18px"}}>
+                {g.fields.map(([key,label,type])=>(
+                  <div key={key} style={type==="textarea"?{gridColumn:"1/-1"}:null}>
+                    <div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>{label}</div>
+                    <div style={{fontSize:13,fontWeight:500}}><BdFieldValue fieldKey={key} type={type} value={bd[key]}/></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Transaction log with a page-size dropdown (default 50) + simple pager.
 const PAGE_SIZES = [50,100,200,500,1000];
 // Member directory sort options (value -> label shown in the Sort dropdown).
@@ -741,6 +881,11 @@ export default function App() {
   const TEAM = readTeam().filter(Boolean).map(t=>({ id:t.id, operatorId:t.operatorId||t.id||"", name:t.name||"Unnamed", role:t.role, nationality:t.nationality||"" }));
   // Only master/manager can rearrange the shift roster — staff see it read-only.
   const canEditRoster = SESSION.role==="master" || SESSION.role==="manager";
+  // Bank Details is master/manager-only — the nav item is hidden for staff below,
+  // and the page content is guarded by this flag too (defense in depth). The REAL
+  // gate is server-side RLS (migration-021): window.FINTRACK_BANK_DETAILS_API is
+  // null for a staff session, so this flag and that null always agree.
+  const canAccessBankDetails = SESSION.role==="master" || SESSION.role==="manager";
   // This company's time zone (set per company by the provider). All "now" dates
   // and times below are computed in this zone so the log follows it.
   const tz = SESSION.timezone || "Australia/Sydney";
@@ -802,13 +947,27 @@ export default function App() {
   const idSuggestRef = useRef(null);
   const phoneSuggestRef = useRef(null);
 
-  const [newBank,setNewBank] = useState({name:"",holder:"",bsb:"",account:"",payid:"",balance:""});
+  const [newBank,setNewBank] = useState({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""});
   const [bankError,setBankError] = useState("");
   const [bankSearch,setBankSearch] = useState(""); // Bank Accounts page: filter by holder / bank / account / PayID
   const [bankAsOfSel,setBankAsOfSel] = useState(""); // Bank Accounts page: "" = today/live, else a date → show closing balances as of that day
   const [editingBank,setEditingBank] = useState(null);
   const [editBankForm,setEditBankForm] = useState({});
   const [editBankError,setEditBankError] = useState("");
+
+  // Bank Details — separate table, own state (not part of the transactions/banks/
+  // members blob), so none of the merge/poll machinery above applies to it.
+  const [bankDetails,setBankDetails] = useState([]);
+  const [bdLoaded,setBdLoaded] = useState(false);
+  const [bdLoadError,setBdLoadError] = useState("");
+  const [bdSearch,setBdSearch] = useState("");
+  const [bdModalOpen,setBdModalOpen] = useState(false);
+  const [bdEditId,setBdEditId] = useState(null); // null = adding, else = id being edited
+  const [bdForm,setBdForm] = useState(BD_BLANK);
+  const [bdFormError,setBdFormError] = useState("");
+  const [bdPanel,setBdPanel] = useState(null); // the record currently open in the full panel, or null
+  const bdGridRef = useRef(null);
+  const bdPanelRef = useRef(null);
 
   const [editingMember,setEditingMember] = useState(null);
   const [editMemberForm,setEditMemberForm] = useState({});
@@ -820,6 +979,7 @@ export default function App() {
   const [newMemberError,setNewMemberError] = useState("");
   const [showOperatorMenu,setShowOperatorMenu] = useState(false);
   const [showMoreTypes,setShowMoreTypes] = useState(false); // "More" entry-type drawer
+  const [showMobileMore,setShowMobileMore] = useState(false); // mobile bottom-bar "More" sheet (overflow nav items)
   const [showMoreStats,setShowMoreStats] = useState(false); // "More stats" drawer (Transactions page)
   const [showShortcuts,setShowShortcuts] = useState(()=>{ try{ return localStorage.getItem("ft_show_shortcuts")!=="0"; }catch{ return true; } }); // collapsible shortcut strip (remembered)
   const [showPasswordModal,setShowPasswordModal] = useState(false);
@@ -1137,7 +1297,7 @@ export default function App() {
   const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false,rate:"",buyAud:false,buyAudAmount:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
   const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:(t==="Bank Block"||t==="Buy/Sell AUD")?null:(activeBanks[0]?.id??null),notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false,rate:"",buyAud:false,buyAudAmount:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
-  const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(false); };
+  const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
   const handleNameInput = val => {
@@ -1486,17 +1646,101 @@ export default function App() {
     done();
   };
 
+  // Load once when this session can access Bank Details — no polling (unlike
+  // transactions/banks/members, this is a plain table, not a merged blob, so
+  // there's no cross-device merge race to guard against here).
+  useEffect(()=>{
+    if(!canAccessBankDetails || !window.FINTRACK_BANK_DETAILS_API){ setBdLoaded(true); return; }
+    let alive = true;
+    (async()=>{
+      const res = await window.FINTRACK_BANK_DETAILS_API.list();
+      if(!alive) return;
+      if(res.ok) setBankDetails(res.rows); else setBdLoadError(res.error);
+      setBdLoaded(true);
+    })();
+    return ()=>{ alive = false; };
+  },[canAccessBankDetails]);
+
+  const bdShown = useMemo(()=>{
+    const q = bdSearch.trim().toLowerCase();
+    if(!q) return bankDetails;
+    return bankDetails.filter(b=>[b.holderName,b.bankName,b.agent,b.bsb,b.account,b.payid,b.phoneNumber].some(v=>String(v||"").toLowerCase().includes(q)));
+  },[bankDetails,bdSearch]);
+
+  const openBdAdd = () => { setBdEditId(null); setBdForm(BD_BLANK); setBdFormError(""); setBdModalOpen(true); };
+  const openBdEdit = bd => { setBdEditId(bd.id); setBdForm(Object.fromEntries(BD_FIELDS.map(k=>[k,bd[k]||""]))); setBdFormError(""); setBdModalOpen(true); };
+  const closeBdModal = () => setBdModalOpen(false);
+  const handleSaveBd = async () => {
+    const api = window.FINTRACK_BANK_DETAILS_API;
+    if(!api){ setBdFormError("Not authorised."); return; }
+    const res = bdEditId ? await api.update(bdEditId,bdForm) : await api.create(bdForm);
+    if(!res.ok){ setBdFormError(res.error); return; }
+    if(bdEditId) setBankDetails(prev=>prev.map(b=>b.id===bdEditId?{...b,...bdForm}:b));
+    else setBankDetails(prev=>[res.row,...prev]);
+    setBdModalOpen(false);
+  };
+  const handleDeleteBd = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
+    setConfirm(null);
+    const api = window.FINTRACK_BANK_DETAILS_API;
+    if(!api) return;
+    const res = await api.remove(id);
+    if(res.ok) setBankDetails(prev=>prev.filter(b=>b.id!==id));
+  }});
+  const handleToggleBdFrozen = async bd => {
+    const api = window.FINTRACK_BANK_DETAILS_API;
+    if(!api) return;
+    const next = !bd.frozen;
+    const res = await api.setFrozen(bd.id,next);
+    if(res.ok) setBankDetails(prev=>prev.map(b=>b.id===bd.id?{...b,frozen:next}:b));
+  };
+  // Copies the record's Name/Holder/BSB/Acc/PayID/OTP link into a brand new Bank
+  // Accounts entry (opening balance $0.00) via the exact same path "+ Add bank"
+  // uses, then stamps the record as added so the card can show the badge.
+  // Repeatable on purpose — the button stays enabled in case a second copy is
+  // genuinely wanted (e.g. the first one was deleted from Bank Accounts).
+  const handleAddBdToBankAccounts = async bd => {
+    setBanks(prev=>[...prev,{id:Date.now(),name:bd.bankName,holder:bd.holderName,bsb:bd.bsb,account:bd.account,payid:bd.payid,otpLink:bd.otpLink,openingBalance:0,activatedAt:Date.now(),updatedAt:Date.now()}]);
+    const api = window.FINTRACK_BANK_DETAILS_API;
+    if(!api) return;
+    const res = await api.markAdded(bd.id);
+    if(res.ok) setBankDetails(prev=>prev.map(b=>b.id===bd.id?{...b,addedToBankAccountsAt:new Date().toISOString()}:b));
+  };
+
+  // Motion: a quiet staggered entrance for the card grid when Bank Details first
+  // becomes visible (page switch, or once the data finishes loading if that
+  // happens after — matchMedia skips it entirely under prefers-reduced-motion).
+  useGSAP(()=>{
+    if(page!=="bankdetails") return;
+    const cards = bdGridRef.current ? bdGridRef.current.querySelectorAll(".bd-card") : null;
+    if(!cards || !cards.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(cards,{autoAlpha:0,y:14,duration:0.4,stagger:0.05,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[page,bdLoaded,bdShown.length===0],scope:bdGridRef});
+
+  // Motion: the record panel fades + scales in when opened.
+  useGSAP(()=>{
+    if(!bdPanel || !bdPanelRef.current) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(bdPanelRef.current,{autoAlpha:0,scale:0.96,duration:0.25,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[bdPanel],scope:bdPanelRef});
+
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
     setBankError("");
-    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,openingBalance:Number(newBank.balance),activatedAt:Date.now(),updatedAt:Date.now()}]);
-    setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""});
+    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,otpLink:newBank.otpLink,openingBalance:Number(newBank.balance),activatedAt:Date.now(),updatedAt:Date.now()}]);
+    setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""});
     setShowBankModal(false);
   };
-  const startEditBank = b => { setEditingBank(b.id); setEditBankForm({name:b.name,holder:b.holder,bsb:b.bsb||"",account:b.account||"",payid:b.payid||"",balance:String(b.openingBalance??0)}); setEditBankError(""); };
+  const startEditBank = b => { setEditingBank(b.id); setEditBankForm({name:b.name,holder:b.holder,bsb:b.bsb||"",account:b.account||"",payid:b.payid||"",otpLink:b.otpLink||"",balance:String(b.openingBalance??0)}); setEditBankError(""); };
   const handleSaveBank = id => {
     if(!editBankForm.name.trim()||!editBankForm.holder.trim()||isNaN(editBankForm.balance)){setEditBankError("Bank name, holder, and opening balance are required.");return;}
-    setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,openingBalance:Number(editBankForm.balance),updatedAt:Date.now()}:b)); setEditingBank(null);
+    setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,otpLink:editBankForm.otpLink,openingBalance:Number(editBankForm.balance),updatedAt:Date.now()}:b)); setEditingBank(null);
   };
   // Soft-delete: tag the bank deleted (with a fresh updatedAt) instead of dropping it, so the
   // newest-wins merge carries the deletion to other devices. The UI filters deleted banks out
@@ -1674,6 +1918,9 @@ export default function App() {
     {id:"dashboard",icon:"ti-layout-dashboard",label:"Dashboard"},
     {id:"transactions",icon:"ti-transfer",label:"Transactions"},
     {id:"banks",icon:"ti-building-bank",label:"Bank Accounts"},
+    // Master/manager only — hidden from staff here (nav), guarded again on the
+    // page render below, and enforced for real by RLS (migration-021).
+    ...(canAccessBankDetails ? [{id:"bankdetails",icon:"ti-id-badge-2",label:"Bank Details"}] : []),
     {id:"members",icon:"ti-users",label:"Members"},
     {id:"search",icon:"ti-search",label:"Search"},
     {id:"offdays",icon:"ti-calendar-off",label:"Work Shifts/Off Day"},
@@ -2012,7 +2259,7 @@ export default function App() {
                   <FluidDropdown value={newBank.name} placeholder="— Select bank —" ariaLabel="Bank name"
                     options={[{value:"",label:"— Select bank —"},...BANK_CHOICES.map(b=>({value:b,label:b}))]}
                     onChange={v=>setNewBank(b=>({...b,name:v}))}/></div>
-                {[["holder","Holder's name","e.g. Company Ltd"],["bsb","BSB number (optional)","e.g. 062-000"],["account","Account number (optional)","e.g. 1234567890"],["payid","PayID (optional)","e.g. name@company.com"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
+                {[["holder","Holder's name","e.g. Company Ltd"],["bsb","BSB number (optional)","e.g. 062-000"],["account","Account number (optional)","e.g. 1234567890"],["payid","PayID (optional)","e.g. name@company.com"],["otpLink","OTP link (optional)","e.g. https://…"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
                   <div key={k}><label style={labelStyle}>{label}</label>
                     <input type={k==="balance"?"number":"text"} placeholder={ph} value={newBank[k]} onChange={e=>setNewBank(b=>({...b,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 ))}
@@ -2026,6 +2273,48 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {bdModalOpen&&(
+        <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:"24px 16px"}} onClick={closeBdModal}>
+          <div style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:680,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+              <div style={{fontWeight:500,fontSize:17,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-id-badge-2" aria-hidden="true" style={{color:C.accent}}/> {bdEditId?"Edit bank detail":"Add bank detail"}</div>
+              <button onClick={closeBdModal} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}><i className="ti ti-x" aria-hidden="true"/> Close</button>
+            </div>
+            <div style={{padding:"18px 20px",overflowY:"auto"}}>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Every field is optional.</div>
+              {BD_GROUPS.map(g=>(
+                <div key={g.title} style={{marginBottom:16}}>
+                  <div style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:8}}>{g.title}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                    {g.fields.map(([key,label,type])=>(
+                      <div key={key} style={type==="textarea"||key==="bankName"?{gridColumn:"1/-1"}:null}>
+                        <label style={labelStyle}>{label}</label>
+                        {key==="bankName" ? (
+                          <FluidDropdown value={bdForm.bankName} placeholder="— Select bank —" ariaLabel="Bank name"
+                            options={[{value:"",label:"— Select bank —"},...BANK_CHOICES.map(b=>({value:b,label:b}))]}
+                            onChange={v=>setBdForm(f=>({...f,bankName:v}))}/>
+                        ) : type==="textarea" ? (
+                          <textarea value={bdForm[key]} onChange={e=>setBdForm(f=>({...f,[key]:e.target.value}))} rows={2} style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
+                        ) : (
+                          <input type={type==="date"?"date":"text"} value={bdForm[key]} onChange={e=>setBdForm(f=>({...f,[key]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {bdFormError&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>{bdFormError}</div>}
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6}}>
+                <button onClick={closeBdModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
+                <button onClick={handleSaveBd} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> {bdEditId?"Save changes":"Add record"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bdPanel&&<BankDetailPanel bd={bdPanel} onClose={()=>setBdPanel(null)} panelRef={bdPanelRef}/>}
 
       {showEntryModal&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:isMobile?"stretch":"center",justifyContent:"center",zIndex:1000,padding:isMobile?0:"24px 16px"}} onClick={closeEntryModal}>
@@ -2531,7 +2820,7 @@ export default function App() {
           <div>
             <div style={sectionStyle}>
               <SectionTitle icon="ti-building-bank" right={
-                <button onClick={()=>{ setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",balance:""}); setBankError(""); setShowBankModal(true); }} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                <button onClick={()=>{ setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""}); setBankError(""); setShowBankModal(true); }} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
                   <i className="ti ti-plus" aria-hidden="true"/> Add bank
                 </button>
               }>Bank accounts</SectionTitle>
@@ -2564,7 +2853,7 @@ export default function App() {
                     {editingBank===b.id?(
                       <div onClick={e=>e.stopPropagation()}>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                          {[["name","Bank name"],["holder","Holder's name"],["bsb","BSB number"],["account","Account number"],["payid","PayID"],["balance","Opening balance"]].map(([k,lbl])=>(
+                          {[["name","Bank name"],["holder","Holder's name"],["bsb","BSB number"],["account","Account number"],["payid","PayID"],["otpLink","OTP link"],["balance","Opening balance"]].map(([k,lbl])=>(
                             <div key={k}><label style={{fontSize:11,color:C.muted,display:"block",marginBottom:2}}>{lbl}</label>
                               <input type={k==="balance"?"number":"text"} value={editBankForm[k]} onChange={e=>setEditBankForm(f=>({...f,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box",fontSize:12,padding:"4px 8px"}}/></div>
                           ))}
@@ -2585,7 +2874,8 @@ export default function App() {
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Bank: {b.name}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
-                        <div style={{fontSize:12,color:C.muted,marginBottom:8}}>PayID: {b.payid||"—"}</div>
+                        <div style={{fontSize:12,color:C.muted,marginBottom:b.otpLink?6:8}}>PayID: {b.payid||"—"}</div>
+                        {b.otpLink&&<a href={b.otpLink} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:6,padding:"3px 9px",marginBottom:8,textDecoration:"none"}}><i className="ti ti-link" aria-hidden="true"/> OTP link</a>}
                         <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(b.balance)}</div>
                         <div style={{fontSize:11,color:C.muted,marginTop:2}}>Yesterday: {fmt(b.yBalance)}</div>
                         {bankIsPast&&<div style={{fontSize:11,fontWeight:600,color:C.accent,marginTop:1}}>Closing {fmtDate(bankAsOf)}: {fmt(b.asOfBalance)}</div>}
@@ -2610,6 +2900,47 @@ export default function App() {
                       </>
                     )}
                   </GlowCard>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {page==="bankdetails"&&canAccessBankDetails&&(
+          <div>
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-id-badge-2" right={
+                <button onClick={openBdAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                  <i className="ti ti-plus" aria-hidden="true"/> Add bank detail
+                </button>
+              }>Bank Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Master/manager only. Recorded drop-account info — not linked to Bank Accounts unless you click "Add to bank accounts". Click a card for the full record.</div>
+              {bankDetails.length>0&&(
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:16}}>
+                  <SumTile icon="ti-id-badge-2" color={C.accent} label="Total records" value={bankDetails.length}/>
+                  <SumTile icon="ti-circle-check" color="#16a34a" label="Active" value={bankDetails.filter(b=>!b.frozen).length}/>
+                  <SumTile icon="ti-snowflake" color="#38bdf8" label="Frozen" value={bankDetails.filter(b=>b.frozen).length}/>
+                </div>
+              )}
+              {bankDetails.length>0&&(
+                <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
+                  <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+                  <input type="text" value={bdSearch} onChange={e=>setBdSearch(e.target.value)} placeholder="Search holder, bank, agent, BSB, account or PayID…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  {bdSearch&&<button type="button" onClick={()=>setBdSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+                </div>
+              )}
+              {!bdLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
+              {bdLoaded&&bdLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{bdLoadError}</div>}
+              {bdLoaded&&!bdLoadError&&bankDetails.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank-detail records yet. Click "Add bank detail" to create one.</div>}
+              {bdLoaded&&bankDetails.length>0&&bdShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match “{bdSearch}”.</div>}
+              <div ref={bdGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
+                {bdShown.map(bd=>(
+                  <BankDetailCard key={bd.id} bd={bd}
+                    onOpen={()=>setBdPanel(bd)}
+                    onEdit={()=>openBdEdit(bd)}
+                    onDelete={()=>handleDeleteBd(bd.id,bd.holderName||bd.bankName)}
+                    onToggleFrozen={()=>handleToggleBdFrozen(bd)}
+                    onAddToBankAccounts={()=>handleAddBdToBankAccounts(bd)}/>
                 ))}
               </div>
             </div>
@@ -2995,21 +3326,54 @@ export default function App() {
       </main>
 
       {/* Mobile bottom tab bar — replaces the hover sidebar (no hover on touch).
-          position:fixed so it sits at the very bottom of the phone screen. */}
-      {isMobile && (
-        <nav className="safe-bottom" aria-label="Main navigation" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,display:"flex",background:C.surface,borderTop:`1px solid ${C.border}`,boxShadow:dark?"0 -4px 18px rgba(0,0,0,0.45)":"0 -4px 18px rgba(0,0,0,0.08)"}}>
-          {nav.map(n=>{
-            const active = page===n.id;
-            return (
-              <button key={n.id} onClick={()=>setPage(n.id)} aria-label={n.label} aria-current={active?"page":undefined}
-                style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"7px 2px",minHeight:56,border:"none",borderTop:`2px solid ${active?C.accent:"transparent"}`,background:active?C.accentBg:"transparent",cursor:"pointer",color:active?C.accent:C.muted,fontWeight:active?600:500,transition:"color 0.15s, background 0.15s"}}>
-                <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:21}}/>
-                <span style={{fontSize:10.5,lineHeight:1,whiteSpace:"nowrap"}}>{MOBILE_TAB_LABEL[n.id]||n.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      )}
+          position:fixed so it sits at the very bottom of the phone screen. Capped
+          at 6 slots: the 5 primary pages, plus a "More" tab for everything else
+          (Off Days, and Bank Details for master/manager) instead of cramming a
+          7th+ item into the bar. */}
+      {isMobile && (()=>{
+        const mobilePrimary = nav.filter(n=>MOBILE_PRIMARY_IDS.includes(n.id));
+        const mobileOverflow = nav.filter(n=>!MOBILE_PRIMARY_IDS.includes(n.id));
+        const moreActive = mobileOverflow.some(n=>n.id===page);
+        const tabBtnStyle = active => ({flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"7px 2px",minHeight:56,border:"none",borderTop:`2px solid ${active?C.accent:"transparent"}`,background:active?C.accentBg:"transparent",cursor:"pointer",color:active?C.accent:C.muted,fontWeight:active?600:500,transition:"color 0.15s, background 0.15s"});
+        return (
+          <>
+            <nav className="safe-bottom" aria-label="Main navigation" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,display:"flex",background:C.surface,borderTop:`1px solid ${C.border}`,boxShadow:dark?"0 -4px 18px rgba(0,0,0,0.45)":"0 -4px 18px rgba(0,0,0,0.08)"}}>
+              {mobilePrimary.map(n=>{
+                const active = page===n.id;
+                return (
+                  <button key={n.id} onClick={()=>setPage(n.id)} aria-label={n.label} aria-current={active?"page":undefined} style={tabBtnStyle(active)}>
+                    <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:21}}/>
+                    <span style={{fontSize:10.5,lineHeight:1,whiteSpace:"nowrap"}}>{MOBILE_TAB_LABEL[n.id]||n.label}</span>
+                  </button>
+                );
+              })}
+              {mobileOverflow.length>0&&(
+                <button onClick={()=>setShowMobileMore(true)} aria-label="More" aria-current={moreActive?"page":undefined} aria-haspopup="dialog" aria-expanded={showMobileMore} style={tabBtnStyle(moreActive)}>
+                  <i className="ti ti-dots" aria-hidden="true" style={{fontSize:21}}/>
+                  <span style={{fontSize:10.5,lineHeight:1,whiteSpace:"nowrap"}}>More</span>
+                </button>
+              )}
+            </nav>
+            {showMobileMore&&(
+              <div role="dialog" aria-label="More pages" onClick={()=>setShowMobileMore(false)}
+                style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:1000}}>
+                <div onClick={e=>e.stopPropagation()} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:"16px 16px 0 0",padding:"18px 18px calc(18px + env(safe-area-inset-bottom,0px))",width:"100%",maxWidth:420,boxShadow:"0 -12px 40px rgba(0,0,0,0.4)"}}>
+                  <div style={{fontWeight:600,fontSize:15,color:C.text,marginBottom:14}}>More</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {mobileOverflow.map(n=>(
+                      <button key={n.id} onClick={()=>{ setPage(n.id); setShowMobileMore(false); }}
+                        style={{cursor:"pointer",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:10,border:`1px solid ${page===n.id?C.accent:C.border}`,background:page===n.id?C.accentBg:C.surface2,color:page===n.id?C.accent:C.text,fontSize:14,fontWeight:500}}>
+                        <i className={`ti ${n.icon}`} aria-hidden="true" style={{fontSize:18}}/> {n.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={()=>setShowMobileMore(false)} style={{marginTop:12,width:"100%",cursor:"pointer",padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,fontSize:13,fontWeight:500}}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
       </div>
     </div>
   );

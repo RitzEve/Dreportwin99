@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { changeOwnPassword, listTeam, ROLES } from '../lib/auth.js';
+import {
+  changeOwnPassword, listTeam, ROLES, canAccessConsole,
+  listBankDetails, createBankDetail, updateBankDetail, deleteBankDetail, setBankDetailFrozen, markBankDetailAdded,
+} from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
 import Guide from '../screens/Guide.jsx';
@@ -38,6 +41,14 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     // The artifact's colours are computed at load, so re-init by reloading after the
     // theme is saved. Root restores the 'app' screen from sessionStorage on reload.
     window.FINTRACK_SET_THEME = (t) => { setTheme(t); window.location.reload(); };
+    // Bank Details: a separate real table (not the app_data blob), gated to
+    // master/manager both here (so staff's session never even calls these) and by
+    // RLS server-side (the real gate). null for staff so the artifact can also use
+    // its presence as a quick client-side check.
+    window.FINTRACK_BANK_DETAILS_API = canAccessConsole(ctx.user.role) ? {
+      list: listBankDetails, create: createBankDetail, update: updateBankDetail,
+      remove: deleteBankDetail, setFrozen: setBankDetailFrozen, markAdded: markBankDetailAdded,
+    } : null;
 
     // Supabase re-fires onAuthStateChange (and Root.jsx rebuilds `ctx` from scratch)
     // whenever the tab regains focus after being backgrounded, as part of its own

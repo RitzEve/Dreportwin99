@@ -722,3 +722,98 @@ export async function markRentUnpaid(companyIds) {
   }
   return { ok: true };
 }
+
+// ---- bank details (master/manager: drop-account records) ------------------
+// Lives in its own table (migration-021) with RLS gated on company_id +
+// role in ('master','manager') — staff never receives this data at all, not
+// just a hidden nav item. Not linked to the `banks` array used for entry
+// unless explicitly copied over (see markBankDetailAdded, called by
+// FinTrack's "Add to bank accounts" action).
+
+const BANK_DETAIL_FIELD_MAP = {
+  phoneModel: 'phone_model', bankName: 'bank_name', holderName: 'holder_name',
+  dateOfBirth: 'date_of_birth', phoneNumber: 'phone_number', email: 'email',
+  emailPassword: 'email_password', cardLast4: 'card_last4', cardPin: 'card_pin',
+  loginPin: 'login_pin', customerLoginId: 'customer_login_id', internetPassword: 'internet_password',
+  vpn: 'vpn', otpLink: 'otp_link', bsb: 'bsb', account: 'account_number', payid: 'payid',
+  openDate: 'open_date', agent: 'agent', others: 'others', remarks: 'remarks',
+};
+
+function bankDetailRowToObj(r) {
+  const obj = {
+    id: r.id, companyId: r.company_id, frozen: !!r.frozen,
+    addedToBankAccountsAt: r.added_to_bank_accounts_at, updatedAt: r.updated_at,
+  };
+  for (const [key, col] of Object.entries(BANK_DETAIL_FIELD_MAP)) obj[key] = r[col] ?? '';
+  return obj;
+}
+
+function bankDetailFieldsToRow(fields) {
+  const row = {};
+  for (const [key, col] of Object.entries(BANK_DETAIL_FIELD_MAP)) {
+    if (fields[key] !== undefined) row[col] = fields[key] === '' ? null : fields[key];
+  }
+  return row;
+}
+
+const BANK_DETAILS_SETUP_ERROR = 'This needs a one-time database setup (run migration-021.sql in Supabase).';
+const isBankDetailsMissing = (error) => /bank_details|does not exist|could not find|schema cache/i.test(error?.message || '');
+
+/** Master/manager: every bank-details record for their own company. */
+export async function listBankDetails() {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
+  const { data, error } = await supabase.from('bank_details').select('*')
+    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+  if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error), rows: [] };
+  return { ok: true, rows: (data || []).map(bankDetailRowToObj) };
+}
+
+/** Master/manager: create a bank-details record for their own company. Every field is optional. */
+export async function createBankDetail(fields) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  const row = { ...bankDetailFieldsToRow(fields), company_id: me.companyId };
+  const { data, error } = await supabase.from('bank_details').insert(row).select().single();
+  if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error) };
+  return { ok: true, row: bankDetailRowToObj(data) };
+}
+
+/** Master/manager: edit a bank-details record. Pass only the fields that changed. */
+export async function updateBankDetail(id, fields) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  const row = { ...bankDetailFieldsToRow(fields), updated_at: new Date().toISOString() };
+  const { error } = await supabase.from('bank_details').update(row).eq('id', id);
+  if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}
+
+/** Master/manager: permanently delete a bank-details record. */
+export async function deleteBankDetail(id) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.from('bank_details').delete().eq('id', id);
+  if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}
+
+/** Master/manager: freeze/unfreeze a bank-details record. Status only — not linked to entry. */
+export async function setBankDetailFrozen(id, frozen) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.from('bank_details')
+    .update({ frozen: !!frozen, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}
+
+/** Master/manager: stamp a record as having been copied into Bank Accounts (drives the "Added" badge). */
+export async function markBankDetailAdded(id) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.from('bank_details')
+    .update({ added_to_bank_accounts_at: new Date().toISOString() }).eq('id', id);
+  if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}

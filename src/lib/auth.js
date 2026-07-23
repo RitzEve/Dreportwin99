@@ -867,6 +867,7 @@ export async function createCompanyCredential(fields) {
   const me = await getCurrentUser();
   if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
   if (!fields.name || !fields.name.trim()) return { ok: false, error: 'Record name is required.' };
+  fields.name = fields.name.trim();
   const row = { ...credentialFieldsToRow(fields), company_id: me.companyId };
   const { data, error } = await supabase.from('company_credentials').insert(row).select().single();
   if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error) };
@@ -877,7 +878,8 @@ export async function createCompanyCredential(fields) {
 export async function updateCompanyCredential(id, fields) {
   const me = await getCurrentUser();
   if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
-  if (fields.name !== undefined && !fields.name.trim()) return { ok: false, error: 'Record name is required.' };
+  if (fields.name !== undefined && (!fields.name || !fields.name.trim())) return { ok: false, error: 'Record name is required.' };
+  if (fields.name !== undefined) fields.name = fields.name.trim();
   const row = { ...credentialFieldsToRow(fields), updated_at: new Date().toISOString() };
   const { error } = await supabase.from('company_credentials').update(row).eq('id', id);
   if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error) };

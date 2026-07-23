@@ -1869,7 +1869,7 @@ export default function App() {
     const api = window.FINTRACK_COMPANY_CREDENTIALS_API;
     if(!api){ setCredFormError("Not authorised."); return; }
     const cleanFields = credForm.customFields.filter(f=>f.label.trim()||f.value.trim());
-    const payload = {...credForm, customFields:cleanFields};
+    const payload = {...credForm, name: credForm.name.trim(), customFields:cleanFields};
     const res = credEditId ? await api.update(credEditId,payload) : await api.create(payload);
     if(!res.ok){ setCredFormError(res.error); return; }
     if(credEditId) setCredentials(prev=>prev.map(c=>c.id===credEditId?{...c,...payload}:c));

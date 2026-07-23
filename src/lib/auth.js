@@ -817,3 +817,78 @@ export async function markBankDetailAdded(id) {
   if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error) };
   return { ok: true };
 }
+
+// ---- company credentials (master/manager: general login/credential vault) --
+// Lives in its own table (migration-022) with RLS gated on company_id + role
+// in ('master','manager') — same isolation as bank_details, and arguably more
+// important here since this can hold root-level infrastructure credentials.
+// No fixed field schema: name/category/username/email/password/link cover the
+// common case, customFields (jsonb array of {label,value,sensitive}) covers
+// everything else a given record needs.
+
+const CREDENTIAL_FIELD_MAP = {
+  name: 'name', category: 'category', username: 'username',
+  email: 'email', password: 'password', link: 'link',
+};
+
+function credentialRowToObj(r) {
+  const obj = {
+    id: r.id, companyId: r.company_id, updatedAt: r.updated_at,
+    customFields: Array.isArray(r.custom_fields) ? r.custom_fields : [],
+  };
+  for (const [key, col] of Object.entries(CREDENTIAL_FIELD_MAP)) obj[key] = r[col] ?? '';
+  return obj;
+}
+
+function credentialFieldsToRow(fields) {
+  const row = {};
+  for (const [key, col] of Object.entries(CREDENTIAL_FIELD_MAP)) {
+    if (fields[key] !== undefined) row[col] = fields[key] === '' ? null : fields[key];
+  }
+  if (fields.customFields !== undefined) row.custom_fields = fields.customFields;
+  return row;
+}
+
+const CREDENTIALS_SETUP_ERROR = 'This needs a one-time database setup (run migration-022.sql in Supabase).';
+const isCredentialsMissing = (error) => /company_credentials|does not exist|could not find|schema cache/i.test(error?.message || '');
+
+/** Master/manager: every credential record for their own company. */
+export async function listCompanyCredentials() {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
+  const { data, error } = await supabase.from('company_credentials').select('*')
+    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+  if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error), rows: [] };
+  return { ok: true, rows: (data || []).map(credentialRowToObj) };
+}
+
+/** Master/manager: create a credential record for their own company. Only `name` is required. */
+export async function createCompanyCredential(fields) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  if (!fields.name || !fields.name.trim()) return { ok: false, error: 'Record name is required.' };
+  const row = { ...credentialFieldsToRow(fields), company_id: me.companyId };
+  const { data, error } = await supabase.from('company_credentials').insert(row).select().single();
+  if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error) };
+  return { ok: true, row: credentialRowToObj(data) };
+}
+
+/** Master/manager: edit a credential record. Pass only the fields that changed. */
+export async function updateCompanyCredential(id, fields) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  if (fields.name !== undefined && !fields.name.trim()) return { ok: false, error: 'Record name is required.' };
+  const row = { ...credentialFieldsToRow(fields), updated_at: new Date().toISOString() };
+  const { error } = await supabase.from('company_credentials').update(row).eq('id', id);
+  if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}
+
+/** Master/manager: permanently delete a credential record. */
+export async function deleteCompanyCredential(id) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.from('company_credentials').delete().eq('id', id);
+  if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}

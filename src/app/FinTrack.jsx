@@ -608,7 +608,12 @@ function CopyableValue({value, masked, isLink}) {
   if(!value) return <span style={{color:C.muted,fontWeight:400}}>—</span>;
   const doCopy = e => {
     e.stopPropagation();
-    navigator.clipboard.writeText(value).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),1500); });
+    try {
+      navigator.clipboard.writeText(value).then(
+        ()=>{ setCopied(true); setTimeout(()=>setCopied(false),1500); },
+        ()=>{ /* copy rejected — leave button as-is, nothing to recover */ }
+      );
+    } catch(e) { /* clipboard API unavailable in this context */ }
   };
   return (
     <span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>

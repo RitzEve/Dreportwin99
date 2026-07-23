@@ -92,9 +92,12 @@ button. Design approved live via the brainstorming visual companion (2 mockup
 rounds — field-structure options, then final card/panel/form layout) using
 fabricated example data, not the user's real credentials.
 
-**Masking**: a `Masked`-style component (show/hide + copy), extending the one
-already built for Bank Details, reused for Password and for any `custom_fields`
-entry flagged `sensitive`.
+**Masking**: a new `CopyableValue` component (show/hide + copy button), kept
+separate from Bank Details' `Masked` component rather than extending it —
+editing an already-shipped, already-verified component in a codebase with no
+test suite carries real regression risk (see: the global.css `input, select`
+rule that silently missed `<textarea>` and broke Bank Details' Remarks field).
+Reused for Password and for any `custom_fields` entry flagged `sensitive`.
 
 ## Motion (GSAP)
 

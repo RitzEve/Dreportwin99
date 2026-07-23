@@ -581,6 +581,111 @@ function BankDetailPanel({bd, onClose, panelRef}) {
   );
 }
 
+// ---- Company Credentials: master/manager-only general login/credential vault ----
+// Unlike Bank Details, records here have no fixed schema — each one can carry
+// totally different fields (a Google account needs Email/Password; "Teams
+// Live" is a single passkey). CRED_COMMON_FIELDS covers the frequent case with
+// ready-made boxes; anything else goes in a record's own customFields array
+// (each {label,value,sensitive} — sensitive ones get the same mask+reveal
+// treatment as Password, plus a copy button). Lives in its own table
+// (migration-022), same isolation reasoning as Bank Details — see
+// window.FINTRACK_COMPANY_CREDENTIALS_API.
+const CRED_COMMON_FIELDS = [
+  ["username","Username / ID","text","ti-user"],
+  ["email","Email","text","ti-mail"],
+  ["password","Password","password","ti-lock"],
+  ["link","Link","text","ti-link"],
+];
+const CRED_BLANK = {name:"",category:"",username:"",email:"",password:"",link:"",customFields:[]};
+
+// Renders one credential value with a COPY button, and — when `masked` — the
+// same show/hide treatment as Bank Details' Masked component. Kept as its own
+// component rather than extending Masked, so Bank Details' Masked stays
+// completely untouched by this feature.
+function CopyableValue({value, masked, isLink}) {
+  const [show,setShow] = useState(false);
+  const [copied,setCopied] = useState(false);
+  if(!value) return <span style={{color:C.muted,fontWeight:400}}>—</span>;
+  const doCopy = e => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(value).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),1500); });
+  };
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+      {isLink ? (
+        <a href={value} target="_blank" rel="noopener noreferrer" style={{color:C.accent,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4,wordBreak:"break-all"}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12,flexShrink:0}}/>{value}</a>
+      ) : (
+        <span style={{fontFamily:masked?"ui-monospace,Consolas,monospace":"inherit",letterSpacing:masked&&!show?2:0,wordBreak:"break-word"}}>{masked&&!show?"•".repeat(Math.min(value.length,8)):value}</span>
+      )}
+      {masked&&<button type="button" onClick={()=>setShow(s=>!s)} style={{cursor:"pointer",fontSize:9.5,fontWeight:700,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:4,padding:"1px 5px",lineHeight:1.6}}>{show?"HIDE":"SHOW"}</button>}
+      <button type="button" onClick={doCopy} style={{cursor:"pointer",fontSize:9.5,fontWeight:700,color:copied?"#16a34a":C.accent,background:copied?(dark?"#14331f":"#16a34a14"):C.accentBg,border:`1px solid ${copied?"#16a34a":C.accent}`,borderRadius:4,padding:"1px 5px",lineHeight:1.6}}>{copied?"COPIED":"COPY"}</button>
+    </span>
+  );
+}
+
+function CredentialCard({cred, onOpen, onEdit, onDelete}) {
+  const extraCount = cred.customFields.length;
+  return (
+    <GlowCard className="cred-card" color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:"pointer"}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}
+      onClick={onOpen}>
+      {cred.category&&<div style={{fontSize:12.5,fontWeight:600,color:C.accent,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cred.category}</div>}
+      <div title={cred.name} style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cred.name}</div>
+      {(cred.username||cred.email||cred.password)&&(
+        <div style={{display:"flex",flexDirection:"column",gap:6,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 10px",marginBottom:8,fontSize:12}}>
+          {cred.username&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Username / ID</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-word"}}>{cred.username}</div></div>}
+          {cred.email&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Email</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-word"}}>{cred.email}</div></div>}
+          {cred.password&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Password</div><CopyableValue value={cred.password} masked/></div>}
+        </div>
+      )}
+      {extraCount>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>+ {extraCount} more field{extraCount===1?"":"s"}</div>}
+      <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6}}>
+        <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
+        <button onClick={onDelete} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
+      </div>
+    </GlowCard>
+  );
+}
+
+function CredentialPanel({cred, onClose, panelRef}) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998,padding:"24px 16px"}} onClick={onClose}>
+      <div ref={panelRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:560,maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+          <div style={{fontWeight:500,fontSize:17}}>{cred.name}{cred.category&&<span style={{fontSize:10,fontWeight:600,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:20,padding:"2px 8px",marginLeft:8}}>{cred.category}</span>}</div>
+          <button onClick={onClose} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}>
+            <i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/> Close
+          </button>
+        </div>
+        <div style={{padding:"18px 20px",overflowY:"auto",background:C.bg}}>
+          {CRED_COMMON_FIELDS.map(([key,label,type,icon])=>(
+            cred[key] ? (
+              <div key={key} style={{marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>
+                  <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:10.5}}/>{label}
+                </div>
+                <div style={{fontSize:13,fontWeight:500}}><CopyableValue value={cred[key]} masked={type==="password"} isLink={key==="link"}/></div>
+              </div>
+            ) : null
+          ))}
+          {cred.customFields.length>0&&(
+            <div style={{marginTop:16}}>
+              <div style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:9,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>Custom fields</div>
+              {cred.customFields.map((f,i)=>(
+                <div key={i} style={{marginBottom:12}}>
+                  <div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>{f.label||"Untitled field"}</div>
+                  <div style={{fontSize:13,fontWeight:500}}><CopyableValue value={f.value} masked={!!f.sensitive}/></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Transaction log with a page-size dropdown (default 50) + simple pager.
 const PAGE_SIZES = [50,100,200,500,1000];
 // Member directory sort options (value -> label shown in the Sort dropdown).

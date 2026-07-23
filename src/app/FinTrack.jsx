@@ -1927,6 +1927,43 @@ export default function App() {
     return ()=>mm.revert();
   },{dependencies:[bdModalOpen],scope:bdModalRef});
 
+  // Motion: a quiet staggered entrance for the card grid when Company
+  // Credentials first becomes visible — same pattern as Bank Details.
+  useGSAP(()=>{
+    if(page!=="companycredentials") return;
+    const cards = credGridRef.current ? credGridRef.current.querySelectorAll(".cred-card") : null;
+    if(!cards || !cards.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(cards,{autoAlpha:0,y:14,duration:0.4,stagger:0.05,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[page,credLoaded,credShown.length===0],scope:credGridRef});
+
+  // Motion: the record panel fades + scales in when opened.
+  useGSAP(()=>{
+    if(!credPanel || !credPanelRef.current) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(credPanelRef.current,{autoAlpha:0,scale:0.96,duration:0.25,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[credPanel],scope:credPanelRef});
+
+  // Motion: form field-groups settle in with a soft stagger when the Add/Edit
+  // modal opens (built in from the start this time, rather than added later —
+  // see the Bank Details redesign-premium pass for why this was worth doing).
+  useGSAP(()=>{
+    if(!credModalOpen || !credModalRef.current) return;
+    const groups = credModalRef.current.querySelectorAll(".cred-form-group");
+    if(!groups.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(groups,{autoAlpha:0,y:12,duration:0.35,stagger:0.06,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[credModalOpen],scope:credModalRef});
+
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
     setBankError("");

@@ -1000,6 +1000,11 @@ export default function App() {
   // gate is server-side RLS (migration-021): window.FINTRACK_BANK_DETAILS_API is
   // null for a staff session, so this flag and that null always agree.
   const canAccessBankDetails = SESSION.role==="master" || SESSION.role==="manager";
+  // Company Credentials is master/manager-only too — separately named from
+  // canAccessBankDetails even though the expression is currently identical,
+  // matching this file's existing convention (canEditRoster is the same
+  // pattern) so either gate can change independently later without coupling.
+  const canAccessCompanyCredentials = SESSION.role==="master" || SESSION.role==="manager";
   // This company's time zone (set per company by the provider). All "now" dates
   // and times below are computed in this zone so the log follows it.
   const tz = SESSION.timezone || "Australia/Sydney";
@@ -1083,6 +1088,21 @@ export default function App() {
   const bdGridRef = useRef(null);
   const bdPanelRef = useRef(null);
   const bdModalRef = useRef(null);
+
+  // Company Credentials — separate table, own state, no fixed schema
+  // (customFields carries whatever's unique to each record).
+  const [credentials,setCredentials] = useState([]);
+  const [credLoaded,setCredLoaded] = useState(false);
+  const [credLoadError,setCredLoadError] = useState("");
+  const [credSearch,setCredSearch] = useState("");
+  const [credModalOpen,setCredModalOpen] = useState(false);
+  const [credEditId,setCredEditId] = useState(null); // null = adding, else = id being edited
+  const [credForm,setCredForm] = useState(CRED_BLANK);
+  const [credFormError,setCredFormError] = useState("");
+  const [credPanel,setCredPanel] = useState(null); // the record currently open in the full panel, or null
+  const credGridRef = useRef(null);
+  const credPanelRef = useRef(null);
+  const credModalRef = useRef(null);
 
   const [editingMember,setEditingMember] = useState(null);
   const [editMemberForm,setEditMemberForm] = useState({});
@@ -1820,6 +1840,56 @@ export default function App() {
     const res = await api.markAdded(bd.id);
     if(res.ok) setBankDetails(prev=>prev.map(b=>b.id===bd.id?{...b,addedToBankAccountsAt:new Date().toISOString()}:b));
   };
+
+  // Company Credentials fetch — same shape as Bank Details' effect (real
+  // table, not a merged blob, so no cross-device merge race to guard here).
+  useEffect(()=>{
+    if(!canAccessCompanyCredentials || !window.FINTRACK_COMPANY_CREDENTIALS_API){ setCredLoaded(true); return; }
+    let alive = true;
+    (async()=>{
+      const res = await window.FINTRACK_COMPANY_CREDENTIALS_API.list();
+      if(!alive) return;
+      if(res.ok) setCredentials(res.rows); else setCredLoadError(res.error);
+      setCredLoaded(true);
+    })();
+    return ()=>{ alive = false; };
+  },[canAccessCompanyCredentials]);
+
+  const credShown = useMemo(()=>{
+    const q = credSearch.trim().toLowerCase();
+    if(!q) return credentials;
+    return credentials.filter(c=>[c.name,c.category,c.username,c.email,c.link,...c.customFields.map(f=>f.label)].some(v=>String(v||"").toLowerCase().includes(q)));
+  },[credentials,credSearch]);
+
+  const openCredAdd = () => { setCredEditId(null); setCredForm(CRED_BLANK); setCredFormError(""); setCredModalOpen(true); };
+  const openCredEdit = cred => { setCredEditId(cred.id); setCredForm({name:cred.name,category:cred.category,username:cred.username,email:cred.email,password:cred.password,link:cred.link,customFields:cred.customFields.map(f=>({...f}))}); setCredFormError(""); setCredModalOpen(true); };
+  const closeCredModal = () => setCredModalOpen(false);
+  const handleSaveCred = async () => {
+    if(!credForm.name.trim()){ setCredFormError("Record name is required."); return; }
+    const api = window.FINTRACK_COMPANY_CREDENTIALS_API;
+    if(!api){ setCredFormError("Not authorised."); return; }
+    const cleanFields = credForm.customFields.filter(f=>f.label.trim()||f.value.trim());
+    const payload = {...credForm, customFields:cleanFields};
+    const res = credEditId ? await api.update(credEditId,payload) : await api.create(payload);
+    if(!res.ok){ setCredFormError(res.error); return; }
+    if(credEditId) setCredentials(prev=>prev.map(c=>c.id===credEditId?{...c,...payload}:c));
+    else setCredentials(prev=>[res.row,...prev]);
+    setCredModalOpen(false);
+  };
+  const handleDeleteCred = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
+    setConfirm(null);
+    const api = window.FINTRACK_COMPANY_CREDENTIALS_API;
+    if(!api) return;
+    const res = await api.remove(id);
+    if(res.ok) setCredentials(prev=>prev.filter(c=>c.id!==id));
+  }});
+
+  // Custom-field row helpers for the Add/Edit form. Defaults to sensitive=true
+  // (safer default — assume a hand-typed extra field is a secret unless told
+  // otherwise) and drops fully-blank rows on save (Step above, handleSaveCred).
+  const addCredCustomField = () => setCredForm(f=>({...f,customFields:[...f.customFields,{label:"",value:"",sensitive:true}]}));
+  const updateCredCustomField = (i,patch) => setCredForm(f=>({...f,customFields:f.customFields.map((row,idx)=>idx===i?{...row,...patch}:row)}));
+  const removeCredCustomField = i => setCredForm(f=>({...f,customFields:f.customFields.filter((_,idx)=>idx!==i)}));
 
   // Motion: a quiet staggered entrance for the card grid when Bank Details first
   // becomes visible (page switch, or once the data finishes loading if that

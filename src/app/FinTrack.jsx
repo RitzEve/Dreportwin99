@@ -453,22 +453,22 @@ function BankTotals({banksLive, asOf, isPast}) {
 // One field-list drives the add/edit form AND the read-only record panel, so
 // the two stay in sync automatically instead of being maintained twice.
 const BD_GROUPS = [
-  {title:"Identity", fields:[
-    ["phoneModel","Phone model","text"],["bankName","Bank name","bankSelect"],["holderName","Holder name","text"],
-    ["dateOfBirth","Date of birth","date"],["phoneNumber","Phone number","text"],["agent","Agent","text"],
+  {title:"Identity", icon:"ti-fingerprint", fields:[
+    ["phoneModel","Phone model","text","ti-device-mobile"],["bankName","Bank name","bankSelect","ti-building-bank"],["holderName","Holder name","text","ti-user"],
+    ["dateOfBirth","Date of birth","date","ti-cake"],["phoneNumber","Phone number","text","ti-phone"],["agent","Agent","text","ti-briefcase"],
   ]},
-  {title:"Access & security", fields:[
-    ["email","Email","text"],["customerLoginId","Customer / login ID","text"],["emailPassword","Email password","password"],
-    ["internetPassword","Internet / login password","password"],["loginPin","Login PIN","password"],["vpn","VPN","text"],
+  {title:"Access & security", icon:"ti-shield-lock", fields:[
+    ["email","Email","text","ti-mail"],["customerLoginId","Customer / login ID","text","ti-id"],["emailPassword","Email password","password","ti-lock"],
+    ["internetPassword","Internet / login password","password","ti-lock"],["loginPin","Login PIN","password","ti-key"],["vpn","VPN","text","ti-map-pin"],
   ]},
-  {title:"Card", fields:[
-    ["cardLast4","Card last 4 digits","text"],["cardPin","Card PIN","password"],
+  {title:"Card", icon:"ti-credit-card", fields:[
+    ["cardLast4","Card last 4 digits","text","ti-credit-card"],["cardPin","Card PIN","password","ti-key"],
   ]},
-  {title:"Banking details", fields:[
-    ["bsb","BSB","text"],["account","Account number","text"],["payid","PayID","text"],["otpLink","OTP link","text"],
+  {title:"Banking details", icon:"ti-building-bank", fields:[
+    ["bsb","BSB","text","ti-building-bank"],["account","Account number","text","ti-hash"],["payid","PayID","text","ti-send"],["otpLink","OTP link","text","ti-link"],
   ]},
-  {title:"Notes", fields:[
-    ["openDate","Open date","date"],["others","Others","text"],["remarks","Remarks","textarea"],
+  {title:"Notes", icon:"ti-note", fields:[
+    ["openDate","Open date","date","ti-calendar"],["others","Others","text","ti-dots-circle-horizontal"],["remarks","Remarks","textarea","ti-note"],
   ]},
 ];
 const BD_FIELDS = BD_GROUPS.flatMap(g=>g.fields.map(([key])=>key));
@@ -559,12 +559,16 @@ function BankDetailPanel({bd, onClose, panelRef}) {
         </div>
         <div style={{padding:"18px 20px",overflowY:"auto",background:C.bg}}>
           {BD_GROUPS.map(g=>(
-            <div key={g.title} style={{marginBottom:16}}>
-              <div style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:8}}>{g.title}</div>
+            <div key={g.title} style={{marginBottom:18}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:9,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                <i className={`ti ${g.icon}`} aria-hidden="true" style={{fontSize:13}}/>{g.title}
+              </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"9px 18px"}}>
-                {g.fields.map(([key,label,type])=>(
+                {g.fields.map(([key,label,type,icon])=>(
                   <div key={key} style={type==="textarea"?{gridColumn:"1/-1"}:null}>
-                    <div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>{label}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>
+                      <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:10.5}}/>{label}
+                    </div>
                     <div style={{fontSize:13,fontWeight:500}}><BdFieldValue fieldKey={key} type={type} value={bd[key]}/></div>
                   </div>
                 ))}
@@ -968,6 +972,7 @@ export default function App() {
   const [bdPanel,setBdPanel] = useState(null); // the record currently open in the full panel, or null
   const bdGridRef = useRef(null);
   const bdPanelRef = useRef(null);
+  const bdModalRef = useRef(null);
 
   const [editingMember,setEditingMember] = useState(null);
   const [editMemberForm,setEditMemberForm] = useState({});
@@ -1730,6 +1735,18 @@ export default function App() {
     return ()=>mm.revert();
   },{dependencies:[bdPanel],scope:bdPanelRef});
 
+  // Motion: form field-groups settle in with a soft stagger when the Add/Edit modal opens.
+  useGSAP(()=>{
+    if(!bdModalOpen || !bdModalRef.current) return;
+    const groups = bdModalRef.current.querySelectorAll(".bd-form-group");
+    if(!groups.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(groups,{autoAlpha:0,y:12,duration:0.35,stagger:0.06,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[bdModalOpen],scope:bdModalRef});
+
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
     setBankError("");
@@ -2276,7 +2293,7 @@ export default function App() {
 
       {bdModalOpen&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:"24px 16px"}} onClick={closeBdModal}>
-          <div style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:680,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+          <div ref={bdModalRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:680,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
               <div style={{fontWeight:500,fontSize:17,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-id-badge-2" aria-hidden="true" style={{color:C.accent}}/> {bdEditId?"Edit bank detail":"Add bank detail"}</div>
               <button onClick={closeBdModal} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}><i className="ti ti-x" aria-hidden="true"/> Close</button>
@@ -2284,18 +2301,20 @@ export default function App() {
             <div style={{padding:"18px 20px",overflowY:"auto"}}>
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Every field is optional.</div>
               {BD_GROUPS.map(g=>(
-                <div key={g.title} style={{marginBottom:16}}>
-                  <div style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:8}}>{g.title}</div>
+                <div key={g.title} className="bd-form-group" style={{marginBottom:20}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                    <i className={`ti ${g.icon}`} aria-hidden="true" style={{fontSize:13}}/>{g.title}
+                  </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                    {g.fields.map(([key,label,type])=>(
+                    {g.fields.map(([key,label,type,icon])=>(
                       <div key={key} style={type==="textarea"||key==="bankName"?{gridColumn:"1/-1"}:null}>
-                        <label style={labelStyle}>{label}</label>
+                        <label style={{...labelStyle,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12,color:C.muted}}/>{label}</label>
                         {key==="bankName" ? (
                           <FluidDropdown value={bdForm.bankName} placeholder="— Select bank —" ariaLabel="Bank name"
                             options={[{value:"",label:"— Select bank —"},...BANK_CHOICES.map(b=>({value:b,label:b}))]}
                             onChange={v=>setBdForm(f=>({...f,bankName:v}))}/>
                         ) : type==="textarea" ? (
-                          <textarea value={bdForm[key]} onChange={e=>setBdForm(f=>({...f,[key]:e.target.value}))} rows={2} style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
+                          <textarea value={bdForm[key]} onChange={e=>setBdForm(f=>({...f,[key]:e.target.value}))} rows={3} placeholder="Anything else worth noting about this record…" style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
                         ) : (
                           <input type={type==="date"?"date":"text"} value={bdForm[key]} onChange={e=>setBdForm(f=>({...f,[key]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
                         )}

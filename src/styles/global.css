@@ -86,7 +86,7 @@ body::before {
   margin-bottom: 6px;
 }
 
-input, select {
+input, select, textarea {
   width: 100%;
   font-family: inherit;
   font-size: 14px;
@@ -98,11 +98,12 @@ input, select {
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-input:focus, select:focus {
+input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
-input::placeholder { color: var(--muted); opacity: 0.7; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.7; }
+textarea { line-height: 1.5; }
 
 /* ---- buttons ---- */
 

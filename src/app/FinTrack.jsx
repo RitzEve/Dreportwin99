@@ -2594,7 +2594,7 @@ export default function App() {
                     <input type="text" placeholder="Field name" value={cf.label} onChange={e=>updateCredCustomField(i,{label:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
                     <input type="text" placeholder="Value" value={cf.value} onChange={e=>updateCredCustomField(i,{value:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
                     <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:C.muted,whiteSpace:"nowrap",cursor:"pointer"}}>
-                      <input type="checkbox" checked={cf.sensitive} onChange={e=>updateCredCustomField(i,{sensitive:e.target.checked})}/> 🔒
+                      <input type="checkbox" checked={cf.sensitive} onChange={e=>updateCredCustomField(i,{sensitive:e.target.checked})} aria-label="Mark this field as sensitive"/> 🔒
                     </label>
                     <button type="button" onClick={()=>removeCredCustomField(i)} aria-label="Remove field" style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:16,padding:4,display:"flex"}}><i className="ti ti-x" aria-hidden="true"/></button>
                   </div>
@@ -3263,7 +3263,7 @@ export default function App() {
               {!credLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
               {credLoaded&&credLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{credLoadError}</div>}
               {credLoaded&&!credLoadError&&credentials.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records yet. Click "Add record" to create one.</div>}
-              {credLoaded&&credentials.length>0&&credShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match "{credSearch}".</div>}
+              {credLoaded&&credentials.length>0&&credShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match “{credSearch}”.</div>}
               <div ref={credGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
                 {credShown.map(cred=>(
                   <CredentialCard key={cred.id} cred={cred}

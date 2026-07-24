@@ -65,7 +65,7 @@ not narrowed to master-only).
 
 ## UI
 
-**Nav**: id `companydetails`, icon `ti-key`, label renders as
+**Nav**: id `companycredentials`, icon `ti-key`, label renders as
 `{SESSION.companyName} Details` (company name is already available via
 `window.FINTRACK_SESSION.companyName`, no new plumbing needed). Slots into the
 sidebar between Bank Details and Members, and into the mobile "More" overflow

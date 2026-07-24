@@ -129,6 +129,15 @@ const downloadBlob = (content,filename,mime) => {
   a.href=url; a.download=filename; document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 };
+// Gate for every user-entered "link" field (Bank Details' OTP link, Bank Accounts'
+// OTP link, Company Credentials' Link field) before it's ever rendered as a clickable
+// <a href>. Without this, a stored `javascript:` URI would execute in the clicking
+// user's session the moment a co-master/co-manager opened it from a card or record
+// panel — same-tenant privilege escalation via social engineering, since rel=
+// "noopener noreferrer" blocks window.opener access but does NOT block javascript:
+// execution. Only http(s) URLs render as a real link; every call site falls back to
+// plain (still visible/copyable) text for anything else.
+const isSafeHttpUrl = v => /^https?:\/\//i.test(String(v||"").trim());
 const TX_COLS = ["date","time","type","amount","memberId","memberName","memberPhone","bank","operator","receipt","notes","deleted"];
 // Transactions don't carry a phone number themselves (only the member record does) —
 // look it up by memberId, falling back to a name match, same pairing rule used
@@ -497,7 +506,9 @@ function BdFieldValue({fieldKey,type,value}) {
   if(type==="password") return <Masked value={value}/>;
   if(!value) return <span style={{color:C.muted,fontWeight:400}}>—</span>;
   if(type==="date") return fmtDate(value);
-  if(fieldKey==="otpLink") return <a href={value} target="_blank" rel="noopener noreferrer" style={{color:C.accent,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4,wordBreak:"break-all"}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12,flexShrink:0}}/>{value}</a>;
+  if(fieldKey==="otpLink") return isSafeHttpUrl(value)
+    ? <a href={value} target="_blank" rel="noopener noreferrer" style={{color:C.accent,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4,wordBreak:"break-all"}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12,flexShrink:0}}/>{value}</a>
+    : <span style={{wordBreak:"break-word"}}>{value}</span>;
   return <span style={{wordBreak:"break-word"}}>{value}</span>;
 }
 
@@ -523,7 +534,9 @@ function BankDetailCard({bd, onOpen, onEdit, onDelete, onToggleFrozen, onAddToBa
         <div style={{gridColumn:"1/-1"}}>
           <div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>OTP link</div>
           {bd.otpLink
-            ? <a href={bd.otpLink} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:C.accent,fontWeight:500,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12}}/>Open</a>
+            ? (isSafeHttpUrl(bd.otpLink)
+                ? <a href={bd.otpLink} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:C.accent,fontWeight:500,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12}}/>Open</a>
+                : <span style={{color:C.text,fontWeight:500,wordBreak:"break-all"}}>{bd.otpLink}</span>)
             : <span style={{color:C.text,fontWeight:500}}>—</span>}
         </div>
       </div>
@@ -617,7 +630,7 @@ function CopyableValue({value, masked, isLink}) {
   };
   return (
     <span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
-      {isLink ? (
+      {isLink && isSafeHttpUrl(value) ? (
         <a href={value} target="_blank" rel="noopener noreferrer" style={{color:C.accent,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4,wordBreak:"break-all"}}><i className="ti ti-link" aria-hidden="true" style={{fontSize:12,flexShrink:0}}/>{value}</a>
       ) : (
         <span style={{fontFamily:masked?"ui-monospace,Consolas,monospace":"inherit",letterSpacing:masked&&!show?2:0,wordBreak:"break-word"}}>{masked&&!show?"•".repeat(Math.min(value.length,8)):value}</span>
@@ -3172,7 +3185,9 @@ export default function App() {
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:b.otpLink?6:8}}>PayID: {b.payid||"—"}</div>
-                        {b.otpLink&&<a href={b.otpLink} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:6,padding:"3px 9px",marginBottom:8,textDecoration:"none"}}><i className="ti ti-link" aria-hidden="true"/> OTP link</a>}
+                        {b.otpLink&&(isSafeHttpUrl(b.otpLink)
+                          ? <a href={b.otpLink} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:6,padding:"3px 9px",marginBottom:8,textDecoration:"none"}}><i className="ti ti-link" aria-hidden="true"/> OTP link</a>
+                          : <div style={{fontSize:12,color:C.muted,marginBottom:8,wordBreak:"break-all"}}>OTP link: {b.otpLink}</div>)}
                         <div style={{fontSize:20,fontWeight:500,color:C.text}}>{fmt(b.balance)}</div>
                         <div style={{fontSize:11,color:C.muted,marginTop:2}}>Yesterday: {fmt(b.yBalance)}</div>
                         {bankIsPast&&<div style={{fontSize:11,fontWeight:600,color:C.accent,marginTop:1}}>Closing {fmtDate(bankAsOf)}: {fmt(b.asOfBalance)}</div>}

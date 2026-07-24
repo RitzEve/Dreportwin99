@@ -2606,8 +2606,12 @@ export default function App() {
                   <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
                     <input type="text" placeholder="Field name" value={cf.label} onChange={e=>updateCredCustomField(i,{label:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
                     <input type="text" placeholder="Value" value={cf.value} onChange={e=>updateCredCustomField(i,{value:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
-                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:C.muted,whiteSpace:"nowrap",cursor:"pointer"}}>
-                      <input type="checkbox" checked={cf.sensitive} onChange={e=>updateCredCustomField(i,{sensitive:e.target.checked})} aria-label="Mark this field as sensitive"/> 🔒
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:C.muted,whiteSpace:"nowrap",cursor:"pointer"}}>
+                      <input type="checkbox" checked={cf.sensitive} onChange={e=>updateCredCustomField(i,{sensitive:e.target.checked})} aria-label="Mark this field as sensitive" style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                      <span aria-hidden="true" style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:cf.sensitive?C.accent:"#0b0f16",border:`1px solid ${cf.sensitive?C.accent:C.borderStrong}`,transition:"all 0.15s"}}>
+                        {cf.sensitive&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:11}}/>}
+                      </span>
+                      🔒
                     </label>
                     <button type="button" onClick={()=>removeCredCustomField(i)} aria-label="Remove field" style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:16,padding:4,display:"flex"}}><i className="ti ti-x" aria-hidden="true"/></button>
                   </div>

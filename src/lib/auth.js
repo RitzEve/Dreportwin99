@@ -894,3 +894,79 @@ export async function deleteCompanyCredential(id) {
   if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error) };
   return { ok: true };
 }
+
+// ---- payment gateway details (master/manager: payment gateway credential vault) --
+// Lives in its own table (migration-023) with the same RLS shape as
+// company_credentials — see that block's comment above for the full isolation
+// reasoning. Fixed fields cover the common case (backend link/login ID/
+// password/API key/merchant key/merchant code); customFields (jsonb array of
+// {label,value,sensitive}) covers anything else per gateway.
+
+const PAYMENT_GATEWAY_FIELD_MAP = {
+  name: 'name', backendLink: 'backend_link', loginId: 'login_id', password: 'password',
+  apiKey: 'api_key', merchantKey: 'merchant_key', merchantCode: 'merchant_code',
+};
+
+function paymentGatewayRowToObj(r) {
+  const obj = {
+    id: r.id, companyId: r.company_id, updatedAt: r.updated_at,
+    customFields: Array.isArray(r.custom_fields) ? r.custom_fields : [],
+  };
+  for (const [key, col] of Object.entries(PAYMENT_GATEWAY_FIELD_MAP)) obj[key] = r[col] ?? '';
+  return obj;
+}
+
+function paymentGatewayFieldsToRow(fields) {
+  const row = {};
+  for (const [key, col] of Object.entries(PAYMENT_GATEWAY_FIELD_MAP)) {
+    if (fields[key] !== undefined) row[col] = fields[key] === '' ? null : fields[key];
+  }
+  if (fields.customFields !== undefined) row.custom_fields = fields.customFields;
+  return row;
+}
+
+const PAYMENT_GATEWAYS_SETUP_ERROR = 'This needs a one-time database setup (run migration-023.sql in Supabase).';
+const isPaymentGatewaysMissing = (error) => /payment_gateways|does not exist|could not find|schema cache/i.test(error?.message || '');
+
+/** Master/manager: every payment gateway record for their own company. */
+export async function listPaymentGateways() {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
+  const { data, error } = await supabase.from('payment_gateways').select('*')
+    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+  if (error) return { ok: false, error: isPaymentGatewaysMissing(error) ? PAYMENT_GATEWAYS_SETUP_ERROR : friendly(error), rows: [] };
+  return { ok: true, rows: (data || []).map(paymentGatewayRowToObj) };
+}
+
+/** Master/manager: create a payment gateway record for their own company. Only `name` is required. */
+export async function createPaymentGateway(fields) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  if (!fields.name || !fields.name.trim()) return { ok: false, error: 'Record name is required.' };
+  fields.name = fields.name.trim();
+  const row = { ...paymentGatewayFieldsToRow(fields), company_id: me.companyId };
+  const { data, error } = await supabase.from('payment_gateways').insert(row).select().single();
+  if (error) return { ok: false, error: isPaymentGatewaysMissing(error) ? PAYMENT_GATEWAYS_SETUP_ERROR : friendly(error) };
+  return { ok: true, row: paymentGatewayRowToObj(data) };
+}
+
+/** Master/manager: edit a payment gateway record. Pass only the fields that changed. */
+export async function updatePaymentGateway(id, fields) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  if (fields.name !== undefined && (!fields.name || !fields.name.trim())) return { ok: false, error: 'Record name is required.' };
+  if (fields.name !== undefined) fields.name = fields.name.trim();
+  const row = { ...paymentGatewayFieldsToRow(fields), updated_at: new Date().toISOString() };
+  const { error } = await supabase.from('payment_gateways').update(row).eq('id', id);
+  if (error) return { ok: false, error: isPaymentGatewaysMissing(error) ? PAYMENT_GATEWAYS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}
+
+/** Master/manager: permanently delete a payment gateway record. */
+export async function deletePaymentGateway(id) {
+  const me = await getCurrentUser();
+  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.from('payment_gateways').delete().eq('id', id);
+  if (error) return { ok: false, error: isPaymentGatewaysMissing(error) ? PAYMENT_GATEWAYS_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}

@@ -704,6 +704,87 @@ function CredentialPanel({cred, onClose, panelRef}) {
   );
 }
 
+// ---- Payment Gateway Details: master/manager-only payment gateway vault ----
+// Same shape as Company Credentials — fixed common fields cover the frequent
+// case (backend link/login ID/password/API key/merchant key/merchant code),
+// customFields covers anything a specific gateway needs beyond that (webhook
+// secrets, support PINs, settlement notes...). Lives in its own table
+// (migration-023), same isolation reasoning as Bank Details / Company
+// Credentials — see window.FINTRACK_PAYMENT_GATEWAYS_API. Reuses CopyableValue
+// as-is rather than a new component, since the mask/reveal/copy behaviour is
+// identical.
+const PG_COMMON_FIELDS = [
+  ["backendLink","Backend Link","text","ti-link"],
+  ["loginId","Login ID","text","ti-user"],
+  ["password","Password","password","ti-lock"],
+  ["apiKey","API Key","password","ti-key"],
+  ["merchantKey","Merchant Key","password","ti-shield-lock"],
+  ["merchantCode","Merchant Code","text","ti-hash"],
+];
+const PG_BLANK = {name:"",backendLink:"",loginId:"",password:"",apiKey:"",merchantKey:"",merchantCode:"",customFields:[]};
+
+function PaymentGatewayCard({pg, onOpen, onEdit, onDelete}) {
+  const extraCount = pg.customFields.length;
+  return (
+    <GlowCard className="pg-card" color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:"pointer"}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}
+      onClick={onOpen}>
+      <div title={pg.name} style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pg.name}</div>
+      {(pg.loginId||pg.merchantCode||pg.password)&&(
+        <div style={{display:"flex",flexDirection:"column",gap:6,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 10px",marginBottom:8,fontSize:12}}>
+          {pg.loginId&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Login ID</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-word"}}>{pg.loginId}</div></div>}
+          {pg.merchantCode&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Merchant Code</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-word"}}>{pg.merchantCode}</div></div>}
+          {pg.password&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Password</div><CopyableValue value={pg.password} masked/></div>}
+        </div>
+      )}
+      {extraCount>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>+ {extraCount} more field{extraCount===1?"":"s"}</div>}
+      <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6}}>
+        <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
+        <button onClick={onDelete} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
+      </div>
+    </GlowCard>
+  );
+}
+
+function PaymentGatewayPanel({pg, onClose, panelRef}) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998,padding:"24px 16px"}} onClick={onClose}>
+      <div ref={panelRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:560,maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+          <div style={{fontWeight:500,fontSize:17}}>{pg.name}</div>
+          <button onClick={onClose} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}>
+            <i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/> Close
+          </button>
+        </div>
+        <div style={{padding:"18px 20px",overflowY:"auto",background:C.bg}}>
+          {PG_COMMON_FIELDS.map(([key,label,type,icon])=>(
+            pg[key] ? (
+              <div key={key} style={{marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>
+                  <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:10.5}}/>{label}
+                </div>
+                <div style={{fontSize:13,fontWeight:500}}><CopyableValue value={pg[key]} masked={type==="password"} isLink={key==="backendLink"}/></div>
+              </div>
+            ) : null
+          ))}
+          {pg.customFields.length>0&&(
+            <div style={{marginTop:16}}>
+              <div style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:9,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>Custom fields</div>
+              {pg.customFields.map((f,i)=>(
+                <div key={i} style={{marginBottom:12}}>
+                  <div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>{f.label||"Untitled field"}</div>
+                  <div style={{fontSize:13,fontWeight:500}}><CopyableValue value={f.value} masked={!!f.sensitive}/></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Transaction log with a page-size dropdown (default 50) + simple pager.
 const PAGE_SIZES = [50,100,200,500,1000];
 // Member directory sort options (value -> label shown in the Sort dropdown).
@@ -1018,6 +1099,10 @@ export default function App() {
   // matching this file's existing convention (canEditRoster is the same
   // pattern) so either gate can change independently later without coupling.
   const canAccessCompanyCredentials = SESSION.role==="master" || SESSION.role==="manager";
+  // Payment Gateway Details is master/manager-only too — same reasoning as
+  // canAccessCompanyCredentials above (kept separately named for the same
+  // future-independence reason).
+  const canAccessPaymentGateways = SESSION.role==="master" || SESSION.role==="manager";
   // This company's time zone (set per company by the provider). All "now" dates
   // and times below are computed in this zone so the log follows it.
   const tz = SESSION.timezone || "Australia/Sydney";
@@ -1116,6 +1201,21 @@ export default function App() {
   const credGridRef = useRef(null);
   const credPanelRef = useRef(null);
   const credModalRef = useRef(null);
+
+  // Payment Gateway Details — separate table, own state, same shape as
+  // Company Credentials (fixed common fields + customFields for anything extra).
+  const [paymentGateways,setPaymentGateways] = useState([]);
+  const [pgLoaded,setPgLoaded] = useState(false);
+  const [pgLoadError,setPgLoadError] = useState("");
+  const [pgSearch,setPgSearch] = useState("");
+  const [pgModalOpen,setPgModalOpen] = useState(false);
+  const [pgEditId,setPgEditId] = useState(null); // null = adding, else = id being edited
+  const [pgForm,setPgForm] = useState(PG_BLANK);
+  const [pgFormError,setPgFormError] = useState("");
+  const [pgPanel,setPgPanel] = useState(null); // the record currently open in the full panel, or null
+  const pgGridRef = useRef(null);
+  const pgPanelRef = useRef(null);
+  const pgModalRef = useRef(null);
 
   const [editingMember,setEditingMember] = useState(null);
   const [editMemberForm,setEditMemberForm] = useState({});
@@ -1904,6 +2004,52 @@ export default function App() {
   const updateCredCustomField = (i,patch) => setCredForm(f=>({...f,customFields:f.customFields.map((row,idx)=>idx===i?{...row,...patch}:row)}));
   const removeCredCustomField = i => setCredForm(f=>({...f,customFields:f.customFields.filter((_,idx)=>idx!==i)}));
 
+  // Payment Gateway Details fetch — same shape as Company Credentials' effect.
+  useEffect(()=>{
+    if(!canAccessPaymentGateways || !window.FINTRACK_PAYMENT_GATEWAYS_API){ setPgLoaded(true); return; }
+    let alive = true;
+    (async()=>{
+      const res = await window.FINTRACK_PAYMENT_GATEWAYS_API.list();
+      if(!alive) return;
+      if(res.ok) setPaymentGateways(res.rows); else setPgLoadError(res.error);
+      setPgLoaded(true);
+    })();
+    return ()=>{ alive = false; };
+  },[canAccessPaymentGateways]);
+
+  const pgShown = useMemo(()=>{
+    const q = pgSearch.trim().toLowerCase();
+    if(!q) return paymentGateways;
+    return paymentGateways.filter(p=>[p.name,p.loginId,p.merchantCode,p.backendLink,...p.customFields.map(f=>f.label)].some(v=>String(v||"").toLowerCase().includes(q)));
+  },[paymentGateways,pgSearch]);
+
+  const openPgAdd = () => { setPgEditId(null); setPgForm(PG_BLANK); setPgFormError(""); setPgModalOpen(true); };
+  const openPgEdit = pg => { setPgEditId(pg.id); setPgForm({name:pg.name,backendLink:pg.backendLink,loginId:pg.loginId,password:pg.password,apiKey:pg.apiKey,merchantKey:pg.merchantKey,merchantCode:pg.merchantCode,customFields:pg.customFields.map(f=>({...f}))}); setPgFormError(""); setPgModalOpen(true); };
+  const closePgModal = () => setPgModalOpen(false);
+  const handleSavePg = async () => {
+    if(!pgForm.name.trim()){ setPgFormError("Record name is required."); return; }
+    const api = window.FINTRACK_PAYMENT_GATEWAYS_API;
+    if(!api){ setPgFormError("Not authorised."); return; }
+    const cleanFields = pgForm.customFields.filter(f=>f.label.trim()||f.value.trim());
+    const payload = {...pgForm, name: pgForm.name.trim(), customFields:cleanFields};
+    const res = pgEditId ? await api.update(pgEditId,payload) : await api.create(payload);
+    if(!res.ok){ setPgFormError(res.error); return; }
+    if(pgEditId) setPaymentGateways(prev=>prev.map(p=>p.id===pgEditId?{...p,...payload}:p));
+    else setPaymentGateways(prev=>[res.row,...prev]);
+    setPgModalOpen(false);
+  };
+  const handleDeletePg = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
+    setConfirm(null);
+    const api = window.FINTRACK_PAYMENT_GATEWAYS_API;
+    if(!api) return;
+    const res = await api.remove(id);
+    if(res.ok) setPaymentGateways(prev=>prev.filter(p=>p.id!==id));
+  }});
+
+  const addPgCustomField = () => setPgForm(f=>({...f,customFields:[...f.customFields,{label:"",value:"",sensitive:true}]}));
+  const updatePgCustomField = (i,patch) => setPgForm(f=>({...f,customFields:f.customFields.map((row,idx)=>idx===i?{...row,...patch}:row)}));
+  const removePgCustomField = i => setPgForm(f=>({...f,customFields:f.customFields.filter((_,idx)=>idx!==i)}));
+
   // Motion: a quiet staggered entrance for the card grid when Bank Details first
   // becomes visible (page switch, or once the data finishes loading if that
   // happens after — matchMedia skips it entirely under prefers-reduced-motion).
@@ -1976,6 +2122,41 @@ export default function App() {
     });
     return ()=>mm.revert();
   },{dependencies:[credModalOpen],scope:credModalRef});
+
+  // Motion: a quiet staggered entrance for the card grid when Payment Gateway
+  // Details first becomes visible — same pattern as Bank Details / Company Credentials.
+  useGSAP(()=>{
+    if(page!=="paymentgateways") return;
+    const cards = pgGridRef.current ? pgGridRef.current.querySelectorAll(".pg-card") : null;
+    if(!cards || !cards.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(cards,{autoAlpha:0,y:14,duration:0.4,stagger:0.05,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[page,pgLoaded,pgShown.length===0],scope:pgGridRef});
+
+  // Motion: the record panel fades + scales in when opened.
+  useGSAP(()=>{
+    if(!pgPanel || !pgPanelRef.current) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(pgPanelRef.current,{autoAlpha:0,scale:0.96,duration:0.25,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[pgPanel],scope:pgPanelRef});
+
+  // Motion: form field-groups settle in with a soft stagger when the Add/Edit modal opens.
+  useGSAP(()=>{
+    if(!pgModalOpen || !pgModalRef.current) return;
+    const groups = pgModalRef.current.querySelectorAll(".pg-form-group");
+    if(!groups.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(groups,{autoAlpha:0,y:12,duration:0.35,stagger:0.06,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[pgModalOpen],scope:pgModalRef});
 
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
@@ -2171,6 +2352,9 @@ export default function App() {
     // Master/manager only — general credential vault, own table (migration-022).
     // Label uses the real company name, same source AccountMenu already reads.
     ...(canAccessCompanyCredentials ? [{id:"companycredentials",icon:"ti-key",label:`${SESSION.companyName} Details`}] : []),
+    // Master/manager only — payment gateway credential vault, own table
+    // (migration-023). Fixed label (not company-name-prefixed like the one above).
+    ...(canAccessPaymentGateways ? [{id:"paymentgateways",icon:"ti-credit-card",label:"Payment Gateway Details"}] : []),
     {id:"members",icon:"ti-users",label:"Members"},
     {id:"search",icon:"ti-search",label:"Search"},
     {id:"offdays",icon:"ti-calendar-off",label:"Work Shifts/Off Day"},
@@ -2629,6 +2813,64 @@ export default function App() {
       )}
 
       {credPanel&&<CredentialPanel cred={credPanel} onClose={()=>setCredPanel(null)} panelRef={credPanelRef}/>}
+
+      {pgModalOpen&&(
+        <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:"24px 16px"}} onClick={closePgModal}>
+          <div ref={pgModalRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+              <div style={{fontWeight:500,fontSize:17,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-credit-card" aria-hidden="true" style={{color:C.accent}}/> {pgEditId?"Edit record":"Add record"}</div>
+              <button onClick={closePgModal} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}><i className="ti ti-x" aria-hidden="true"/> Close</button>
+            </div>
+            <div style={{padding:"18px 20px",overflowY:"auto"}}>
+              <div className="pg-form-group" style={{marginBottom:20}}>
+                <label style={labelStyle}>Record name <span style={{color:C.muted,fontWeight:400}}>(e.g. Stripe, PayPal, Airwallex)</span></label>
+                <input type="text" placeholder="e.g. Stripe" value={pgForm.name} onChange={e=>setPgForm(f=>({...f,name:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+              </div>
+              <div className="pg-form-group" style={{marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                  <i className="ti ti-id-badge-2" aria-hidden="true" style={{fontSize:13}}/>Common fields
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  {PG_COMMON_FIELDS.map(([key,label,type,icon])=>(
+                    <div key={key}>
+                      <label style={{...labelStyle,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12,color:C.muted}}/>{label} <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                      <input type="text" value={pgForm[key]} onChange={e=>setPgForm(f=>({...f,[key]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="pg-form-group" style={{marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                  <i className="ti ti-list-details" aria-hidden="true" style={{fontSize:13}}/>Custom fields
+                </div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Anything else — webhook secrets, support PINs, settlement notes...</div>
+                {pgForm.customFields.map((cf,i)=>(
+                  <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+                    <input type="text" placeholder="Field name" value={cf.label} onChange={e=>updatePgCustomField(i,{label:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
+                    <input type="text" placeholder="Value" value={cf.value} onChange={e=>updatePgCustomField(i,{value:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:C.muted,whiteSpace:"nowrap",cursor:"pointer"}}>
+                      <input type="checkbox" checked={cf.sensitive} onChange={e=>updatePgCustomField(i,{sensitive:e.target.checked})} aria-label="Mark this field as sensitive" style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                      <span aria-hidden="true" style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:cf.sensitive?C.accent:"#0b0f16",border:`1px solid ${cf.sensitive?C.accent:C.borderStrong}`,transition:"all 0.15s"}}>
+                        {cf.sensitive&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:11}}/>}
+                      </span>
+                      🔒
+                    </label>
+                    <button type="button" onClick={()=>removePgCustomField(i)} aria-label="Remove field" style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:16,padding:4,display:"flex"}}><i className="ti ti-x" aria-hidden="true"/></button>
+                  </div>
+                ))}
+                <button type="button" onClick={addPgCustomField} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"7px 14px",border:`1px dashed ${C.borderStrong}`,borderRadius:8,background:"transparent",color:C.accent,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-plus" aria-hidden="true"/> Add custom field</button>
+              </div>
+              {pgFormError&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>{pgFormError}</div>}
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6}}>
+                <button onClick={closePgModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
+                <button onClick={handleSavePg} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> {pgEditId?"Save changes":"Add record"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pgPanel&&<PaymentGatewayPanel pg={pgPanel} onClose={()=>setPgPanel(null)} panelRef={pgPanelRef}/>}
 
       {showEntryModal&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:isMobile?"stretch":"center",justifyContent:"center",zIndex:1000,padding:isMobile?0:"24px 16px"}} onClick={closeEntryModal}>
@@ -3289,6 +3531,38 @@ export default function App() {
                     onOpen={()=>setCredPanel(cred)}
                     onEdit={()=>openCredEdit(cred)}
                     onDelete={()=>handleDeleteCred(cred.id,cred.name)}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {page==="paymentgateways"&&canAccessPaymentGateways&&(
+          <div>
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-credit-card" right={
+                <button onClick={openPgAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                  <i className="ti ti-plus" aria-hidden="true"/> Add record
+                </button>
+              }>Payment Gateway Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Master/manager only. {paymentGateways.length} record{paymentGateways.length===1?"":"s"} saved. Click a card for the full record.</div>
+              {paymentGateways.length>0&&(
+                <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
+                  <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+                  <input type="text" value={pgSearch} onChange={e=>setPgSearch(e.target.value)} placeholder="Search name, login ID, merchant code or link…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  {pgSearch&&<button type="button" onClick={()=>setPgSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+                </div>
+              )}
+              {!pgLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
+              {pgLoaded&&pgLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{pgLoadError}</div>}
+              {pgLoaded&&!pgLoadError&&paymentGateways.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records yet. Click "Add record" to create one.</div>}
+              {pgLoaded&&paymentGateways.length>0&&pgShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match "{pgSearch}".</div>}
+              <div ref={pgGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
+                {pgShown.map(pg=>(
+                  <PaymentGatewayCard key={pg.id} pg={pg}
+                    onOpen={()=>setPgPanel(pg)}
+                    onEdit={()=>openPgEdit(pg)}
+                    onDelete={()=>handleDeletePg(pg.id,pg.name)}/>
                 ))}
               </div>
             </div>

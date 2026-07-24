@@ -3,6 +3,7 @@ import {
   changeOwnPassword, listTeam, ROLES, canAccessConsole,
   listBankDetails, createBankDetail, updateBankDetail, deleteBankDetail, setBankDetailFrozen, markBankDetailAdded,
   listCompanyCredentials, createCompanyCredential, updateCompanyCredential, deleteCompanyCredential,
+  listPaymentGateways, createPaymentGateway, updatePaymentGateway, deletePaymentGateway,
 } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
@@ -57,6 +58,13 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     window.FINTRACK_COMPANY_CREDENTIALS_API = canAccessConsole(ctx.user.role) ? {
       list: listCompanyCredentials, create: createCompanyCredential, update: updateCompanyCredential,
       remove: deleteCompanyCredential,
+    } : null;
+
+    // Payment Gateway Details: a separate real table (not the app_data blob),
+    // same master/manager gate as Bank Details / Company Credentials above.
+    window.FINTRACK_PAYMENT_GATEWAYS_API = canAccessConsole(ctx.user.role) ? {
+      list: listPaymentGateways, create: createPaymentGateway, update: updatePaymentGateway,
+      remove: deletePaymentGateway,
     } : null;
 
     // Supabase re-fires onAuthStateChange (and Root.jsx rebuilds `ctx` from scratch)

@@ -2155,6 +2155,9 @@ export default function App() {
     // Master/manager only — hidden from staff here (nav), guarded again on the
     // page render below, and enforced for real by RLS (migration-021).
     ...(canAccessBankDetails ? [{id:"bankdetails",icon:"ti-id-badge-2",label:"Bank Details"}] : []),
+    // Master/manager only — general credential vault, own table (migration-022).
+    // Label uses the real company name, same source AccountMenu already reads.
+    ...(canAccessCompanyCredentials ? [{id:"companycredentials",icon:"ti-key",label:`${SESSION.companyName} Details`}] : []),
     {id:"members",icon:"ti-users",label:"Members"},
     {id:"search",icon:"ti-search",label:"Search"},
     {id:"offdays",icon:"ti-calendar-off",label:"Work Shifts/Off Day"},
@@ -2551,6 +2554,64 @@ export default function App() {
       )}
 
       {bdPanel&&<BankDetailPanel bd={bdPanel} onClose={()=>setBdPanel(null)} panelRef={bdPanelRef}/>}
+
+      {credModalOpen&&(
+        <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:"24px 16px"}} onClick={closeCredModal}>
+          <div ref={credModalRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+              <div style={{fontWeight:500,fontSize:17,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-key" aria-hidden="true" style={{color:C.accent}}/> {credEditId?"Edit record":"Add record"}</div>
+              <button onClick={closeCredModal} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}><i className="ti ti-x" aria-hidden="true"/> Close</button>
+            </div>
+            <div style={{padding:"18px 20px",overflowY:"auto"}}>
+              <div className="cred-form-group" style={{marginBottom:20}}>
+                <label style={labelStyle}>Record name</label>
+                <input type="text" placeholder="e.g. Nord VPN" value={credForm.name} onChange={e=>setCredForm(f=>({...f,name:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+              </div>
+              <div className="cred-form-group" style={{marginBottom:20}}>
+                <label style={labelStyle}>Category <span style={{color:C.muted,fontWeight:400}}>(optional — e.g. VPN, Console, Social)</span></label>
+                <input type="text" value={credForm.category} onChange={e=>setCredForm(f=>({...f,category:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+              </div>
+              <div className="cred-form-group" style={{marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                  <i className="ti ti-id-badge-2" aria-hidden="true" style={{fontSize:13}}/>Common fields
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  {CRED_COMMON_FIELDS.map(([key,label,type,icon])=>(
+                    <div key={key}>
+                      <label style={{...labelStyle,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12,color:C.muted}}/>{label} <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                      <input type="text" value={credForm[key]} onChange={e=>setCredForm(f=>({...f,[key]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="cred-form-group" style={{marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                  <i className="ti ti-list-details" aria-hidden="true" style={{fontSize:13}}/>Custom fields
+                </div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Anything else — 2FA codes, passkeys, admin passwords, download links...</div>
+                {credForm.customFields.map((cf,i)=>(
+                  <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+                    <input type="text" placeholder="Field name" value={cf.label} onChange={e=>updateCredCustomField(i,{label:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
+                    <input type="text" placeholder="Value" value={cf.value} onChange={e=>updateCredCustomField(i,{value:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:C.muted,whiteSpace:"nowrap",cursor:"pointer"}}>
+                      <input type="checkbox" checked={cf.sensitive} onChange={e=>updateCredCustomField(i,{sensitive:e.target.checked})}/> 🔒
+                    </label>
+                    <button type="button" onClick={()=>removeCredCustomField(i)} aria-label="Remove field" style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:16,padding:4,display:"flex"}}><i className="ti ti-x" aria-hidden="true"/></button>
+                  </div>
+                ))}
+                <button type="button" onClick={addCredCustomField} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"7px 14px",border:`1px dashed ${C.borderStrong}`,borderRadius:8,background:"transparent",color:C.accent,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-plus" aria-hidden="true"/> Add custom field</button>
+              </div>
+              {credFormError&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>{credFormError}</div>}
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6}}>
+                <button onClick={closeCredModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
+                <button onClick={handleSaveCred} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> {credEditId?"Save changes":"Add record"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {credPanel&&<CredentialPanel cred={credPanel} onClose={()=>setCredPanel(null)} panelRef={credPanelRef}/>}
 
       {showEntryModal&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:isMobile?"stretch":"center",justifyContent:"center",zIndex:1000,padding:isMobile?0:"24px 16px"}} onClick={closeEntryModal}>
@@ -3177,6 +3238,38 @@ export default function App() {
                     onDelete={()=>handleDeleteBd(bd.id,bd.holderName||bd.bankName)}
                     onToggleFrozen={()=>handleToggleBdFrozen(bd)}
                     onAddToBankAccounts={()=>handleAddBdToBankAccounts(bd)}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {page==="companycredentials"&&canAccessCompanyCredentials&&(
+          <div>
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-key" right={
+                <button onClick={openCredAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                  <i className="ti ti-plus" aria-hidden="true"/> Add record
+                </button>
+              }>{SESSION.companyName} Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Master/manager only. {credentials.length} record{credentials.length===1?"":"s"} saved. Click a card for the full record.</div>
+              {credentials.length>0&&(
+                <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
+                  <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+                  <input type="text" value={credSearch} onChange={e=>setCredSearch(e.target.value)} placeholder="Search name, category, username, email or link…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  {credSearch&&<button type="button" onClick={()=>setCredSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+                </div>
+              )}
+              {!credLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
+              {credLoaded&&credLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{credLoadError}</div>}
+              {credLoaded&&!credLoadError&&credentials.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records yet. Click "Add record" to create one.</div>}
+              {credLoaded&&credentials.length>0&&credShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match "{credSearch}".</div>}
+              <div ref={credGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
+                {credShown.map(cred=>(
+                  <CredentialCard key={cred.id} cred={cred}
+                    onOpen={()=>setCredPanel(cred)}
+                    onEdit={()=>openCredEdit(cred)}
+                    onDelete={()=>handleDeleteCred(cred.id,cred.name)}/>
                 ))}
               </div>
             </div>

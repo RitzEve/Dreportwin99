@@ -970,3 +970,77 @@ export async function deletePaymentGateway(id) {
   if (error) return { ok: false, error: isPaymentGatewaysMissing(error) ? PAYMENT_GATEWAYS_SETUP_ERROR : friendly(error) };
   return { ok: true };
 }
+
+// ---- game kiosk details (ALL roles: master/manager/staff — no console gate) --
+// Lives in its own table (migration-024), same dedicated-table pattern as
+// payment_gateways/company_credentials/bank_details, but deliberately open to
+// every role: RLS (and these functions) only check company_id, not my_role().
+
+const KIOSK_FIELD_MAP = {
+  name: 'name', backendLink: 'backend_link', loginId: 'login_id',
+  password: 'password', merchantCode: 'merchant_code',
+};
+
+function kioskRowToObj(r) {
+  const obj = {
+    id: r.id, companyId: r.company_id, updatedAt: r.updated_at,
+    customFields: Array.isArray(r.custom_fields) ? r.custom_fields : [],
+  };
+  for (const [key, col] of Object.entries(KIOSK_FIELD_MAP)) obj[key] = r[col] ?? '';
+  return obj;
+}
+
+function kioskFieldsToRow(fields) {
+  const row = {};
+  for (const [key, col] of Object.entries(KIOSK_FIELD_MAP)) {
+    if (fields[key] !== undefined) row[col] = fields[key] === '' ? null : fields[key];
+  }
+  if (fields.customFields !== undefined) row.custom_fields = fields.customFields;
+  return row;
+}
+
+const KIOSK_SETUP_ERROR = 'This needs a one-time database setup (run migration-024.sql in Supabase).';
+const isKioskMissing = (error) => /kiosk_details|does not exist|could not find|schema cache/i.test(error?.message || '');
+
+/** Any signed-in role: every kiosk record for their own company. */
+export async function listKioskDetails() {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not authorised.', rows: [] };
+  const { data, error } = await supabase.from('kiosk_details').select('*')
+    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+  if (error) return { ok: false, error: isKioskMissing(error) ? KIOSK_SETUP_ERROR : friendly(error), rows: [] };
+  return { ok: true, rows: (data || []).map(kioskRowToObj) };
+}
+
+/** Any signed-in role: create a kiosk record for their own company. Only `name` is required. */
+export async function createKioskDetail(fields) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not authorised.' };
+  if (!fields.name || !fields.name.trim()) return { ok: false, error: 'Record name is required.' };
+  fields.name = fields.name.trim();
+  const row = { ...kioskFieldsToRow(fields), company_id: me.companyId };
+  const { data, error } = await supabase.from('kiosk_details').insert(row).select().single();
+  if (error) return { ok: false, error: isKioskMissing(error) ? KIOSK_SETUP_ERROR : friendly(error) };
+  return { ok: true, row: kioskRowToObj(data) };
+}
+
+/** Any signed-in role: edit a kiosk record. Pass only the fields that changed. */
+export async function updateKioskDetail(id, fields) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not authorised.' };
+  if (fields.name !== undefined && (!fields.name || !fields.name.trim())) return { ok: false, error: 'Record name is required.' };
+  if (fields.name !== undefined) fields.name = fields.name.trim();
+  const row = { ...kioskFieldsToRow(fields), updated_at: new Date().toISOString() };
+  const { error } = await supabase.from('kiosk_details').update(row).eq('id', id);
+  if (error) return { ok: false, error: isKioskMissing(error) ? KIOSK_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}
+
+/** Any signed-in role: permanently delete a kiosk record. */
+export async function deleteKioskDetail(id) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not authorised.' };
+  const { error } = await supabase.from('kiosk_details').delete().eq('id', id);
+  if (error) return { ok: false, error: isKioskMissing(error) ? KIOSK_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}

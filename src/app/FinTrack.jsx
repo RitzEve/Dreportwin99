@@ -785,6 +785,83 @@ function PaymentGatewayPanel({pg, onClose, panelRef}) {
   );
 }
 
+// ---- Game Kiosk Details: ALL-roles kiosk credential vault ----
+// Same shape as Payment Gateway Details (fixed common fields + customFields
+// for anything extra), but deliberately open to every role — master, manager,
+// AND staff all get full add/edit/delete, not just master/manager. Lives in
+// its own table (migration-024) so kiosk credentials still don't ride in the
+// shared app_data blob, but the RLS only isolates by company, not by role —
+// see window.FINTRACK_KIOSK_DETAILS_API. Reuses CopyableValue as-is.
+const KIOSK_COMMON_FIELDS = [
+  ["backendLink","Kiosk Backend Link","text","ti-link"],
+  ["loginId","Login ID","text","ti-user"],
+  ["password","Password","password","ti-lock"],
+  ["merchantCode","Merchant Code","text","ti-hash"],
+];
+const KIOSK_BLANK = {name:"",backendLink:"",loginId:"",password:"",merchantCode:"",customFields:[]};
+
+function KioskCard({kiosk, onOpen, onEdit, onDelete}) {
+  const extraCount = kiosk.customFields.length;
+  return (
+    <GlowCard className="kiosk-card" color={C.accent} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",cursor:"pointer"}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}
+      onClick={onOpen}>
+      <div title={kiosk.name} style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kiosk.name}</div>
+      {(kiosk.loginId||kiosk.merchantCode||kiosk.password)&&(
+        <div style={{display:"flex",flexDirection:"column",gap:6,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 10px",marginBottom:8,fontSize:12}}>
+          {kiosk.loginId&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Login ID</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-word"}}>{kiosk.loginId}</div></div>}
+          {kiosk.merchantCode&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Merchant Code</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-word"}}>{kiosk.merchantCode}</div></div>}
+          {kiosk.password&&<div><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>Password</div><CopyableValue value={kiosk.password} masked/></div>}
+        </div>
+      )}
+      {extraCount>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>+ {extraCount} more field{extraCount===1?"":"s"}</div>}
+      <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6}}>
+        <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
+        <button onClick={onDelete} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
+      </div>
+    </GlowCard>
+  );
+}
+
+function KioskPanel({kiosk, onClose, panelRef}) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998,padding:"24px 16px"}} onClick={onClose}>
+      <div ref={panelRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:560,maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+          <div style={{fontWeight:500,fontSize:17}}>{kiosk.name}</div>
+          <button onClick={onClose} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}>
+            <i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/> Close
+          </button>
+        </div>
+        <div style={{padding:"18px 20px",overflowY:"auto",background:C.bg}}>
+          {KIOSK_COMMON_FIELDS.map(([key,label,type,icon])=>(
+            kiosk[key] ? (
+              <div key={key} style={{marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>
+                  <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:10.5}}/>{label}
+                </div>
+                <div style={{fontSize:13,fontWeight:500}}><CopyableValue value={kiosk[key]} masked={type==="password"} isLink={key==="backendLink"}/></div>
+              </div>
+            ) : null
+          ))}
+          {kiosk.customFields.length>0&&(
+            <div style={{marginTop:16}}>
+              <div style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:9,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>Custom fields</div>
+              {kiosk.customFields.map((f,i)=>(
+                <div key={i} style={{marginBottom:12}}>
+                  <div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>{f.label||"Untitled field"}</div>
+                  <div style={{fontSize:13,fontWeight:500}}><CopyableValue value={f.value} masked={!!f.sensitive}/></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Transaction log with a page-size dropdown (default 50) + simple pager.
 const PAGE_SIZES = [50,100,200,500,1000];
 // Member directory sort options (value -> label shown in the Sort dropdown).
@@ -1216,6 +1293,22 @@ export default function App() {
   const pgGridRef = useRef(null);
   const pgPanelRef = useRef(null);
   const pgModalRef = useRef(null);
+
+  // Game Kiosk Details — separate table, own state, same shape as Payment
+  // Gateway Details. No canAccess flag: every role gets this page, so there's
+  // nothing to gate on (matches how Members/Search/Transactions have none either).
+  const [kioskDetails,setKioskDetails] = useState([]);
+  const [kioskLoaded,setKioskLoaded] = useState(false);
+  const [kioskLoadError,setKioskLoadError] = useState("");
+  const [kioskSearch,setKioskSearch] = useState("");
+  const [kioskModalOpen,setKioskModalOpen] = useState(false);
+  const [kioskEditId,setKioskEditId] = useState(null); // null = adding, else = id being edited
+  const [kioskForm,setKioskForm] = useState(KIOSK_BLANK);
+  const [kioskFormError,setKioskFormError] = useState("");
+  const [kioskPanel,setKioskPanel] = useState(null); // the record currently open in the full panel, or null
+  const kioskGridRef = useRef(null);
+  const kioskPanelRef = useRef(null);
+  const kioskModalRef = useRef(null);
 
   const [editingMember,setEditingMember] = useState(null);
   const [editMemberForm,setEditMemberForm] = useState({});
@@ -2050,6 +2143,53 @@ export default function App() {
   const updatePgCustomField = (i,patch) => setPgForm(f=>({...f,customFields:f.customFields.map((row,idx)=>idx===i?{...row,...patch}:row)}));
   const removePgCustomField = i => setPgForm(f=>({...f,customFields:f.customFields.filter((_,idx)=>idx!==i)}));
 
+  // Game Kiosk Details fetch — same shape as Payment Gateway Details' effect,
+  // but with no role check: the API is always present for every session.
+  useEffect(()=>{
+    if(!window.FINTRACK_KIOSK_DETAILS_API){ setKioskLoaded(true); return; }
+    let alive = true;
+    (async()=>{
+      const res = await window.FINTRACK_KIOSK_DETAILS_API.list();
+      if(!alive) return;
+      if(res.ok) setKioskDetails(res.rows); else setKioskLoadError(res.error);
+      setKioskLoaded(true);
+    })();
+    return ()=>{ alive = false; };
+  },[]);
+
+  const kioskShown = useMemo(()=>{
+    const q = kioskSearch.trim().toLowerCase();
+    if(!q) return kioskDetails;
+    return kioskDetails.filter(k=>[k.name,k.loginId,k.merchantCode,k.backendLink,...k.customFields.map(f=>f.label)].some(v=>String(v||"").toLowerCase().includes(q)));
+  },[kioskDetails,kioskSearch]);
+
+  const openKioskAdd = () => { setKioskEditId(null); setKioskForm(KIOSK_BLANK); setKioskFormError(""); setKioskModalOpen(true); };
+  const openKioskEdit = kiosk => { setKioskEditId(kiosk.id); setKioskForm({name:kiosk.name,backendLink:kiosk.backendLink,loginId:kiosk.loginId,password:kiosk.password,merchantCode:kiosk.merchantCode,customFields:kiosk.customFields.map(f=>({...f}))}); setKioskFormError(""); setKioskModalOpen(true); };
+  const closeKioskModal = () => setKioskModalOpen(false);
+  const handleSaveKiosk = async () => {
+    if(!kioskForm.name.trim()){ setKioskFormError("Record name is required."); return; }
+    const api = window.FINTRACK_KIOSK_DETAILS_API;
+    if(!api){ setKioskFormError("Not authorised."); return; }
+    const cleanFields = kioskForm.customFields.filter(f=>f.label.trim()||f.value.trim());
+    const payload = {...kioskForm, name: kioskForm.name.trim(), customFields:cleanFields};
+    const res = kioskEditId ? await api.update(kioskEditId,payload) : await api.create(payload);
+    if(!res.ok){ setKioskFormError(res.error); return; }
+    if(kioskEditId) setKioskDetails(prev=>prev.map(k=>k.id===kioskEditId?{...k,...payload}:k));
+    else setKioskDetails(prev=>[res.row,...prev]);
+    setKioskModalOpen(false);
+  };
+  const handleDeleteKiosk = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
+    setConfirm(null);
+    const api = window.FINTRACK_KIOSK_DETAILS_API;
+    if(!api) return;
+    const res = await api.remove(id);
+    if(res.ok) setKioskDetails(prev=>prev.filter(k=>k.id!==id));
+  }});
+
+  const addKioskCustomField = () => setKioskForm(f=>({...f,customFields:[...f.customFields,{label:"",value:"",sensitive:true}]}));
+  const updateKioskCustomField = (i,patch) => setKioskForm(f=>({...f,customFields:f.customFields.map((row,idx)=>idx===i?{...row,...patch}:row)}));
+  const removeKioskCustomField = i => setKioskForm(f=>({...f,customFields:f.customFields.filter((_,idx)=>idx!==i)}));
+
   // Motion: a quiet staggered entrance for the card grid when Bank Details first
   // becomes visible (page switch, or once the data finishes loading if that
   // happens after — matchMedia skips it entirely under prefers-reduced-motion).
@@ -2157,6 +2297,41 @@ export default function App() {
     });
     return ()=>mm.revert();
   },{dependencies:[pgModalOpen],scope:pgModalRef});
+
+  // Motion: a quiet staggered entrance for the card grid when Game Kiosk
+  // Details first becomes visible — same pattern as the other vault pages.
+  useGSAP(()=>{
+    if(page!=="kioskdetails") return;
+    const cards = kioskGridRef.current ? kioskGridRef.current.querySelectorAll(".kiosk-card") : null;
+    if(!cards || !cards.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(cards,{autoAlpha:0,y:14,duration:0.4,stagger:0.05,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[page,kioskLoaded,kioskShown.length===0],scope:kioskGridRef});
+
+  // Motion: the record panel fades + scales in when opened.
+  useGSAP(()=>{
+    if(!kioskPanel || !kioskPanelRef.current) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(kioskPanelRef.current,{autoAlpha:0,scale:0.96,duration:0.25,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[kioskPanel],scope:kioskPanelRef});
+
+  // Motion: form field-groups settle in with a soft stagger when the Add/Edit modal opens.
+  useGSAP(()=>{
+    if(!kioskModalOpen || !kioskModalRef.current) return;
+    const groups = kioskModalRef.current.querySelectorAll(".kiosk-form-group");
+    if(!groups.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(groups,{autoAlpha:0,y:12,duration:0.35,stagger:0.06,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[kioskModalOpen],scope:kioskModalRef});
 
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
@@ -2355,6 +2530,9 @@ export default function App() {
     // Master/manager only — payment gateway credential vault, own table
     // (migration-023). Fixed label (not company-name-prefixed like the one above).
     ...(canAccessPaymentGateways ? [{id:"paymentgateways",icon:"ti-credit-card",label:"Payment Gateway Details"}] : []),
+    // Unconditional — every role gets this page, own table (migration-024) but
+    // RLS has no role restriction, just company isolation.
+    {id:"kioskdetails",icon:"ti-device-desktop",label:"Game Kiosk Details"},
     {id:"members",icon:"ti-users",label:"Members"},
     {id:"search",icon:"ti-search",label:"Search"},
     {id:"offdays",icon:"ti-calendar-off",label:"Work Shifts/Off Day"},
@@ -2871,6 +3049,64 @@ export default function App() {
       )}
 
       {pgPanel&&<PaymentGatewayPanel pg={pgPanel} onClose={()=>setPgPanel(null)} panelRef={pgPanelRef}/>}
+
+      {kioskModalOpen&&(
+        <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:"24px 16px"}} onClick={closeKioskModal}>
+          <div ref={kioskModalRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+              <div style={{fontWeight:500,fontSize:17,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-device-desktop" aria-hidden="true" style={{color:C.accent}}/> {kioskEditId?"Edit record":"Add record"}</div>
+              <button onClick={closeKioskModal} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}><i className="ti ti-x" aria-hidden="true"/> Close</button>
+            </div>
+            <div style={{padding:"18px 20px",overflowY:"auto"}}>
+              <div className="kiosk-form-group" style={{marginBottom:20}}>
+                <label style={labelStyle}>Record name <span style={{color:C.muted,fontWeight:400}}>(e.g. Kiosk 1, Front Counter)</span></label>
+                <input type="text" placeholder="e.g. Kiosk 1" value={kioskForm.name} onChange={e=>setKioskForm(f=>({...f,name:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+              </div>
+              <div className="kiosk-form-group" style={{marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                  <i className="ti ti-id-badge-2" aria-hidden="true" style={{fontSize:13}}/>Common fields
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  {KIOSK_COMMON_FIELDS.map(([key,label,type,icon])=>(
+                    <div key={key}>
+                      <label style={{...labelStyle,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12,color:C.muted}}/>{label} <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+                      <input type="text" value={kioskForm[key]} onChange={e=>setKioskForm(f=>({...f,[key]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="kiosk-form-group" style={{marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:C.accent,marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>
+                  <i className="ti ti-list-details" aria-hidden="true" style={{fontSize:13}}/>Custom fields
+                </div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Anything else — notes, install date, location...</div>
+                {kioskForm.customFields.map((cf,i)=>(
+                  <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+                    <input type="text" placeholder="Field name" value={cf.label} onChange={e=>updateKioskCustomField(i,{label:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
+                    <input type="text" placeholder="Value" value={cf.value} onChange={e=>updateKioskCustomField(i,{value:e.target.value})} style={{flex:1,boxSizing:"border-box"}}/>
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:C.muted,whiteSpace:"nowrap",cursor:"pointer"}}>
+                      <input type="checkbox" checked={cf.sensitive} onChange={e=>updateKioskCustomField(i,{sensitive:e.target.checked})} aria-label="Mark this field as sensitive" style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                      <span aria-hidden="true" style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",background:cf.sensitive?C.accent:"#0b0f16",border:`1px solid ${cf.sensitive?C.accent:C.borderStrong}`,transition:"all 0.15s"}}>
+                        {cf.sensitive&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:11}}/>}
+                      </span>
+                      🔒
+                    </label>
+                    <button type="button" onClick={()=>removeKioskCustomField(i)} aria-label="Remove field" style={{cursor:"pointer",background:"transparent",border:"none",color:C.muted,fontSize:16,padding:4,display:"flex"}}><i className="ti ti-x" aria-hidden="true"/></button>
+                  </div>
+                ))}
+                <button type="button" onClick={addKioskCustomField} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"7px 14px",border:`1px dashed ${C.borderStrong}`,borderRadius:8,background:"transparent",color:C.accent,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-plus" aria-hidden="true"/> Add custom field</button>
+              </div>
+              {kioskFormError&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>{kioskFormError}</div>}
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6}}>
+                <button onClick={closeKioskModal} style={{cursor:"pointer",padding:"9px 18px",fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
+                <button onClick={handleSaveKiosk} style={{cursor:"pointer",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,padding:"9px 22px",display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-check" aria-hidden="true"/> {kioskEditId?"Save changes":"Add record"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {kioskPanel&&<KioskPanel kiosk={kioskPanel} onClose={()=>setKioskPanel(null)} panelRef={kioskPanelRef}/>}
 
       {showEntryModal&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:isMobile?"stretch":"center",justifyContent:"center",zIndex:1000,padding:isMobile?0:"24px 16px"}} onClick={closeEntryModal}>
@@ -3563,6 +3799,38 @@ export default function App() {
                     onOpen={()=>setPgPanel(pg)}
                     onEdit={()=>openPgEdit(pg)}
                     onDelete={()=>handleDeletePg(pg.id,pg.name)}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {page==="kioskdetails"&&(
+          <div>
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-device-desktop" right={
+                <button onClick={openKioskAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                  <i className="ti ti-plus" aria-hidden="true"/> Add record
+                </button>
+              }>Game Kiosk Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>{kioskDetails.length} record{kioskDetails.length===1?"":"s"} saved. Click a card for the full record.</div>
+              {kioskDetails.length>0&&(
+                <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
+                  <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+                  <input type="text" value={kioskSearch} onChange={e=>setKioskSearch(e.target.value)} placeholder="Search name, login ID, merchant code or link…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  {kioskSearch&&<button type="button" onClick={()=>setKioskSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+                </div>
+              )}
+              {!kioskLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
+              {kioskLoaded&&kioskLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{kioskLoadError}</div>}
+              {kioskLoaded&&!kioskLoadError&&kioskDetails.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records yet. Click "Add record" to create one.</div>}
+              {kioskLoaded&&kioskDetails.length>0&&kioskShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match "{kioskSearch}".</div>}
+              <div ref={kioskGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
+                {kioskShown.map(kiosk=>(
+                  <KioskCard key={kiosk.id} kiosk={kiosk}
+                    onOpen={()=>setKioskPanel(kiosk)}
+                    onEdit={()=>openKioskEdit(kiosk)}
+                    onDelete={()=>handleDeleteKiosk(kiosk.id,kiosk.name)}/>
                 ))}
               </div>
             </div>

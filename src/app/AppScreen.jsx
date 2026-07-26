@@ -4,6 +4,7 @@ import {
   listBankDetails, createBankDetail, updateBankDetail, deleteBankDetail, setBankDetailFrozen, markBankDetailAdded,
   listCompanyCredentials, createCompanyCredential, updateCompanyCredential, deleteCompanyCredential,
   listPaymentGateways, createPaymentGateway, updatePaymentGateway, deletePaymentGateway,
+  listKioskDetails, createKioskDetail, updateKioskDetail, deleteKioskDetail,
 } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
@@ -66,6 +67,15 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
       list: listPaymentGateways, create: createPaymentGateway, update: updatePaymentGateway,
       remove: deletePaymentGateway,
     } : null;
+
+    // Game Kiosk Details: a separate real table (not the app_data blob), but
+    // deliberately UNGATED here — every role gets full access, unlike the
+    // master/manager-only vaults above. RLS (migration-024) only checks
+    // company_id, not role, so this matches the server-side gate exactly.
+    window.FINTRACK_KIOSK_DETAILS_API = {
+      list: listKioskDetails, create: createKioskDetail, update: updateKioskDetail,
+      remove: deleteKioskDetail,
+    };
 
     // Supabase re-fires onAuthStateChange (and Root.jsx rebuilds `ctx` from scratch)
     // whenever the tab regains focus after being backgrounded, as part of its own

@@ -362,6 +362,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
                 <TxBadge type={t.type}/>
                 {t.isNew&&<span style={{marginLeft:4,background:"#16a34a26",color:"#16a34a",fontSize:10,padding:"1px 6px",borderRadius:4,border:"1px solid #16a34a55"}}>New</span>}
                 {t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}
+                {t.deleted&&(t.deletedBy||t.deletedDate)&&<span style={{display:"block",fontSize:10.5,color:C.muted,marginTop:3,whiteSpace:"nowrap"}}><i className="ti ti-user-x" aria-hidden="true" style={{fontSize:11,marginRight:3}}/>by {t.deletedBy||"—"}{t.deletedDate?` · ${fmtDate(t.deletedDate)}${t.deletedTime?` ${t.deletedTime}`:""}`:""}</span>}
               </td>
               <td style={{padding:"9px 10px",color:C.text,textDecoration:t.deleted?"line-through":"none"}}>{t.memberName}</td>
               <td style={{padding:"9px 10px",color:C.muted,textDecoration:t.deleted?"line-through":"none"}}>{t.memberId||"—"}</td>
@@ -1087,7 +1088,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summar
                     <tr key={t.uid || t.id} style={{borderBottom:`1px solid ${C.border}`,background:t.deleted?"rgba(220,38,38,0.10)":(idx%2?C.surface:"transparent"),opacity:t.deleted?0.7:1}}>
                       <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",...(isMobile?{position:"sticky",left:0,zIndex:1,background:idx%2?C.surface:C.bg}:null)}}>{idx+1}</td>
                       <td style={{padding:"9px 10px",whiteSpace:"nowrap",color:C.muted}}>{fmtDate(t.date)} {t.time}</td>
-                      <td style={{padding:"9px 10px"}}><TxBadge type={t.type}/>{t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}</td>
+                      <td style={{padding:"9px 10px"}}><TxBadge type={t.type}/>{t.deleted&&<span style={{marginLeft:4,background:"#dc262630",color:"#ef5350",fontSize:10,padding:"1px 6px",borderRadius:4}}>Deleted</span>}{t.deleted&&(t.deletedBy||t.deletedDate)&&<span style={{display:"block",fontSize:10.5,color:C.muted,marginTop:3,whiteSpace:"nowrap"}}><i className="ti ti-user-x" aria-hidden="true" style={{fontSize:11,marginRight:3}}/>by {t.deletedBy||"—"}{t.deletedDate?` · ${fmtDate(t.deletedDate)}${t.deletedTime?` ${t.deletedTime}`:""}`:""}</span>}</td>
                       <td style={{padding:"9px 10px",color:C.text,textDecoration:t.deleted?"line-through":"none"}}>{t.memberName}</td>
                       <td style={{padding:"9px 10px",color:C.muted,textDecoration:t.deleted?"line-through":"none"}}>{t.memberId||"—"}</td>
                       <td style={{padding:"9px 10px",fontWeight:500,textDecoration:t.deleted?"line-through":"none"}}><Amt t={t}/></td>
@@ -1695,9 +1696,15 @@ export default function App() {
         ? "Delete this transfer? Both the OUT and IN sides will be marked deleted together."
         : "Mark this entry as deleted? It will remain visible in the log for audit purposes.",
       onConfirm:()=>{
+        // Same operator/date/time stamping convention as a transaction's own creation
+        // (SESSION.operatorId + dateInTz/timeInTz) — recorded so the deleted-log audit
+        // trail shows WHO deleted an entry and WHEN, not just that it's gone.
+        const deletedBy = SESSION.operatorId;
+        const deletedDate = dateInTz(tz);
+        const deletedTime = timeInTz(tz);
         setTransactions(prev=>prev.map(t=>{
-          if(sameRow(t,key)) return {...t,deleted:true};
-          if(isPair && t.pairId===target.pairId) return {...t,deleted:true};
+          if(sameRow(t,key)) return {...t,deleted:true,deletedBy,deletedDate,deletedTime};
+          if(isPair && t.pairId===target.pairId) return {...t,deleted:true,deletedBy,deletedDate,deletedTime};
           return t;
         }));
         setConfirm(null);

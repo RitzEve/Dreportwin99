@@ -541,6 +541,9 @@ function BankDetailCard({bd, onOpen, onEdit, onDelete, onToggleFrozen, onAddToBa
             : <span style={{color:C.text,fontWeight:500}}>—</span>}
         </div>
       </div>
+      {/* Every control here writes, so the whole block is dropped for a read-only
+          viewer (an owner) — the page passes onEdit=null in that case. */}
+      {onEdit&&(
       <div onClick={e=>e.stopPropagation()} style={{display:"flex",flexDirection:"column",gap:8}}>
         <div style={{display:"flex",gap:6}}>
           <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
@@ -554,6 +557,7 @@ function BankDetailCard({bd, onOpen, onEdit, onDelete, onToggleFrozen, onAddToBa
           <i className="ti ti-building-bank" aria-hidden="true"/> {added?"Add again":"Add to bank accounts"}
         </button>
       </div>
+      )}
     </GlowCard>
   );
 }
@@ -659,10 +663,13 @@ function CredentialCard({cred, onOpen, onEdit, onDelete}) {
         </div>
       )}
       {extraCount>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>+ {extraCount} more field{extraCount===1?"":"s"}</div>}
+      {/* Dropped for a read-only viewer (an owner) — page passes onEdit=null. */}
+      {onEdit&&(
       <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6}}>
         <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
         <button onClick={onDelete} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
       </div>
+      )}
     </GlowCard>
   );
 }
@@ -740,10 +747,13 @@ function PaymentGatewayCard({pg, onOpen, onEdit, onDelete}) {
         </div>
       )}
       {extraCount>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>+ {extraCount} more field{extraCount===1?"":"s"}</div>}
+      {/* Dropped for a read-only viewer (an owner) — page passes onEdit=null. */}
+      {onEdit&&(
       <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6}}>
         <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
         <button onClick={onDelete} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
       </div>
+      )}
     </GlowCard>
   );
 }
@@ -817,10 +827,13 @@ function KioskCard({kiosk, onOpen, onEdit, onDelete}) {
         </div>
       )}
       {extraCount>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>+ {extraCount} more field{extraCount===1?"":"s"}</div>}
+      {/* Dropped for a read-only viewer (an owner) — page passes onEdit=null. */}
+      {onEdit&&(
       <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6}}>
         <button onClick={onEdit} style={{...editBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-edit" aria-hidden="true"/> Edit</button>
         <button onClick={onDelete} style={{...deleteBtnStyle,flex:1,justifyContent:"center"}}><i className="ti ti-trash" aria-hidden="true"/> Del</button>
       </div>
+      )}
     </GlowCard>
   );
 }
@@ -1167,20 +1180,33 @@ export default function App() {
   const TEAM = readTeam().filter(Boolean).map(t=>({ id:t.id, operatorId:t.operatorId||t.id||"", name:t.name||"Unnamed", role:t.role, nationality:t.nationality||"" }));
   // Only master/manager can rearrange the shift roster — staff see it read-only.
   const canEditRoster = SESSION.role==="master" || SESSION.role==="manager";
-  // Bank Details is master/manager-only — the nav item is hidden for staff below,
-  // and the page content is guarded by this flag too (defense in depth). The REAL
-  // gate is server-side RLS (migration-021): window.FINTRACK_BANK_DETAILS_API is
-  // null for a staff session, so this flag and that null always agree.
-  const canAccessBankDetails = SESSION.role==="master" || SESSION.role==="manager";
-  // Company Credentials is master/manager-only too — separately named from
+  // An owner drilled into this company: reads everything, writes nothing. Their
+  // own company_id is null, which is exactly what makes every write policy
+  // (gated on company_id = my_company()) impossible for them — see migration-013
+  // and migration-025. Used below to show the Details pages but not their
+  // add/edit/delete controls.
+  const isOwnerView = SESSION.role==="owner";
+  // Bank Details is master/manager, plus an owner read-only — the nav item is
+  // hidden for staff below, and the page content is guarded by this flag too
+  // (defense in depth). The REAL gate is server-side RLS (migration-021, widened
+  // for owners by migration-025): window.FINTRACK_BANK_DETAILS_API is null for a
+  // staff session, so this flag and that null always agree.
+  const canAccessBankDetails = SESSION.role==="master" || SESSION.role==="manager" || isOwnerView;
+  // Company Credentials is the same audience — separately named from
   // canAccessBankDetails even though the expression is currently identical,
   // matching this file's existing convention (canEditRoster is the same
   // pattern) so either gate can change independently later without coupling.
-  const canAccessCompanyCredentials = SESSION.role==="master" || SESSION.role==="manager";
-  // Payment Gateway Details is master/manager-only too — same reasoning as
-  // canAccessCompanyCredentials above (kept separately named for the same
-  // future-independence reason).
-  const canAccessPaymentGateways = SESSION.role==="master" || SESSION.role==="manager";
+  const canAccessCompanyCredentials = SESSION.role==="master" || SESSION.role==="manager" || isOwnerView;
+  // Payment Gateway Details, same again — kept separately named for the same
+  // future-independence reason.
+  const canAccessPaymentGateways = SESSION.role==="master" || SESSION.role==="manager" || isOwnerView;
+  // Who may ADD / EDIT / DELETE on the three vault pages above. Deliberately
+  // narrower than the canAccess* flags: an owner sees the records but gets no
+  // write controls at all (the server would reject the write anyway).
+  const canEditVaults = SESSION.role==="master" || SESSION.role==="manager";
+  // Game Kiosk Details is open to EVERY company role including staff
+  // (migration-024), so its write gate is just "not a read-only owner".
+  const canEditKiosk = !isOwnerView;
   // This company's time zone (set per company by the provider). All "now" dates
   // and times below are computed in this zone so the log follows it.
   const tz = SESSION.timezone || "Australia/Sydney";
@@ -2018,9 +2044,12 @@ export default function App() {
   const openBdAdd = () => { setBdEditId(null); setBdForm(BD_BLANK); setBdFormError(""); setBdModalOpen(true); };
   const openBdEdit = bd => { setBdEditId(bd.id); setBdForm(Object.fromEntries(BD_FIELDS.map(k=>[k,bd[k]||""]))); setBdFormError(""); setBdModalOpen(true); };
   const closeBdModal = () => setBdModalOpen(false);
+  // Every write handler below checks for the SPECIFIC method it needs, not just
+  // for the API object: a read-only session (an owner) gets an API with `list`
+  // only, so `if(!api)` alone would sail past and throw. See AppScreen.jsx.
   const handleSaveBd = async () => {
     const api = window.FINTRACK_BANK_DETAILS_API;
-    if(!api){ setBdFormError("Not authorised."); return; }
+    if(!api?.create || !api?.update){ setBdFormError("Not authorised."); return; }
     const res = bdEditId ? await api.update(bdEditId,bdForm) : await api.create(bdForm);
     if(!res.ok){ setBdFormError(res.error); return; }
     if(bdEditId) setBankDetails(prev=>prev.map(b=>b.id===bdEditId?{...b,...bdForm}:b));
@@ -2030,13 +2059,13 @@ export default function App() {
   const handleDeleteBd = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
     setConfirm(null);
     const api = window.FINTRACK_BANK_DETAILS_API;
-    if(!api) return;
+    if(!api?.remove) return;
     const res = await api.remove(id);
     if(res.ok) setBankDetails(prev=>prev.filter(b=>b.id!==id));
   }});
   const handleToggleBdFrozen = async bd => {
     const api = window.FINTRACK_BANK_DETAILS_API;
-    if(!api) return;
+    if(!api?.setFrozen) return;
     const next = !bd.frozen;
     const res = await api.setFrozen(bd.id,next);
     if(res.ok) setBankDetails(prev=>prev.map(b=>b.id===bd.id?{...b,frozen:next}:b));
@@ -2047,9 +2076,9 @@ export default function App() {
   // Repeatable on purpose — the button stays enabled in case a second copy is
   // genuinely wanted (e.g. the first one was deleted from Bank Accounts).
   const handleAddBdToBankAccounts = async bd => {
-    setBanks(prev=>[...prev,{id:Date.now(),name:bd.bankName,holder:bd.holderName,bsb:bd.bsb,account:bd.account,payid:bd.payid,otpLink:bd.otpLink,openingBalance:0,activatedAt:Date.now(),updatedAt:Date.now()}]);
     const api = window.FINTRACK_BANK_DETAILS_API;
-    if(!api) return;
+    if(!api?.markAdded) return;   // read-only session — don't touch `banks` either
+    setBanks(prev=>[...prev,{id:Date.now(),name:bd.bankName,holder:bd.holderName,bsb:bd.bsb,account:bd.account,payid:bd.payid,otpLink:bd.otpLink,openingBalance:0,activatedAt:Date.now(),updatedAt:Date.now()}]);
     const res = await api.markAdded(bd.id);
     if(res.ok) setBankDetails(prev=>prev.map(b=>b.id===bd.id?{...b,addedToBankAccountsAt:new Date().toISOString()}:b));
   };
@@ -2080,7 +2109,7 @@ export default function App() {
   const handleSaveCred = async () => {
     if(!credForm.name.trim()){ setCredFormError("Record name is required."); return; }
     const api = window.FINTRACK_COMPANY_CREDENTIALS_API;
-    if(!api){ setCredFormError("Not authorised."); return; }
+    if(!api?.create || !api?.update){ setCredFormError("Not authorised."); return; }
     const cleanFields = credForm.customFields.filter(f=>f.label.trim()||f.value.trim());
     const payload = {...credForm, name: credForm.name.trim(), customFields:cleanFields};
     const res = credEditId ? await api.update(credEditId,payload) : await api.create(payload);
@@ -2092,7 +2121,7 @@ export default function App() {
   const handleDeleteCred = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
     setConfirm(null);
     const api = window.FINTRACK_COMPANY_CREDENTIALS_API;
-    if(!api) return;
+    if(!api?.remove) return;
     const res = await api.remove(id);
     if(res.ok) setCredentials(prev=>prev.filter(c=>c.id!==id));
   }});
@@ -2129,7 +2158,7 @@ export default function App() {
   const handleSavePg = async () => {
     if(!pgForm.name.trim()){ setPgFormError("Record name is required."); return; }
     const api = window.FINTRACK_PAYMENT_GATEWAYS_API;
-    if(!api){ setPgFormError("Not authorised."); return; }
+    if(!api?.create || !api?.update){ setPgFormError("Not authorised."); return; }
     const cleanFields = pgForm.customFields.filter(f=>f.label.trim()||f.value.trim());
     const payload = {...pgForm, name: pgForm.name.trim(), customFields:cleanFields};
     const res = pgEditId ? await api.update(pgEditId,payload) : await api.create(payload);
@@ -2141,7 +2170,7 @@ export default function App() {
   const handleDeletePg = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
     setConfirm(null);
     const api = window.FINTRACK_PAYMENT_GATEWAYS_API;
-    if(!api) return;
+    if(!api?.remove) return;
     const res = await api.remove(id);
     if(res.ok) setPaymentGateways(prev=>prev.filter(p=>p.id!==id));
   }});
@@ -2176,7 +2205,7 @@ export default function App() {
   const handleSaveKiosk = async () => {
     if(!kioskForm.name.trim()){ setKioskFormError("Record name is required."); return; }
     const api = window.FINTRACK_KIOSK_DETAILS_API;
-    if(!api){ setKioskFormError("Not authorised."); return; }
+    if(!api?.create || !api?.update){ setKioskFormError("Not authorised."); return; }
     const cleanFields = kioskForm.customFields.filter(f=>f.label.trim()||f.value.trim());
     const payload = {...kioskForm, name: kioskForm.name.trim(), customFields:cleanFields};
     const res = kioskEditId ? await api.update(kioskEditId,payload) : await api.create(payload);
@@ -2188,7 +2217,7 @@ export default function App() {
   const handleDeleteKiosk = (id,label) => setConfirm({message:`Delete "${label||"this record"}"? This cannot be undone.`,onConfirm: async ()=>{
     setConfirm(null);
     const api = window.FINTRACK_KIOSK_DETAILS_API;
-    if(!api) return;
+    if(!api?.remove) return;
     const res = await api.remove(id);
     if(res.ok) setKioskDetails(prev=>prev.filter(k=>k.id!==id));
   }});
@@ -2528,13 +2557,14 @@ export default function App() {
     {id:"dashboard",icon:"ti-layout-dashboard",label:"Dashboard"},
     {id:"transactions",icon:"ti-transfer",label:"Transactions"},
     {id:"banks",icon:"ti-building-bank",label:"Bank Accounts"},
-    // Master/manager only — hidden from staff here (nav), guarded again on the
-    // page render below, and enforced for real by RLS (migration-021).
+    // Master/manager, plus an owner read-only — hidden from staff here (nav),
+    // guarded again on the page render below, and enforced for real by RLS
+    // (migration-021, widened to owners by migration-025).
     ...(canAccessBankDetails ? [{id:"bankdetails",icon:"ti-id-badge-2",label:"Bank Details"}] : []),
-    // Master/manager only — general credential vault, own table (migration-022).
+    // Same audience — general credential vault, own table (migration-022).
     // Label uses the real company name, same source AccountMenu already reads.
     ...(canAccessCompanyCredentials ? [{id:"companycredentials",icon:"ti-key",label:`${SESSION.companyName} Details`}] : []),
-    // Master/manager only — payment gateway credential vault, own table
+    // Same audience — payment gateway credential vault, own table
     // (migration-023). Fixed label (not company-name-prefixed like the one above).
     ...(canAccessPaymentGateways ? [{id:"paymentgateways",icon:"ti-credit-card",label:"Payment Gateway Details"}] : []),
     // Unconditional — every role gets this page, own table (migration-024) but
@@ -3710,12 +3740,14 @@ export default function App() {
         {page==="bankdetails"&&canAccessBankDetails&&(
           <div>
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-id-badge-2" right={
+              <SectionTitle icon="ti-id-badge-2" right={canEditVaults?(
                 <button onClick={openBdAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
                   <i className="ti ti-plus" aria-hidden="true"/> Add bank detail
                 </button>
-              }>Bank Details</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Master/manager only. Recorded drop-account info — not linked to Bank Accounts unless you click "Add to bank accounts". Click a card for the full record.</div>
+              ):null}>Bank Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>{canEditVaults
+                ? `Master/manager only. Recorded drop-account info — not linked to Bank Accounts unless you click "Add to bank accounts". Click a card for the full record.`
+                : "Read-only for owners. Recorded drop-account info. Click a card for the full record."}</div>
               {bankDetails.length>0&&(
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:16}}>
                   <SumTile icon="ti-id-badge-2" color={C.accent} label="Total records" value={bankDetails.length}/>
@@ -3732,13 +3764,13 @@ export default function App() {
               )}
               {!bdLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
               {bdLoaded&&bdLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{bdLoadError}</div>}
-              {bdLoaded&&!bdLoadError&&bankDetails.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No bank-detail records yet. Click "Add bank detail" to create one.</div>}
+              {bdLoaded&&!bdLoadError&&bankDetails.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>{canEditVaults?`No bank-detail records yet. Click "Add bank detail" to create one.`:"No bank-detail records saved for this company yet."}</div>}
               {bdLoaded&&bankDetails.length>0&&bdShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match “{bdSearch}”.</div>}
               <div ref={bdGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
                 {bdShown.map(bd=>(
                   <BankDetailCard key={bd.id} bd={bd}
                     onOpen={()=>setBdPanel(bd)}
-                    onEdit={()=>openBdEdit(bd)}
+                    onEdit={canEditVaults?()=>openBdEdit(bd):null}
                     onDelete={()=>handleDeleteBd(bd.id,bd.holderName||bd.bankName)}
                     onToggleFrozen={()=>handleToggleBdFrozen(bd)}
                     onAddToBankAccounts={()=>handleAddBdToBankAccounts(bd)}/>
@@ -3751,12 +3783,12 @@ export default function App() {
         {page==="companycredentials"&&canAccessCompanyCredentials&&(
           <div>
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-key" right={
+              <SectionTitle icon="ti-key" right={canEditVaults?(
                 <button onClick={openCredAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
                   <i className="ti ti-plus" aria-hidden="true"/> Add record
                 </button>
-              }>{SESSION.companyName} Details</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Master/manager only. {credentials.length} record{credentials.length===1?"":"s"} saved. Click a card for the full record.</div>
+              ):null}>{SESSION.companyName} Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>{canEditVaults?"Master/manager only.":"Read-only for owners."} {credentials.length} record{credentials.length===1?"":"s"} saved. Click a card for the full record.</div>
               {credentials.length>0&&(
                 <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
                   <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
@@ -3766,13 +3798,13 @@ export default function App() {
               )}
               {!credLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
               {credLoaded&&credLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{credLoadError}</div>}
-              {credLoaded&&!credLoadError&&credentials.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records yet. Click "Add record" to create one.</div>}
+              {credLoaded&&!credLoadError&&credentials.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>{canEditVaults?`No records yet. Click "Add record" to create one.`:"No records saved for this company yet."}</div>}
               {credLoaded&&credentials.length>0&&credShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match “{credSearch}”.</div>}
               <div ref={credGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
                 {credShown.map(cred=>(
                   <CredentialCard key={cred.id} cred={cred}
                     onOpen={()=>setCredPanel(cred)}
-                    onEdit={()=>openCredEdit(cred)}
+                    onEdit={canEditVaults?()=>openCredEdit(cred):null}
                     onDelete={()=>handleDeleteCred(cred.id,cred.name)}/>
                 ))}
               </div>
@@ -3783,12 +3815,12 @@ export default function App() {
         {page==="paymentgateways"&&canAccessPaymentGateways&&(
           <div>
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-credit-card" right={
+              <SectionTitle icon="ti-credit-card" right={canEditVaults?(
                 <button onClick={openPgAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
                   <i className="ti ti-plus" aria-hidden="true"/> Add record
                 </button>
-              }>Payment Gateway Details</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Master/manager only. {paymentGateways.length} record{paymentGateways.length===1?"":"s"} saved. Click a card for the full record.</div>
+              ):null}>Payment Gateway Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>{canEditVaults?"Master/manager only.":"Read-only for owners."} {paymentGateways.length} record{paymentGateways.length===1?"":"s"} saved. Click a card for the full record.</div>
               {paymentGateways.length>0&&(
                 <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
                   <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
@@ -3798,13 +3830,13 @@ export default function App() {
               )}
               {!pgLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
               {pgLoaded&&pgLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{pgLoadError}</div>}
-              {pgLoaded&&!pgLoadError&&paymentGateways.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records yet. Click "Add record" to create one.</div>}
+              {pgLoaded&&!pgLoadError&&paymentGateways.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>{canEditVaults?`No records yet. Click "Add record" to create one.`:"No records saved for this company yet."}</div>}
               {pgLoaded&&paymentGateways.length>0&&pgShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match "{pgSearch}".</div>}
               <div ref={pgGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
                 {pgShown.map(pg=>(
                   <PaymentGatewayCard key={pg.id} pg={pg}
                     onOpen={()=>setPgPanel(pg)}
-                    onEdit={()=>openPgEdit(pg)}
+                    onEdit={canEditVaults?()=>openPgEdit(pg):null}
                     onDelete={()=>handleDeletePg(pg.id,pg.name)}/>
                 ))}
               </div>
@@ -3815,12 +3847,12 @@ export default function App() {
         {page==="kioskdetails"&&(
           <div>
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-device-desktop" right={
+              <SectionTitle icon="ti-device-desktop" right={canEditKiosk?(
                 <button onClick={openKioskAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
                   <i className="ti ti-plus" aria-hidden="true"/> Add record
                 </button>
-              }>Game Kiosk Details</SectionTitle>
-              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>{kioskDetails.length} record{kioskDetails.length===1?"":"s"} saved. Click a card for the full record.</div>
+              ):null}>Game Kiosk Details</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14}}>{canEditKiosk?"":"Read-only for owners. "}{kioskDetails.length} record{kioskDetails.length===1?"":"s"} saved. Click a card for the full record.</div>
               {kioskDetails.length>0&&(
                 <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
                   <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
@@ -3830,13 +3862,13 @@ export default function App() {
               )}
               {!kioskLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
               {kioskLoaded&&kioskLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{kioskLoadError}</div>}
-              {kioskLoaded&&!kioskLoadError&&kioskDetails.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records yet. Click "Add record" to create one.</div>}
+              {kioskLoaded&&!kioskLoadError&&kioskDetails.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>{canEditKiosk?`No records yet. Click "Add record" to create one.`:"No records saved for this company yet."}</div>}
               {kioskLoaded&&kioskDetails.length>0&&kioskShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>No records match "{kioskSearch}".</div>}
               <div ref={kioskGridRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr))",gap:12}}>
                 {kioskShown.map(kiosk=>(
                   <KioskCard key={kiosk.id} kiosk={kiosk}
                     onOpen={()=>setKioskPanel(kiosk)}
-                    onEdit={()=>openKioskEdit(kiosk)}
+                    onEdit={canEditKiosk?()=>openKioskEdit(kiosk):null}
                     onDelete={()=>handleDeleteKiosk(kiosk.id,kiosk.name)}/>
                 ))}
               </div>

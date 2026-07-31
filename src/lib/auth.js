@@ -723,6 +723,30 @@ export async function markRentUnpaid(companyIds) {
   return { ok: true };
 }
 
+// ---- the four "Details" vault pages: shared read gate ---------------------
+/*
+ * Resolve which company a Details-page READ should be scoped to, or null when
+ * this session may not read that table at all.
+ *
+ * `allowed` lists the company-side roles that may read it. An OWNER is always
+ * additionally allowed, but read-only and against the company they drilled
+ * into: an owner's own profiles.company_id is always NULL (that's what makes
+ * the whole owner drill-in read-only), so `me.companyId` is useless for them
+ * and AppScreen.jsx passes the drilled-in company id in explicitly — same
+ * shape as listTeam(companyId) already uses.
+ *
+ * Server-side this is backed by migration-025, which adds the matching
+ * company_owners clause to each table's SELECT policy and deliberately leaves
+ * their insert/update/delete policies alone — so an owner physically cannot
+ * write to any of them. Every create/update/delete below keeps its own role
+ * check as well; this helper is for reads only.
+ */
+function vaultReadCompanyId(me, companyId, allowed) {
+  if (!me) return null;
+  if (me.role === ROLES.OWNER) return companyId || null;
+  return allowed.includes(me.role) ? (me.companyId || null) : null;
+}
+
 // ---- bank details (master/manager: drop-account records) ------------------
 // Lives in its own table (migration-021) with RLS gated on company_id +
 // role in ('master','manager') — staff never receives this data at all, not
@@ -759,12 +783,13 @@ function bankDetailFieldsToRow(fields) {
 const BANK_DETAILS_SETUP_ERROR = 'This needs a one-time database setup (run migration-021.sql in Supabase).';
 const isBankDetailsMissing = (error) => /bank_details|does not exist|could not find|schema cache/i.test(error?.message || '');
 
-/** Master/manager: every bank-details record for their own company. */
-export async function listBankDetails() {
+/** Master/manager (own company) or an owner (read-only, drilled-in company). */
+export async function listBankDetails(companyId) {
   const me = await getCurrentUser();
-  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
+  const cid = vaultReadCompanyId(me, companyId, [ROLES.MASTER, ROLES.MANAGER]);
+  if (!cid) return { ok: false, error: 'Not authorised.', rows: [] };
   const { data, error } = await supabase.from('bank_details').select('*')
-    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+    .eq('company_id', cid).order('created_at', { ascending: false });
   if (error) return { ok: false, error: isBankDetailsMissing(error) ? BANK_DETAILS_SETUP_ERROR : friendly(error), rows: [] };
   return { ok: true, rows: (data || []).map(bankDetailRowToObj) };
 }
@@ -852,12 +877,13 @@ function credentialFieldsToRow(fields) {
 const CREDENTIALS_SETUP_ERROR = 'This needs a one-time database setup (run migration-022.sql in Supabase).';
 const isCredentialsMissing = (error) => /company_credentials|does not exist|could not find|schema cache/i.test(error?.message || '');
 
-/** Master/manager: every credential record for their own company. */
-export async function listCompanyCredentials() {
+/** Master/manager (own company) or an owner (read-only, drilled-in company). */
+export async function listCompanyCredentials(companyId) {
   const me = await getCurrentUser();
-  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
+  const cid = vaultReadCompanyId(me, companyId, [ROLES.MASTER, ROLES.MANAGER]);
+  if (!cid) return { ok: false, error: 'Not authorised.', rows: [] };
   const { data, error } = await supabase.from('company_credentials').select('*')
-    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+    .eq('company_id', cid).order('created_at', { ascending: false });
   if (error) return { ok: false, error: isCredentialsMissing(error) ? CREDENTIALS_SETUP_ERROR : friendly(error), rows: [] };
   return { ok: true, rows: (data || []).map(credentialRowToObj) };
 }
@@ -928,12 +954,13 @@ function paymentGatewayFieldsToRow(fields) {
 const PAYMENT_GATEWAYS_SETUP_ERROR = 'This needs a one-time database setup (run migration-023.sql in Supabase).';
 const isPaymentGatewaysMissing = (error) => /payment_gateways|does not exist|could not find|schema cache/i.test(error?.message || '');
 
-/** Master/manager: every payment gateway record for their own company. */
-export async function listPaymentGateways() {
+/** Master/manager (own company) or an owner (read-only, drilled-in company). */
+export async function listPaymentGateways(companyId) {
   const me = await getCurrentUser();
-  if (!me || !canAccessConsole(me.role)) return { ok: false, error: 'Not authorised.', rows: [] };
+  const cid = vaultReadCompanyId(me, companyId, [ROLES.MASTER, ROLES.MANAGER]);
+  if (!cid) return { ok: false, error: 'Not authorised.', rows: [] };
   const { data, error } = await supabase.from('payment_gateways').select('*')
-    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+    .eq('company_id', cid).order('created_at', { ascending: false });
   if (error) return { ok: false, error: isPaymentGatewaysMissing(error) ? PAYMENT_GATEWAYS_SETUP_ERROR : friendly(error), rows: [] };
   return { ok: true, rows: (data || []).map(paymentGatewayRowToObj) };
 }
@@ -1002,12 +1029,13 @@ function kioskFieldsToRow(fields) {
 const KIOSK_SETUP_ERROR = 'This needs a one-time database setup (run migration-024.sql in Supabase).';
 const isKioskMissing = (error) => /kiosk_details|does not exist|could not find|schema cache/i.test(error?.message || '');
 
-/** Any signed-in role: every kiosk record for their own company. */
-export async function listKioskDetails() {
+/** Any company role (own company) or an owner (read-only, drilled-in company). */
+export async function listKioskDetails(companyId) {
   const me = await getCurrentUser();
-  if (!me) return { ok: false, error: 'Not authorised.', rows: [] };
+  const cid = vaultReadCompanyId(me, companyId, [ROLES.MASTER, ROLES.MANAGER, ROLES.STAFF]);
+  if (!cid) return { ok: false, error: 'Not authorised.', rows: [] };
   const { data, error } = await supabase.from('kiosk_details').select('*')
-    .eq('company_id', me.companyId).order('created_at', { ascending: false });
+    .eq('company_id', cid).order('created_at', { ascending: false });
   if (error) return { ok: false, error: isKioskMissing(error) ? KIOSK_SETUP_ERROR : friendly(error), rows: [] };
   return { ok: true, rows: (data || []).map(kioskRowToObj) };
 }

@@ -44,37 +44,55 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
     // The artifact's colours are computed at load, so re-init by reloading after the
     // theme is saved. Root restores the 'app' screen from sessionStorage on reload.
     window.FINTRACK_SET_THEME = (t) => { setTheme(t); window.location.reload(); };
-    // Bank Details: a separate real table (not the app_data blob), gated to
-    // master/manager both here (so staff's session never even calls these) and by
-    // RLS server-side (the real gate). null for staff so the artifact can also use
-    // its presence as a quick client-side check.
-    window.FINTRACK_BANK_DETAILS_API = canAccessConsole(ctx.user.role) ? {
-      list: listBankDetails, create: createBankDetail, update: updateBankDetail,
-      remove: deleteBankDetail, setFrozen: setBankDetailFrozen, markAdded: markBankDetailAdded,
+    // The four "Details" vault pages below all live in their own real tables
+    // (not the app_data blob). An OWNER may READ all four for a company it's
+    // linked to (migration-025) but never write — so `list` is exposed to
+    // owners while create/update/remove are only wired for a company-side
+    // session. An owner's own companyId is null, so every `list` is called with
+    // the drilled-in company's id explicitly (same shape as listTeam above).
+    const viewingCompanyId = ctx.company.id;
+    const isOwner = ctx.user.role === ROLES.OWNER;
+    const canWrite = canAccessConsole(ctx.user.role);
+
+    // Bank Details: master/manager can read+write their own company's records;
+    // an owner reads only. Gated here (so a staff session never even calls
+    // these) and by RLS server-side, which is the real gate. null for staff, so
+    // the artifact can also use its presence as a quick client-side check.
+    window.FINTRACK_BANK_DETAILS_API = (canWrite || isOwner) ? {
+      list: () => listBankDetails(viewingCompanyId),
+      ...(canWrite ? {
+        create: createBankDetail, update: updateBankDetail, remove: deleteBankDetail,
+        setFrozen: setBankDetailFrozen, markAdded: markBankDetailAdded,
+      } : {}),
     } : null;
 
-    // Company Credentials: a separate real table (not the app_data blob), same
-    // master/manager gate as Bank Details — see that block's comment above for
-    // the full reasoning (client-side check here, RLS is the real gate).
-    window.FINTRACK_COMPANY_CREDENTIALS_API = canAccessConsole(ctx.user.role) ? {
-      list: listCompanyCredentials, create: createCompanyCredential, update: updateCompanyCredential,
-      remove: deleteCompanyCredential,
+    // Company Credentials: same read/write split as Bank Details — see that
+    // block's comment above for the full reasoning.
+    window.FINTRACK_COMPANY_CREDENTIALS_API = (canWrite || isOwner) ? {
+      list: () => listCompanyCredentials(viewingCompanyId),
+      ...(canWrite ? {
+        create: createCompanyCredential, update: updateCompanyCredential,
+        remove: deleteCompanyCredential,
+      } : {}),
     } : null;
 
-    // Payment Gateway Details: a separate real table (not the app_data blob),
-    // same master/manager gate as Bank Details / Company Credentials above.
-    window.FINTRACK_PAYMENT_GATEWAYS_API = canAccessConsole(ctx.user.role) ? {
-      list: listPaymentGateways, create: createPaymentGateway, update: updatePaymentGateway,
-      remove: deletePaymentGateway,
+    // Payment Gateway Details: same read/write split again.
+    window.FINTRACK_PAYMENT_GATEWAYS_API = (canWrite || isOwner) ? {
+      list: () => listPaymentGateways(viewingCompanyId),
+      ...(canWrite ? {
+        create: createPaymentGateway, update: updatePaymentGateway,
+        remove: deletePaymentGateway,
+      } : {}),
     } : null;
 
-    // Game Kiosk Details: a separate real table (not the app_data blob), but
-    // deliberately UNGATED here — every role gets full access, unlike the
-    // master/manager-only vaults above. RLS (migration-024) only checks
-    // company_id, not role, so this matches the server-side gate exactly.
+    // Game Kiosk Details: unlike the three above, EVERY company role (staff
+    // included) gets full access — RLS (migration-024) checks only company_id,
+    // not role. An owner still reads only, same as the others.
     window.FINTRACK_KIOSK_DETAILS_API = {
-      list: listKioskDetails, create: createKioskDetail, update: updateKioskDetail,
-      remove: deleteKioskDetail,
+      list: () => listKioskDetails(viewingCompanyId),
+      ...(isOwner ? {} : {
+        create: createKioskDetail, update: updateKioskDetail, remove: deleteKioskDetail,
+      }),
     };
 
     // Supabase re-fires onAuthStateChange (and Root.jsx rebuilds `ctx` from scratch)

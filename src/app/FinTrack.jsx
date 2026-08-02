@@ -880,8 +880,8 @@ function KioskPanel({kiosk, onClose, panelRef}) {
 const PAGE_SIZES = [50,100,200,500,1000];
 // Member directory sort options (value -> label shown in the Sort dropdown).
 const MEMBER_SORTS = [
-  {value:"newest",  label:"Newest first"},
-  {value:"oldest",  label:"Oldest first"},
+  {value:"newest",  label:"Newest joined"},
+  {value:"oldest",  label:"Oldest joined"},
   {value:"name",    label:"Name (A–Z)"},
   {value:"nameDesc",label:"Name (Z–A)"},
   {value:"tx",      label:"Most transactions"},
@@ -1219,7 +1219,7 @@ export default function App() {
   const [memberPage,setMemberPage] = useState(1);
   const [memberPageSize,setMemberPageSize] = useState(50);
   const [memberSearch,setMemberSearch] = useState("");
-  const [memberSort,setMemberSort] = useState("newest"); // members directory order — newest member on top by default
+  const [memberSort,setMemberSort] = useState("newest"); // members directory order — most recently JOINED member on top by default
   useEffect(()=>{ setMemberPage(1); },[memberPageSize,memberSearch,memberSort]);
   // Sidebar behaviour: "expanded" | "collapsed" | "hover" (expand-on-hover) — default hover.
   const [sidebarMode,setSidebarMode] = useState(()=>{ try{ return localStorage.getItem("fintrack-sidebar-mode-v2")||"hover"; }catch(e){ return "hover"; } });
@@ -2582,11 +2582,19 @@ export default function App() {
     return members.filter(m=>(m.name||"").toLowerCase().includes(q)||(m.id||"").toLowerCase().includes(q)||(m.phone||"").toLowerCase().includes(q));
   },[members,memberSearch]);
   // Members are appended as they're added, so a member's index in `members` is its join
-  // order — the reliable "newest" signal (joined dates tie when several join the same day).
-  // Every sort reuses that index as a stable tiebreaker.
+  // ORDER. Every sort reuses that index as a stable tiebreaker — and for the joined
+  // sorts it's the only signal left when two members share a joined date, since
+  // `joined` records a day with no time-of-day.
   const memberOrderIndex = useMemo(()=>{ const m=new Map(); members.forEach((mem,i)=>m.set(mem.id,i)); return m; },[members]);
   const memberSorted = useMemo(()=>{
     const ix = m => (memberOrderIndex.get(m.id) ?? 0);
+    // Newest/Oldest follow the member's JOINED date — the same value shown in the
+    // "Joined" column — not the order they happen to sit in the array. It's stored
+    // as an ISO YYYY-MM-DD string, so a plain string compare is already
+    // chronological. A member with no joined date at all (an older or merged-in
+    // record from before the field was kept) sorts as the earliest, since they
+    // predate it being recorded.
+    const joinedKey = m => String(m.joined||"");
     const arr = [...memberFiltered];
     if(memberSort==="tx"){
       const cnt = new Map();
@@ -2599,9 +2607,11 @@ export default function App() {
     } else if(memberSort==="activity"){
       arr.sort((a,b)=> String(b.lastActivity||"").localeCompare(String(a.lastActivity||"")) || (ix(b)-ix(a)));
     } else if(memberSort==="oldest"){
-      arr.sort((a,b)=> ix(a)-ix(b));
-    } else { // "newest" (default) — most recently added member on top
-      arr.sort((a,b)=> ix(b)-ix(a));
+      // Longest-standing member on top: earliest joined date first, and within the
+      // same day whoever was entered first.
+      arr.sort((a,b)=> joinedKey(a).localeCompare(joinedKey(b)) || (ix(a)-ix(b)));
+    } else { // "newest" (default) — most recently JOINED member on top
+      arr.sort((a,b)=> joinedKey(b).localeCompare(joinedKey(a)) || (ix(b)-ix(a)));
     }
     return arr;
   },[memberFiltered,memberSort,memberOrderIndex,transactions]);

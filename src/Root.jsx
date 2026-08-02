@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabaseClient.js';
-import { ROLES, loadContext, logout, canAccessConsole, isProviderTier } from './lib/auth.js';
+import { ROLES, loadContext, logout, canAccessConsole, isProviderTier, touchPresence } from './lib/auth.js';
 import Login from './screens/Login.jsx';
 import Provider from './screens/Provider.jsx';
 import Console from './screens/Console.jsx';
@@ -35,6 +35,11 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
  * carries the branding, which is why the trailing "· DRW" can afford to be the
  * part that gets cut off on a crowded tab strip.
  */
+// How often a signed-in tab stamps "still here". Paired with ONLINE_WINDOW_MS in
+// Console.jsx, which decides how long that stamp keeps counting as online — keep
+// the window comfortably larger than this interval or a slow beat looks offline.
+const PRESENCE_BEAT_MS = 2 * 60 * 1000;
+
 const BASE_TITLE = 'DRW';
 function tabTitle({ loading, ctx, ownerCompany }) {
   if (loading || !ctx) return BASE_TITLE;
@@ -69,6 +74,31 @@ export default function Root() {
   useEffect(() => {
     document.title = tabTitle({ loading, ctx, ownerCompany });
   }, [loading, ctx, ownerCompany]);
+
+  /*
+   * Presence heartbeat — tells the master/manager Console this account is still
+   * signed in (and, server-side, which IP from). See migration-026.
+   *
+   * Keyed on the user ID, not the `ctx` OBJECT: Supabase hands us a brand-new
+   * ctx on every onAuthStateChange, which re-fires each time a backgrounded tab
+   * regains focus. Keying on the object would tear down and rebuild this
+   * interval constantly, so on a busy machine it might never actually reach the
+   * two-minute mark (the same trap AppScreen.jsx fell into in V2.2.0).
+   *
+   * Skipped entirely while the tab is hidden, so a forgotten background tab
+   * stops counting as "online" within one staleness window instead of holding
+   * the dot green forever.
+   */
+  useEffect(() => {
+    if (!ctx?.user?.id) return undefined;
+    let stopped = false;
+    const beat = () => { if (!stopped && document.visibilityState === 'visible') touchPresence(); };
+    beat();
+    const iv = setInterval(beat, PRESENCE_BEAT_MS);
+    // Re-stamp the moment they come back to the tab, so the dot doesn't lag.
+    document.addEventListener('visibilitychange', beat);
+    return () => { stopped = true; clearInterval(iv); document.removeEventListener('visibilitychange', beat); };
+  }, [ctx?.user?.id]);
 
   async function handleAuthed() {
     setCtx(await loadContext());

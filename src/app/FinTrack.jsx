@@ -1186,6 +1186,18 @@ export default function App() {
   // and migration-025. Used below to show the Details pages but not their
   // add/edit/delete controls.
   const isOwnerView = SESSION.role==="owner";
+  // Who may DOWNLOAD data (the CSV / Excel / PDF buttons on the Dashboard,
+  // Transactions, Members and Search pages). Everyone except staff — written as
+  // an allow-list, not `!== "staff"`, so any role added later is denied until
+  // it's considered explicitly.
+  //
+  // Worth being clear about what this is: it stops staff casually walking out
+  // with a spreadsheet of the company's records. It is NOT a data-access
+  // boundary — staff can still SEE these pages, because they need them to do
+  // the job, so the underlying rows are in their browser either way. Only the
+  // separately RLS-gated pages (Bank Details and the other vaults below) keep
+  // data away from a staff session entirely.
+  const canExport = SESSION.role==="master" || SESSION.role==="manager" || isOwnerView;
   // Bank Details is master/manager, plus an owner read-only — the nav item is
   // hidden for staff below, and the page content is guarded by this flag too
   // (defense in depth). The REAL gate is server-side RLS (migration-021, widened
@@ -2731,12 +2743,12 @@ export default function App() {
       <span style={{fontSize:13,color:C.muted,marginLeft:"auto"}}>{dashScopeLabel}</span>
     </div>
 
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+    {canExport&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
       <span style={{fontSize:12,color:C.muted,marginRight:2}}>Export this view:</span>
       <button onClick={()=>exportCSV(dashTx,`fintrack_${scopeName}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
       <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
       <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
-    </div>
+    </div>}
   </>);
 
   // Dashboard overview — scope bar + ALL 10 stat cards.
@@ -3891,9 +3903,11 @@ export default function App() {
             <SectionTitle icon="ti-users" right={
               <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                 <button onClick={()=>{ setNewMember({name:"",phone:"",id:""}); setNewMemberError(""); setShowMemberModal(true); }} style={{cursor:"pointer",fontSize:13,fontWeight:500,padding:"7px 16px",border:"none",borderRadius:8,background:C.accent,color:C.onAccent,display:"inline-flex",alignItems:"center",gap:6}}><i className="ti ti-user-plus" aria-hidden="true"/> Add member</button>
+                {canExport&&<>
                 <button onClick={()=>exportMembersCSV()} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
                 <button onClick={()=>exportMembersExcel()} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
                 <button onClick={()=>exportMembersPDF()} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
+                </>}
               </div>
             }>Members directory</SectionTitle>
             <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Click a row to view a member's full transaction history.</div>
@@ -4003,13 +4017,13 @@ export default function App() {
               </div>
             </div>
             <div style={sectionStyle}>
-              <SectionTitle icon="ti-list" right={
+              <SectionTitle icon="ti-list" right={canExport?(
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   <button onClick={()=>exportCSV(filteredTx,"fintrack_search",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
                   <button onClick={()=>exportExcel(filteredTx,"fintrack_search",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
                   <button onClick={()=>exportPDF(filteredTx,"FinTrack — Search results",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
                 </div>
-              }>Results</SectionTitle>
+              ):null}>Results</SectionTitle>
               {(search.bank||search.member)&&(
                 <div style={{marginBottom:12,padding:"10px 14px",background:C.accentBg,borderRadius:8,fontSize:13,border:`1px solid ${C.accent}55`,color:C.text}}>
                   Showing all history for:

@@ -156,7 +156,54 @@ export async function login({ identifier, password }) {
 }
 
 export async function logout() {
+  // Drop the Console's "online" dot straight away rather than letting it go
+  // stale on its own. Must run BEFORE signOut, while the token is still valid —
+  // clear_presence() identifies the row by auth.uid(). Failure is ignored on
+  // purpose: never block a sign-out on a presence write.
+  try { await clearPresence(); } catch { /* signing out regardless */ }
   await supabase.auth.signOut();
+}
+
+// ---- presence: who's signed in right now, and from where ------------------
+/*
+ * Backed by the user_presence table + two SECURITY DEFINER functions
+ * (migration-026). The IP is captured server-side from the request headers —
+ * it is deliberately NOT passed from here, so it can't be faked.
+ *
+ * Both calls are fire-and-forget background chatter: if the migration hasn't
+ * been run yet, or the network blips, they fail silently rather than surfacing
+ * an error to someone who was only trying to use the app.
+ */
+export async function touchPresence() {
+  try { await supabase.rpc('touch_presence'); } catch { /* presence is best-effort */ }
+}
+
+export async function clearPresence() {
+  try { await supabase.rpc('clear_presence'); } catch { /* presence is best-effort */ }
+}
+
+/** Master/manager: presence rows for their own company, keyed by user id. */
+export async function listPresence(companyId) {
+  const { data, error } = await supabase
+    .from('user_presence')
+    .select('user_id, last_seen, last_ip, updated_at')
+    .eq('company_id', companyId);
+  // Includes the "table doesn't exist yet" case — the Console just shows no
+  // dots instead of an error banner.
+  if (error) return {};
+  const byUser = {};
+  for (const r of (data || [])) {
+    byUser[r.user_id] = {
+      lastSeen: r.last_seen,
+      lastIp: r.last_ip || '',
+      // When someone signs out, clear_presence() nulls last_seen but stamps
+      // updated_at — so updated_at IS the moment they were last here. Falling
+      // back to it means "last seen" survives a sign-out without needing a
+      // separate column to remember it.
+      lastSeenAt: r.last_seen || r.updated_at || null,
+    };
+  }
+  return byUser;
 }
 
 export async function changeOwnPassword(currentPassword, newPassword) {

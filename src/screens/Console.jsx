@@ -3,6 +3,7 @@ import FluidDropdown from '../components/FluidDropdown.jsx';
 import {
   ROLES,
   listTeam,
+  listPresence,
   createAccount,
   changeRole,
   setActive,
@@ -36,15 +37,65 @@ import useIsMobile from '../lib/useIsMobile.js';
  */
 const ROLE_LABEL = { master: 'Master', manager: 'Manager', staff: 'Staff' };
 
+/*
+ * Presence (migration-026). A signed-in tab stamps user_presence every 2 minutes
+ * (PRESENCE_BEAT_MS in Root.jsx); anything stamped inside this window counts as
+ * online. Deliberately more than double the beat, so one missed heartbeat — a
+ * slow network, a moment of sleep — doesn't flip someone to offline while
+ * they're sitting right there.
+ */
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const isOnline = (p) => !!p?.lastSeen && (Date.now() - new Date(p.lastSeen).getTime()) < ONLINE_WINDOW_MS;
+/*
+ * "Last seen" for anyone not online right now, to the minute — seconds would
+ * only add noise on a two-minute heartbeat. Recent times read as "12 minutes
+ * ago" because that's what you actually want to know mid-shift; past a day it
+ * switches to a plain date, where the exact gap stops being useful.
+ */
+function lastSeenText(p) {
+  const iso = p?.lastSeenAt;
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (isNaN(then.getTime())) return '';
+  const mins = Math.floor((Date.now() - then.getTime()) / 60000);
+  if (mins < 1) return 'Last seen just now';
+  if (mins < 60) return `Last seen ${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Last seen ${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  return `Last seen ${then.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+}
+// The list re-reads presence on this cadence while the Console is open, so the
+// dots stay live instead of freezing at whatever they were on page load.
+const PRESENCE_REFRESH_MS = 60 * 1000;
+
 export default function Console({ ctx, onOpenApp, onLogout }) {
   const { company, user } = ctx;
   const isMobile = useIsMobile();
   const [team, setTeam] = useState(null);
+  const [presence, setPresence] = useState({});
   const [guideOpen, setGuideOpen] = useState(false);
   const roleClass = user.role === ROLES.MASTER ? 'badge-master' : 'badge-manager';
 
-  async function refresh() { setTeam(await listTeam(company.id)); }
+  async function refresh() {
+    const [t, p] = await Promise.all([listTeam(company.id), listPresence(company.id)]);
+    setTeam(t);
+    setPresence(p);
+  }
   useEffect(() => { refresh(); }, []);
+
+  // Keep the online dots current without re-pulling the whole team list: only
+  // presence changes minute to minute, and it's a handful of tiny rows.
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      if (stopped || document.visibilityState !== 'visible') return;
+      const p = await listPresence(company.id);
+      if (!stopped) setPresence(p);
+    };
+    const iv = setInterval(tick, PRESENCE_REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => { stopped = true; clearInterval(iv); document.removeEventListener('visibilitychange', tick); };
+  }, [company.id]);
 
   return (
     <div style={styles.page}>
@@ -97,7 +148,7 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {team === null && <p style={styles.cardSub}>Loading…</p>}
             {team && team.map((m) => (
-              <AccountRow key={m.id} account={m} currentUser={user} onChanged={refresh} />
+              <AccountRow key={m.id} account={m} currentUser={user} onChanged={refresh} presence={presence[m.id]} />
             ))}
           </div>
         </section>
@@ -254,7 +305,7 @@ function roleBadgeClass(role, active) {
   return 'badge-staff';
 }
 
-function AccountRow({ account, currentUser, onChanged }) {
+function AccountRow({ account, currentUser, onChanged, presence }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -264,6 +315,8 @@ function AccountRow({ account, currentUser, onChanged }) {
   const isSelf = account.id === currentUser.id;
   const manageable = canActOn(currentUser, account);
   const canToggleRole = currentUser.role === ROLES.MASTER && manageable;
+  const online = isOnline(presence);
+  const lastSeen = online ? '' : lastSeenText(presence);
 
   async function act(fn) {
     setBusy(true);
@@ -309,10 +362,31 @@ function AccountRow({ account, currentUser, onChanged }) {
   return (
     <div style={styles.row}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <div style={styles.avatar}>{(account.operatorId || '').replace(/\D/g, '').slice(-2) || '?'}</div>
+        <div style={{ position: 'relative', flexShrink: 0, display: 'flex' }}>
+          <div style={styles.avatar}>{(account.operatorId || '').replace(/\D/g, '').slice(-2) || '?'}</div>
+          {/* Signed-in-right-now dot. Kept visually separate from the role/"Disabled"
+              badge on the right, which is the admin on-off switch, not a login state —
+              an enabled account can be offline and a disabled one was never online. */}
+          <span aria-hidden="true"
+            style={{ ...styles.presenceDot, background: online ? 'var(--success)' : 'var(--border)' }} />
+        </div>
         <div style={{ minWidth: 0 }}>
-          <div style={styles.rowName}>{account.name}{isSelf && <span style={styles.youTag}>you</span>}</div>
-          <div style={styles.sub}>{account.operatorId} · {account.email}</div>
+          <div style={styles.rowName}>
+            {account.name}
+            {isSelf && <span style={styles.youTag}>you</span>}
+            <span style={{ ...styles.presenceLabel, color: online ? 'var(--success)' : 'var(--muted)' }}>
+              {online ? 'Online' : 'Offline'}
+            </span>
+          </div>
+          <div style={styles.sub}>
+            {account.operatorId} · {account.email}
+            {online && presence?.lastIp && (
+              <> · <span style={styles.ip} title="Address this account is signed in from">{presence.lastIp}</span></>
+            )}
+            {!online && lastSeen && (
+              <> · <span title={new Date(presence.lastSeenAt).toLocaleString()}>{lastSeen}</span></>
+            )}
+          </div>
         </div>
       </div>
 
@@ -435,6 +509,14 @@ const styles = {
   },
   rowName: { fontSize: 13.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 },
   youTag: { fontSize: 10, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-bg)', padding: '1px 6px', borderRadius: 5 },
+  // Small dot on the avatar's corner; the ring matches the row background so it
+  // reads as sitting on top of the circle rather than punched out of it.
+  presenceDot: {
+    position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: '50%',
+    border: '2px solid var(--bg)', boxSizing: 'content-box',
+  },
+  presenceLabel: { fontSize: 10, fontWeight: 600, letterSpacing: '0.02em' },
+  ip: { fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' },
   rowActions: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   resetRow: { display: 'flex', gap: 8, width: '100%', marginTop: 4 },
   editBox: { display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border)' },

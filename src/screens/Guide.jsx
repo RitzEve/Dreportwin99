@@ -42,6 +42,7 @@ const SECTIONS = [
   // Shown to every role: Game Kiosk Details is open to staff too, and the section
   // itself says which of the four pages are master/manager-only.
   { id: 'details',     icon: 'ti-key',              roles: ['staff', 'manager', 'master'] },
+  { id: 'search',      icon: 'ti-search',           roles: ['staff', 'manager', 'master'] },
   { id: 'shifts',      icon: 'ti-calendar-event',   roles: ['staff', 'manager', 'master'] },
   { id: 'team',        icon: 'ti-users-group',      roles: ['manager', 'master'] },
   { id: 'roles',       icon: 'ti-shield-check',     roles: ['master'] },
@@ -381,6 +382,34 @@ function Mockup({ id }) {
           <Pin x={214} y={42} n="2" />
           <Pin x={186} y={96} n="3" />
           <Pin x={296} y={42} n="4" />
+        </svg>
+      );
+    case 'search':
+      return (
+        <svg {...svgProps}>
+          <rect x="20" y="14" width="280" height="172" rx="12" fill={cv('--surface')} stroke={cv('--border')} />
+          {/* the six filter boxes */}
+          {[[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]].map(([r, c]) => (
+            <rect key={`${r}-${c}`} x={36 + c * 85} y={28 + r * 29} width="78" height="22" rx="7"
+              fill={cv('--surface-2')} stroke={cv('--border')} />
+          ))}
+          {/* live result count, and Clear filters */}
+          <rect x="36" y="90" width="70" height="9" rx="4" fill={cv('--border-strong')} />
+          <rect x="228" y="86" width="56" height="17" rx="6" fill={cv('--surface-2')} stroke={cv('--border')} />
+          {/* the Results heading, with CSV / Excel / PDF beside it */}
+          <rect x="36" y="114" width="44" height="9" rx="4" fill={cv('--border-strong')} />
+          {[190, 224, 258].map((x) => (
+            <rect key={x} x={x} y="112" width="28" height="15" rx="4" fill={cv('--accent-bg')} stroke={cv('--accent')} />
+          ))}
+          {/* the totals that only appear once a date is set */}
+          {[36, 100, 164, 228].map((x) => (
+            <rect key={x} x={x} y="138" width="58" height="24" rx="7" fill={cv('--surface-2')} stroke={cv('--border')} />
+          ))}
+          <rect x="36" y="170" width="250" height="9" rx="4" fill={cv('--surface-2')} />
+          <Pin x={284} y={39} n="1" />
+          <Pin x={100} y={94} n="2" />
+          <Pin x={286} y={119} n="3" />
+          <Pin x={36} y={150} n="4" />
         </svg>
       );
     case 'shifts':
@@ -753,6 +782,16 @@ const T = {
           'Use Add, Edit and Del to keep records up to date — master and manager on the first three pages, everyone on Game Kiosk Details. Any record can also carry extra custom fields, for anything the standard boxes do not cover.',
         ],
       },
+      search: {
+        title: 'Search: finding & exporting past entries',
+        intro: 'The Search page looks across every transaction ever saved, not just today’s. It is how you answer questions like “what did this member do last month?” or “everything that touched this bank in March” — and how you get that out as a file.',
+        steps: [
+          'Set any of the six filters: keyword, member, bank, from date, to date and entry type. They stack, so each one you add narrows the results further, and the count updates as you go. “Clear filters” resets them all at once.',
+          'The keyword box searches the member name, member ID, bank and notes. Type a number instead and it matches the amount exactly — “1,500” finds entries of exactly 1,500, whether the money went in or out.',
+          'CSV, Excel and PDF export exactly what the filters are showing at that moment, so filter first and export second.',
+          'Set a From or To date and a row of totals appears above the results: money in, money out, the net, and the store balance. With no date set there are no totals — just the list.',
+        ],
+      },
       shifts: {
         title: 'Work shifts & days off',
         intro: 'Track who is working and plan days off so the schedule stays clear.',
@@ -1009,6 +1048,16 @@ const T = {
           '用“Add”“Edit”“Del”维护记录——前三个页面限主管／经理，“Game Kiosk Details”所有人都可以编辑。每条记录还可添加自定义字段，用于存放标准栏位之外的内容。',
         ],
       },
+      search: {
+        title: '搜索：查找并导出历史记录',
+        intro: '“搜索”页面会检索所有已保存的交易，而不只是今天的。用它来回答诸如“这位会员上个月做了什么？”或“三月里所有涉及这个银行的记录”这类问题——并把结果导出成文件。',
+        steps: [
+          '设置六个筛选条件中的任意几个：关键词、会员、银行、开始日期、结束日期和记录类型。它们会叠加，每多加一个，结果就更精确，数量也会随之实时更新。点击“Clear filters（清除筛选）”可一次全部重置。',
+          '关键词框会搜索会员姓名、会员编号、银行和备注。若改为输入数字，则按金额精确匹配——输入“1,500”会找出金额正好是 1,500 的记录，无论是进账还是出账。',
+          'CSV、Excel 和 PDF 导出的正是当前筛选后显示的内容，所以请先筛选，再导出。',
+          '设置开始或结束日期后，结果上方会出现一排汇总：收入、支出、净额以及商店余额。不设日期就没有汇总，只有列表。',
+        ],
+      },
       shifts: {
         title: '班次与休息日',
         intro: '跟踪谁在上班，并安排休息日，让排班一目了然。',
@@ -1263,6 +1312,16 @@ const T = {
           'ទាំងបួនដំណើរការដូចគ្នា៖ ប្រអប់ស្វែងរកនៅខាងលើ រួចកាតមួយសម្រាប់កំណត់ត្រានីមួយៗ។ ចុចលើកាតណាមួយ ដើម្បីបើកកំណត់ត្រាពេញលេញ។',
           'ពាក្យសម្ងាត់ PIN និងកូនសោ ត្រូវបានលាក់ជាចំណុច។ ចុច «SHOW» ដើម្បីបង្ហាញ ឬ «COPY» ដើម្បីចម្លងទៅក្ដារតម្បៀតខ្ទាស់ ដោយមិនបង្ហាញវានៅលើអេក្រង់ឡើយ។ តំណដែលបានរក្សាទុក នឹងបើកក្នុងផ្ទាំងថ្មី។',
           'ប្រើ «Add» «Edit» និង «Del» ដើម្បីរក្សាកំណត់ត្រាឱ្យទាន់សម័យ — ប្រធាន/អ្នកគ្រប់គ្រងសម្រាប់បីទំព័រដំបូង និងគ្រប់គ្នាសម្រាប់ «Game Kiosk Details»។ កំណត់ត្រានីមួយៗក៏អាចមានវាលបន្ថែមផ្ទាល់ខ្លួន សម្រាប់អ្វីដែលប្រអប់ស្តង់ដារមិនគ្របដណ្តប់។',
+        ],
+      },
+      search: {
+        title: 'ការស្វែងរក៖ រក និងនាំចេញកំណត់ត្រាចាស់',
+        intro: 'ទំព័រ «ស្វែងរក» មើលគ្រប់ប្រតិបត្តិការដែលធ្លាប់រក្សាទុកទាំងអស់ មិនមែនត្រឹមតែថ្ងៃនេះទេ។ វាជាមធ្យោបាយឆ្លើយសំណួរដូចជា «សមាជិកនេះបានធ្វើអ្វីខ្លះកាលពីខែមុន?» ឬ «អ្វីៗទាំងអស់ដែលពាក់ព័ន្ធនឹងធនាគារនេះក្នុងខែមីនា» — និងជាមធ្យោបាយនាំវាចេញជាឯកសារ។',
+        steps: [
+          'កំណត់តម្រងណាមួយក្នុងចំណោមប្រាំមួយ៖ ពាក្យគន្លឹះ សមាជិក ធនាគារ ថ្ងៃចាប់ផ្ដើម ថ្ងៃបញ្ចប់ និងប្រភេទកំណត់ត្រា។ ពួកវាបូកបញ្ចូលគ្នា ដូច្នេះរាល់តម្រងដែលអ្នកបន្ថែម បង្រួមលទ្ធផលកាន់តែតូច ហើយចំនួនផ្លាស់ប្ដូរភ្លាមៗ។ «Clear filters» កំណត់ពួកវាឡើងវិញទាំងអស់ក្នុងពេលតែមួយ។',
+          'ប្រអប់ពាក្យគន្លឹះស្វែងរកឈ្មោះសមាជិក លេខសម្គាល់សមាជិក ធនាគារ និងចំណាំ។ បើអ្នកវាយលេខវិញ វាផ្គូផ្គងចំនួនទឹកប្រាក់ដោយជាក់លាក់ — «1,500» រកឃើញកំណត់ត្រាដែលមានចំនួន 1,500 ត្រង់ៗ ទោះជាលុយចូល ឬចេញក៏ដោយ។',
+          'CSV, Excel និង PDF នាំចេញត្រឹមតែអ្វីដែលតម្រងកំពុងបង្ហាញនៅពេលនោះ ដូច្នេះត្រងជាមុនសិន រួចទើបនាំចេញ។',
+          'កំណត់ថ្ងៃចាប់ផ្ដើម ឬថ្ងៃបញ្ចប់ នោះជួរចំនួនសរុបនឹងបង្ហាញនៅពីលើលទ្ធផល៖ ប្រាក់ចូល ប្រាក់ចេញ ចំនួនសុទ្ធ និងសមតុល្យហាង។ បើមិនកំណត់ថ្ងៃ គ្មានចំនួនសរុបទេ — មានតែបញ្ជី។',
         ],
       },
       shifts: {

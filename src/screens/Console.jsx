@@ -380,11 +380,17 @@ function AccountRow({ account, currentUser, onChanged, presence }) {
           </div>
           <div style={styles.sub}>
             {account.operatorId} · {account.email}
-            {online && presence?.lastIp && (
-              <> · <span style={styles.ip} title="Address this account is signed in from">{presence.lastIp}</span></>
-            )}
             {!online && lastSeen && (
               <> · <span title={new Date(presence.lastSeenAt).toLocaleString()}>{lastSeen}</span></>
+            )}
+            {/* Shown whether or not they're online — for someone offline this is
+                the address they last signed in from, which is the whole point of
+                keeping last_ip rather than clearing it on sign-out. */}
+            {presence?.lastIp && (
+              <> · <span style={styles.ip}
+                title={online
+                  ? 'Address this account is signed in from'
+                  : 'Address this account last signed in from'}>{presence.lastIp}</span></>
             )}
           </div>
         </div>

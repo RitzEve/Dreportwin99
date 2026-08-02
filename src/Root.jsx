@@ -20,6 +20,33 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
  *   master / manager  -> Console (can open the app)
  *   staff             -> straight into the app
  */
+
+/*
+ * The browser tab title names WHICH company this tab is signed into.
+ *
+ * This matters because the Supabase session lives in sessionStorage, not
+ * localStorage (see supabaseClient.js) — so every tab is its own independent
+ * session and ONE browser can genuinely be signed into two different companies
+ * side by side. When every tab just read "DRW" they were impossible to tell
+ * apart at a glance.
+ *
+ * The company name goes FIRST on purpose: browsers truncate tab titles from the
+ * right, so the distinguishing part has to lead. The DRW shield favicon already
+ * carries the branding, which is why the trailing "· DRW" can afford to be the
+ * part that gets cut off on a crowded tab strip.
+ */
+const BASE_TITLE = 'DRW';
+function tabTitle({ loading, ctx, ownerCompany }) {
+  if (loading || !ctx) return BASE_TITLE;
+  // Provider/sub-provider belong to no company; they manage all of them.
+  if (isProviderTier(ctx.user.role)) return `Provider · ${BASE_TITLE}`;
+  // An owner has no company of their own either — the relevant one is whichever
+  // they've drilled into, and null means they're still on the overview.
+  const company = ctx.user.role === ROLES.OWNER ? ownerCompany : ctx.company;
+  const name = String(company?.name || '').trim();
+  if (name) return `${name} · ${BASE_TITLE}`;
+  return ctx.user.role === ROLES.OWNER ? `Owner · ${BASE_TITLE}` : BASE_TITLE;
+}
 export default function Root() {
   const [ctx, setCtx] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +64,11 @@ export default function Root() {
     });
     return () => { active = false; sub.subscription.unsubscribe(); };
   }, []);
+
+  // Keep the tab title in step with whoever this tab is signed in as.
+  useEffect(() => {
+    document.title = tabTitle({ loading, ctx, ownerCompany });
+  }, [loading, ctx, ownerCompany]);
 
   async function handleAuthed() {
     setCtx(await loadContext());

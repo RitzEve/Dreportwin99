@@ -39,6 +39,9 @@ const SECTIONS = [
   { id: 'txoptions',   icon: 'ti-checkbox',         roles: ['staff', 'manager', 'master'] },
   { id: 'members',     icon: 'ti-users',            roles: ['staff', 'manager', 'master'] },
   { id: 'banks',       icon: 'ti-building-bank',    roles: ['staff', 'manager', 'master'] },
+  // Shown to every role: Game Kiosk Details is open to staff too, and the section
+  // itself says which of the four pages are master/manager-only.
+  { id: 'details',     icon: 'ti-key',              roles: ['staff', 'manager', 'master'] },
   { id: 'shifts',      icon: 'ti-calendar-event',   roles: ['staff', 'manager', 'master'] },
   { id: 'team',        icon: 'ti-users-group',      roles: ['manager', 'master'] },
   { id: 'roles',       icon: 'ti-shield-check',     roles: ['master'] },
@@ -341,9 +344,43 @@ function Mockup({ id }) {
               <rect x="214" y={44 + i * 50} width="56" height="12" rx="6" fill={cv('--accent')} opacity="0.85" />
             </g>
           ))}
+          {/* the "OTP link" button that appears on a card once a link is saved */}
+          <rect x="176" y="144" width="32" height="12" rx="6" fill={cv('--accent-bg')} stroke={cv('--accent')} />
           <Pin x={284} y={50} n="1" />
           <Pin x={284} y={100} n="2" />
           <Pin x={50} y={150} n="3" />
+          <Pin x={192} y={150} n="4" />
+        </svg>
+      );
+    case 'details':
+      return (
+        <svg {...svgProps}>
+          <rect x="8" y="14" width="304" height="172" rx="12" fill={cv('--surface')} stroke={cv('--border')} />
+          {/* sidebar, with one of the Details pages selected */}
+          <rect x="8" y="14" width="64" height="172" rx="12" fill={cv('--surface-2')} />
+          {[0, 1, 2, 3, 4].map((i) => (
+            <rect key={i} x="20" y={36 + i * 26} width="40" height="10" rx="5"
+              fill={i === 2 ? cv('--accent') : cv('--border-strong')} />
+          ))}
+          {/* search box + the Add button */}
+          <rect x="84" y="32" width="130" height="20" rx="7" fill={cv('--surface-2')} stroke={cv('--border')} />
+          <circle cx="96" cy="42" r="4" fill="none" stroke={cv('--muted')} strokeWidth="2" />
+          <rect x="252" y="32" width="48" height="20" rx="7" fill={cv('--accent')} />
+          {/* one card per saved record */}
+          {[[84, 64], [198, 64], [84, 126], [198, 126]].map(([x, y], i) => (
+            <rect key={i} x={x} y={y} width="102" height="52" rx="9" fill={cv('--surface-2')} stroke={cv('--border')} />
+          ))}
+          {/* the first card spelled out: a name, a hidden value, and SHOW / COPY */}
+          <rect x="94" y="74" width="52" height="7" rx="3.5" fill={cv('--border-strong')} />
+          {[0, 1, 2, 3, 4].map((i) => (
+            <circle key={i} cx={98 + i * 7} cy="90" r="2.2" fill={cv('--muted')} />
+          ))}
+          <rect x="138" y="84" width="20" height="12" rx="3" fill={cv('--accent-bg')} stroke={cv('--accent')} />
+          <rect x="161" y="84" width="20" height="12" rx="3" fill={cv('--accent-bg')} stroke={cv('--accent')} />
+          <Pin x={62} y={88} n="1" />
+          <Pin x={214} y={42} n="2" />
+          <Pin x={186} y={96} n="3" />
+          <Pin x={296} y={42} n="4" />
         </svg>
       );
     case 'shifts':
@@ -530,7 +567,7 @@ const T = {
       },
       layout: {
         title: 'Finding your way around',
-        intro: 'The bar across the top is always there. It shows where you are and the controls you use most.',
+        intro: "The bar across the top is always there. It shows where you are and the controls you use most. The browser tab itself is named after the company you're signed into, so if you have two companies open in two tabs you can tell them apart at a glance.",
         steps: [
           'The bell rings when a new version is available — open it to see what changed.',
           'The light / dark switch changes the look. Pick whichever is easier on your eyes.',
@@ -552,7 +589,7 @@ const T = {
         steps: [
           'Choose the member, then pick the type: deposit, withdraw or redeposit.',
           'Enter the amount and the bank or store it touches, plus a note if useful.',
-          'Press Enter to save. The record appears in the history straight away.',
+          'Press Enter to save — the record appears in the history straight away. Nothing is ever truly erased: a deleted entry stays in the log with a red “Deleted” badge, and just under it, who deleted it and when.',
         ],
       },
       alltypes: {
@@ -703,6 +740,17 @@ const T = {
           'Open Banks to see each account and its current balance.',
           'When a transaction uses a bank, choose the right one so the balance stays correct.',
           'Store credit covers unclaimed amounts — use it when a transaction draws from credit, not a bank.',
+          'Click a bank’s card to open its history — the BSB, account number and PayID sit at the top. If an OTP link is saved for that account, an “OTP link” button appears on the card so you can jump straight there while you work.',
+        ],
+      },
+      details: {
+        title: 'Details pages: saved logins & info',
+        intro: "Four pages hold the account details your company needs day to day, so nobody has to go hunting for them. Bank Details keeps drop-account records (holder, bank, agent, BSB, account, PayID, VPN, login PIN). Your company's own Details page keeps general logins. Payment Gateway Details keeps gateway keys and merchant codes. Game Kiosk Details keeps each kiosk's backend link and login — that last one is on every account, while the other three are master/manager only.",
+        steps: [
+          'On a computer they sit in the left sidebar. On a phone, tap “More” in the bottom bar — that is where the pages which do not fit go, along with Work Shifts.',
+          'All four work the same way: a search box at the top, then one card per saved record. Click any card to open the full record.',
+          'Passwords, PINs and keys stay hidden as dots. Press SHOW to reveal one, or COPY to put it straight on your clipboard without ever showing it on screen. A saved link opens in a new tab.',
+          'Use Add, Edit and Del to keep records up to date — master and manager on the first three pages, everyone on Game Kiosk Details. Any record can also carry extra custom fields, for anything the standard boxes do not cover.',
         ],
       },
       shifts: {
@@ -775,7 +823,7 @@ const T = {
       },
       layout: {
         title: '熟悉界面',
-        intro: '顶部的横栏始终存在，它显示你所在的位置以及最常用的控件。',
+        intro: '顶部的横栏始终存在，它显示你所在的位置以及最常用的控件。浏览器标签页会以你登录的公司命名，因此在两个标签页中打开两家公司时，一眼就能分辨。',
         steps: [
           '有新版本时铃铛会提醒——点击即可查看更新内容。',
           '“浅色 / 深色”开关可切换外观，选你看着更舒服的一种。',
@@ -797,7 +845,7 @@ const T = {
         steps: [
           '先选择会员，再选择类型：存入、取出或再存入。',
           '填写金额以及涉及的银行或商店额度，必要时加上备注。',
-          '点击“确认”保存，记录会立即出现在历史中。',
+          '点击“确认”保存，记录会立即出现在历史中。任何条目都不会被真正抹去：已删除的条目仍留在记录中，带有红色“Deleted（已删除）”标记，其下方显示由谁在何时删除。',
         ],
       },
       alltypes: {
@@ -948,6 +996,17 @@ const T = {
           '打开“银行”，查看每个账户及其当前余额。',
           '当交易涉及银行时，选对账户，余额才会保持正确。',
           '商店额度用于未领取的金额——当交易从额度（而非银行）扣款时使用它。',
+          '点击某个银行的卡片可打开它的交易历史——BSB、账号和 PayID 就显示在顶部。如果该账户保存了 OTP 链接，卡片上会出现“OTP link”按钮，办理业务时可直接跳转过去。',
+        ],
+      },
+      details: {
+        title: '详情页：已保存的登录信息',
+        intro: '四个页面集中存放公司日常需要的账号资料，省去到处翻找。“Bank Details”存放收款账户记录（持有人、银行、代理、BSB、账号、PayID、VPN、登录 PIN）；以公司名命名的“Details”页存放通用登录信息；“Payment Gateway Details”存放支付网关密钥与商户号；“Game Kiosk Details”存放各游戏终端的后台链接与登录信息——最后这个所有账号都能看到，其余三个仅限主管／经理。',
+        steps: [
+          '在电脑上，它们位于左侧边栏。在手机上，点击底部栏的“More（更多）”——放不下的页面连同“班次”都在那里。',
+          '四个页面用法相同：顶部是搜索框，下面每条记录一张卡片。点击任意卡片即可打开完整记录。',
+          '密码、PIN 和密钥默认以圆点隐藏。点击“SHOW”可显示，点击“COPY”则直接复制到剪贴板而完全不显示出来。已保存的链接会在新标签页中打开。',
+          '用“Add”“Edit”“Del”维护记录——前三个页面限主管／经理，“Game Kiosk Details”所有人都可以编辑。每条记录还可添加自定义字段，用于存放标准栏位之外的内容。',
         ],
       },
       shifts: {
@@ -1020,7 +1079,7 @@ const T = {
       },
       layout: {
         title: 'ការស្គាល់ផ្ទៃកម្មវិធី',
-        intro: 'របារខាងលើមានជានិច្ច។ វាបង្ហាញពីកន្លែងដែលអ្នកនៅ និងឧបករណ៍បញ្ជាដែលអ្នកប្រើញឹកញាប់បំផុត។',
+        intro: 'របារខាងលើមានជានិច្ច។ វាបង្ហាញពីកន្លែងដែលអ្នកនៅ និងឧបករណ៍បញ្ជាដែលអ្នកប្រើញឹកញាប់បំផុត។ ផ្ទាំងកម្មវិធីរុករក ត្រូវបានដាក់ឈ្មោះតាមក្រុមហ៊ុនដែលអ្នកបានចូល ដូច្នេះបើអ្នកបើកក្រុមហ៊ុនពីរក្នុងផ្ទាំងពីរ អ្នកអាចបែងចែកបានភ្លាមៗ។',
         steps: [
           'កណ្ដឹងនឹងរោទ៍នៅពេលមានកំណែថ្មី — ចុចវាដើម្បីមើលអ្វីដែលបានផ្លាស់ប្ដូរ។',
           'ប៊ូតុង ភ្លឺ / ងងឹត ប្ដូររូបរាង។ ជ្រើសយកមួយណាដែលធ្វើឱ្យភ្នែកអ្នកស្រួលជាង។',
@@ -1042,7 +1101,7 @@ const T = {
         steps: [
           'ជ្រើសសមាជិក រួចជ្រើសប្រភេទ៖ ដាក់ប្រាក់ ដកប្រាក់ ឬដាក់ប្រាក់ឡើងវិញ។',
           'បញ្ចូលចំនួនទឹកប្រាក់ និងធនាគារ ឬឥណទានហាងដែលពាក់ព័ន្ធ ព្រមទាំងចំណាំបើចាំបាច់។',
-          'ចុច «បញ្ជាក់» ដើម្បីរក្សាទុក។ កំណត់ត្រានឹងបង្ហាញក្នុងប្រវត្តិភ្លាមៗ។',
+          'ចុច «បញ្ជាក់» ដើម្បីរក្សាទុក។ កំណត់ត្រានឹងបង្ហាញក្នុងប្រវត្តិភ្លាមៗ។ គ្មានអ្វីត្រូវបានលុបចោលពិតប្រាកដទេ៖ ធាតុដែលបានលុប នៅតែស្ថិតក្នុងកំណត់ហេតុ ជាមួយស្លាកក្រហម «Deleted» ហើយនៅខាងក្រោមវា បង្ហាញថាអ្នកណាបានលុប និងនៅពេលណា។',
         ],
       },
       alltypes: {
@@ -1193,6 +1252,17 @@ const T = {
           'បើក «ធនាគារ» ដើម្បីមើលគណនីនីមួយៗ និងសមតុល្យបច្ចុប្បន្នរបស់វា។',
           'នៅពេលប្រតិបត្តិការប្រើធនាគារ សូមជ្រើសឱ្យត្រូវ ដើម្បីឱ្យសមតុល្យនៅត្រឹមត្រូវ។',
           'ឥណទានហាងគ្របដណ្តប់លើចំនួនមិនទាន់ដក — ប្រើវានៅពេលប្រតិបត្តិការដកពីឥណទាន មិនមែនពីធនាគារ។',
+          'ចុចលើកាតរបស់ធនាគារណាមួយ ដើម្បីបើកប្រវត្តិប្រតិបត្តិការរបស់វា — BSB លេខគណនី និង PayID ស្ថិតនៅខាងលើ។ បើមានតំណ OTP បានរក្សាទុកសម្រាប់គណនីនោះ ប៊ូតុង «OTP link» នឹងបង្ហាញនៅលើកាត ដើម្បីឱ្យអ្នកទៅដល់វាដោយផ្ទាល់ពេលកំពុងធ្វើការ។',
+        ],
+      },
+      details: {
+        title: 'ទំព័រព័ត៌មានលម្អិត៖ គណនីដែលបានរក្សាទុក',
+        intro: 'ទំព័រចំនួនបួនរក្សាទុកព័ត៌មានគណនីដែលក្រុមហ៊ុនរបស់អ្នកត្រូវការប្រចាំថ្ងៃ ដើម្បីកុំឱ្យនរណាម្នាក់ត្រូវរកឆ្ងាយ។ «Bank Details» រក្សាកំណត់ត្រាគណនីទទួលប្រាក់ (ម្ចាស់គណនី ធនាគារ ភ្នាក់ងារ BSB លេខគណនី PayID VPN និង PIN ចូល)។ ទំព័រ «Details» ដែលដាក់ឈ្មោះតាមក្រុមហ៊ុន រក្សាព័ត៌មានចូលទូទៅ។ «Payment Gateway Details» រក្សាកូនសោ និងលេខកូដអាជីវករ។ «Game Kiosk Details» រក្សាតំណខាងក្រោយ និងព័ត៌មានចូលរបស់ម៉ាស៊ីនហ្គេមនីមួយៗ — ទំព័រចុងក្រោយនេះមានសម្រាប់គ្រប់គណនី ចំណែកបីទៀតសម្រាប់តែប្រធាន/អ្នកគ្រប់គ្រងប៉ុណ្ណោះ។',
+        steps: [
+          'នៅលើកុំព្យូទ័រ ពួកវាស្ថិតនៅរបារចំហៀងខាងឆ្វេង។ នៅលើទូរស័ព្ទ ចុច «More» នៅរបារខាងក្រោម — ទំព័រដែលដាក់មិនអស់ ព្រមទាំង «វេនការងារ» ស្ថិតនៅទីនោះ។',
+          'ទាំងបួនដំណើរការដូចគ្នា៖ ប្រអប់ស្វែងរកនៅខាងលើ រួចកាតមួយសម្រាប់កំណត់ត្រានីមួយៗ។ ចុចលើកាតណាមួយ ដើម្បីបើកកំណត់ត្រាពេញលេញ។',
+          'ពាក្យសម្ងាត់ PIN និងកូនសោ ត្រូវបានលាក់ជាចំណុច។ ចុច «SHOW» ដើម្បីបង្ហាញ ឬ «COPY» ដើម្បីចម្លងទៅក្ដារតម្បៀតខ្ទាស់ ដោយមិនបង្ហាញវានៅលើអេក្រង់ឡើយ។ តំណដែលបានរក្សាទុក នឹងបើកក្នុងផ្ទាំងថ្មី។',
+          'ប្រើ «Add» «Edit» និង «Del» ដើម្បីរក្សាកំណត់ត្រាឱ្យទាន់សម័យ — ប្រធាន/អ្នកគ្រប់គ្រងសម្រាប់បីទំព័រដំបូង និងគ្រប់គ្នាសម្រាប់ «Game Kiosk Details»។ កំណត់ត្រានីមួយៗក៏អាចមានវាលបន្ថែមផ្ទាល់ខ្លួន សម្រាប់អ្វីដែលប្រអប់ស្តង់ដារមិនគ្របដណ្តប់។',
         ],
       },
       shifts: {

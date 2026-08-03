@@ -1412,6 +1412,13 @@ export default function App() {
   const [blLoadError,setBlLoadError] = useState("");
   const [blSearch,setBlSearch] = useState("");
   const [blSort,setBlSort] = useState("newest");
+  // Paged like the Members directory. Without this the page rendered all 3,400+
+  // rows at once — thousands of DOM cells for a list nobody reads end to end.
+  const [blPage,setBlPage] = useState(1);
+  const [blPageSize,setBlPageSize] = useState(50);
+  // Any change to what's being listed sends you back to page 1 — staying on
+  // page 40 of a search that now has 3 results just shows an empty table.
+  useEffect(()=>{ setBlPage(1); },[blPageSize,blSearch,blSort]);
   const [blModalOpen,setBlModalOpen] = useState(false);
   const [blForm,setBlForm] = useState(BL_BLANK);
   const [blFormError,setBlFormError] = useState("");
@@ -2326,6 +2333,12 @@ export default function App() {
     return by;
   },[blacklist,blSearch,blSort]);
 
+  const blTotal   = blShown.length;
+  const blPages   = Math.max(1, Math.ceil(blTotal/blPageSize));
+  const blCurPage = Math.min(blPage, blPages);
+  const blStart   = (blCurPage-1)*blPageSize;
+  const blSlice   = blShown.slice(blStart, blStart+blPageSize);
+
   /*
    * Lookup index for the transaction-entry warning: normalised name -> entry and
    * normalised phone -> entry. Built once per blacklist change rather than
@@ -2521,7 +2534,9 @@ export default function App() {
       gsap.from(Array.from(rows).slice(0,25),{autoAlpha:0,y:8,duration:0.3,stagger:0.025,ease:"power2.out"});
     });
     return ()=>mm.revert();
-  },{dependencies:[page,blLoaded,blShown.length===0],scope:blGridRef});
+    // Re-runs on page change too, so flipping to page 2 gets the same entrance
+    // rather than the new rows appearing abruptly under the old ones.
+  },{dependencies:[page,blLoaded,blCurPage,blShown.length===0],scope:blGridRef});
 
   // Motion: the add-to-blacklist form's fields stagger in, same as the others.
   useGSAP(()=>{
@@ -4210,7 +4225,19 @@ export default function App() {
                     <span>Sort</span>
                     <FluidDropdown width={150} value={blSort} ariaLabel="Sort blacklist" options={BL_SORTS} onChange={v=>setBlSort(v)}/>
                   </div>
-                  <span style={{fontSize:12,color:C.muted,marginLeft:"auto"}}>{blShown.length===blacklist.length?`${blacklist.length} shown`:`${blShown.length} of ${blacklist.length}`}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+                    <span>Show</span>
+                    <FluidDropdown width={100} value={blPageSize} ariaLabel="Rows per page"
+                      options={PAGE_SIZES.map(n=>({value:n,label:String(n)}))}
+                      onChange={v=>setBlPageSize(Number(v))}/>
+                    <span>per page</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:C.muted,marginLeft:"auto"}}>
+                    <span>{blTotal===0?0:blStart+1}–{Math.min(blStart+blPageSize,blTotal)} of {blTotal}</span>
+                    <button onClick={()=>setBlPage(Math.max(1,blCurPage-1))} disabled={blCurPage<=1} style={pagerBtn(blCurPage<=1)} aria-label="Previous page"><i className="ti ti-chevron-left" aria-hidden="true"/></button>
+                    <span>{blCurPage}/{blPages}</span>
+                    <button onClick={()=>setBlPage(Math.min(blPages,blCurPage+1))} disabled={blCurPage>=blPages} style={pagerBtn(blCurPage>=blPages)} aria-label="Next page"><i className="ti ti-chevron-right" aria-hidden="true"/></button>
+                  </div>
                 </div>
               )}
               {!blLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
@@ -4218,32 +4245,59 @@ export default function App() {
               {blLoaded&&!blLoadError&&blacklist.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>Nobody on the blacklist yet.{canAddBlacklist?` Click "Add to blacklist" to report someone.`:""}</div>}
               {blLoaded&&blacklist.length>0&&blShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>Nobody matches “{blSearch}”.</div>}
               {blShown.length>0&&(
-                <div ref={blGridRef} style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                /* Eight separate columns forced a horizontal drag to read one
+                   person. Related facts are stacked into four instead — who they
+                   are, how they'd be paid, what they did, who said so — and the
+                   fixed layout with percentage widths means the table always fits
+                   its container instead of growing to fit its longest cell. */
+                /* overflowX:auto, NOT hidden. The fixed layout means there's
+                   nothing to scroll at desktop widths — that's the point of the
+                   redesign — but on a phone the columns can't compress below
+                   their content and need ~20px more than the screen has.
+                   Hidden would silently clip that off with no way to reach it. */
+                <div ref={blGridRef} style={{border:`1px solid ${C.border}`,borderRadius:10,overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,tableLayout:"fixed"}}>
+                    <colgroup>
+                      <col style={{width:canDeleteBlacklist?"24%":"26%"}}/>
+                      <col style={{width:canDeleteBlacklist?"21%":"23%"}}/>
+                      <col style={{width:canDeleteBlacklist?"29%":"31%"}}/>
+                      <col style={{width:"20%"}}/>
+                      {canDeleteBlacklist&&<col style={{width:"6%"}}/>}
+                    </colgroup>
                     <thead>
                       <tr style={{background:C.header}}>
-                        {["Name","Phone","PayID","BSB","Account no.","Reason","Reported by",...(canDeleteBlacklist?[""]:[])].map((h,i)=>(
-                          <th key={i} style={{textAlign:"left",padding:"10px",color:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`}}>{h}</th>
+                        {["Person","Payment details","Reason","Reported by",...(canDeleteBlacklist?[""]:[])].map((h,i)=>(
+                          <th key={i} style={{textAlign:"left",padding:"9px 10px",color:C.muted,fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:"0.04em",borderBottom:`1px solid ${C.border}`}}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {blShown.map((b,idx)=>(
-                        <tr key={b.id} className="bl-row" style={{borderBottom:`1px solid ${C.border}`,background:idx%2?C.surface:"transparent"}}>
-                          <td style={{padding:"9px 10px",color:C.text,fontWeight:500}}>{b.name}</td>
-                          <td style={{padding:"9px 10px",whiteSpace:"nowrap",fontFamily:"var(--font-mono)"}}>{b.phone||"—"}</td>
-                          <td style={{padding:"9px 10px",color:C.muted}}>{b.payid||"—"}</td>
-                          <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",fontFamily:"var(--font-mono)"}}>{b.bsb||"—"}</td>
-                          <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",fontFamily:"var(--font-mono)"}}>{b.accountNo||"—"}</td>
-                          <td style={{padding:"9px 10px",color:C.text,maxWidth:280}}>{b.reason||"—"}</td>
-                          <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>
-                            <span style={{display:"block"}}>{b.addedByCompany||"—"}</span>
-                            <span style={{fontSize:11}}>{b.addedByName}{b.createdAt?` · ${fmtDate(String(b.createdAt).slice(0,10))}`:""}</span>
+                      {blSlice.map((b,idx)=>(
+                        <tr key={b.id} className="bl-row" style={{borderBottom:`1px solid ${C.border}`,background:idx%2?C.surface:"transparent",verticalAlign:"top"}}>
+                          <td style={{padding:"8px 10px"}}>
+                            <div style={{color:C.text,fontWeight:600,lineHeight:1.35,wordBreak:"break-word"}}>{b.name}</div>
+                            {b.phone&&<div style={{fontSize:11.5,color:C.muted,fontFamily:"var(--font-mono)",wordBreak:"break-word",marginTop:1}}>{b.phone}</div>}
+                          </td>
+                          <td style={{padding:"8px 10px",fontSize:11.5,color:C.muted}}>
+                            {b.payid&&<div style={{wordBreak:"break-word",lineHeight:1.35}}>{b.payid}</div>}
+                            {(b.bsb||b.accountNo)&&(
+                              <div style={{fontFamily:"var(--font-mono)",marginTop:1,wordBreak:"break-word"}}>
+                                {b.bsb||"—"}{b.accountNo?` · ${b.accountNo}`:""}
+                              </div>
+                            )}
+                            {!b.payid&&!b.bsb&&!b.accountNo&&"—"}
+                          </td>
+                          <td style={{padding:"8px 10px",color:C.text,lineHeight:1.4,wordBreak:"break-word"}}>{b.reason||"—"}</td>
+                          <td style={{padding:"8px 10px",fontSize:11.5,color:C.muted,lineHeight:1.35}}>
+                            <div style={{wordBreak:"break-word"}}>{b.addedByCompany||"—"}</div>
+                            <div>{b.addedByName}{b.createdAt?` · ${fmtDate(String(b.createdAt).slice(0,10))}`:""}</div>
                           </td>
                           {canDeleteBlacklist&&(
-                            <td style={{padding:"9px 8px"}}>
-                              <button onClick={()=>handleDeleteBl(b)} style={deleteBtnStyle} title="Remove from the shared blacklist">
-                                <i className="ti ti-trash" aria-hidden="true"/> Remove
+                            <td style={{padding:"8px 8px"}}>
+                              <button onClick={()=>handleDeleteBl(b)} title="Remove from the shared blacklist"
+                                aria-label={`Remove ${b.name} from the blacklist`}
+                                style={{cursor:"pointer",padding:"5px 8px",fontSize:11,fontWeight:600,border:"1px solid #dc262655",borderRadius:6,background:"transparent",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:4}}>
+                                <i className="ti ti-trash" aria-hidden="true"/>
                               </button>
                             </td>
                           )}

@@ -5,6 +5,7 @@ import {
   listCompanyCredentials, createCompanyCredential, updateCompanyCredential, deleteCompanyCredential,
   listPaymentGateways, createPaymentGateway, updatePaymentGateway, deletePaymentGateway,
   listKioskDetails, createKioskDetail, updateKioskDetail, deleteKioskDetail,
+  listBlacklistMembers, addBlacklistMember, deleteBlacklistMember,
 } from '../lib/auth.js';
 import { setTheme } from '../lib/theme.js';
 import FluxLoader from '../components/FluxLoader.jsx';
@@ -34,6 +35,10 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
       companyName: ctx.company.name,
       companyLogo: ctx.company.logo || '',
       timezone: ctx.company.timezone || 'Australia/Sydney',
+      // Country drives the shared Blacklist Member pool (migration-027) — every
+      // company in the same country sees one list. Blank until the provider sets
+      // it, in which case the page says so rather than silently showing nothing.
+      country: ctx.company.country || '',
       operatorId: ctx.user.operatorId,
       operatorName: ctx.user.name,
       role: ctx.user.role,
@@ -93,6 +98,19 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
       ...(isOwner ? {} : {
         create: createKioskDetail, update: updateKioskDetail, remove: deleteKioskDetail,
       }),
+    };
+
+    // Blacklist Member: the one SHARED list — every company in the same country
+    // reads and writes the same pool (migration-027). Every company role can
+    // add, including staff; nobody can edit or delete, because the table has no
+    // update/delete policy at all. `add` is withheld from an owner for the usual
+    // reason (their drill-in is read-only, and RLS would reject it anyway).
+    // `remove` is wired for a master only — the table has no update policy at
+    // all, so an entry can be withdrawn but never rewritten.
+    window.FINTRACK_BLACKLIST_API = {
+      list: listBlacklistMembers,
+      ...(isOwner ? {} : { add: addBlacklistMember }),
+      ...(ctx.user.role === ROLES.MASTER ? { remove: deleteBlacklistMember } : {}),
     };
 
     // Supabase re-fires onAuthStateChange (and Root.jsx rebuilds `ctx` from scratch)

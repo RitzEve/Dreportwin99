@@ -4,6 +4,7 @@ import UpdateBell from "../components/UpdateBell.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
+import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -393,6 +394,30 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/*
+ * Inline blacklist warning shown under the entry form's name / phone field.
+ *
+ * A WARNING and nothing more — it never disables the field, and it never blocks
+ * saving. There are legitimate reasons to record a transaction against someone
+ * on the list (paying them out, closing their balance, correcting an earlier
+ * entry), and a hard block would just get routed around by typing the name
+ * slightly differently, which would be worse: the entry still happens, and now
+ * nobody can see it was flagged.
+ */
+function BlacklistWarning({hit, matchedOn}) {
+  if(!hit) return null;
+  return (
+    <div role="status" style={{marginTop:6,display:"flex",alignItems:"flex-start",gap:7,fontSize:11.5,lineHeight:1.5,
+      color:"#dc2626",background:dark?"#3a1515":"#fee2e2",border:"1px solid #dc262655",borderRadius:8,padding:"7px 9px"}}>
+      <i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:13,marginTop:1,flexShrink:0}}/>
+      <span>
+        <strong>On the blacklist</strong> — this {matchedOn} matches <strong>{hit.name}</strong>{hit.reason?`: ${hit.reason}`:""}
+        {hit.addedByCompany&&<span style={{display:"block",marginTop:2,color:C.muted}}>Reported by {hit.addedByCompany}</span>}
+      </span>
     </div>
   );
 }
@@ -878,6 +903,26 @@ function KioskPanel({kiosk, onClose, panelRef}) {
 
 // Transaction log with a page-size dropdown (default 50) + simple pager.
 const PAGE_SIZES = [50,100,200,500,1000];
+// ---- Blacklist Member: the one list shared ACROSS companies ----------------
+// Pooled by country (migration-027), so an entry added at one company shows up
+// at every other company in that country. Append-only by design: the table has
+// no update or delete policy, so there is nothing here for editing a record.
+const BL_FIELDS = [
+  ["name",     "Name",           "ti-user",          true],
+  ["phone",    "Phone number",   "ti-phone",         false],
+  ["payid",    "PayID",          "ti-at",            false],
+  ["bsb",      "BSB",            "ti-building-bank", false],
+  ["accountNo","Account number", "ti-credit-card",   false],
+  ["reason",   "Reason",         "ti-alert-triangle",false],
+];
+const BL_BLANK = { name:"", phone:"", payid:"", bsb:"", accountNo:"", reason:"" };
+const BL_SORTS = [
+  {value:"newest", label:"Newest added"},
+  {value:"oldest", label:"Oldest added"},
+  {value:"name",   label:"Name (A–Z)"},
+  {value:"company",label:"Reported by"},
+];
+
 // Member directory sort options (value -> label shown in the Sort dropdown).
 const MEMBER_SORTS = [
   {value:"newest",  label:"Newest joined"},
@@ -1219,6 +1264,14 @@ export default function App() {
   // Game Kiosk Details is open to EVERY company role including staff
   // (migration-024), so its write gate is just "not a read-only owner".
   const canEditKiosk = !isOwnerView;
+  // Blacklist: every company role may ADD (never edit or delete — the table has
+  // no such policy). An owner can read the shared list but not contribute, same
+  // read-only rule as everywhere else; without a company they'd fail RLS anyway.
+  const canAddBlacklist = !isOwnerView;
+  // Only a master can withdraw an entry. Nobody, master included, can EDIT one —
+  // the table has no update policy, so what an entry says about a person is
+  // fixed once saved; the only remedy for a wrong entry is removing it.
+  const canDeleteBlacklist = SESSION.role==="master";
   // This company's time zone (set per company by the provider). All "now" dates
   // and times below are computed in this zone so the log follows it.
   const tz = SESSION.timezone || "Australia/Sydney";
@@ -1348,6 +1401,23 @@ export default function App() {
   const kioskGridRef = useRef(null);
   const kioskPanelRef = useRef(null);
   const kioskModalRef = useRef(null);
+
+  // Blacklist Member — the SHARED list (migration-027). Unlike every other page
+  // here, these rows don't belong to this company: they're pooled across every
+  // company in the same country, and RLS decides what comes back. Append-only,
+  // so there's no edit id / no panel state — just the list, a search, a sort and
+  // an add form.
+  const [blacklist,setBlacklist] = useState([]);
+  const [blLoaded,setBlLoaded] = useState(false);
+  const [blLoadError,setBlLoadError] = useState("");
+  const [blSearch,setBlSearch] = useState("");
+  const [blSort,setBlSort] = useState("newest");
+  const [blModalOpen,setBlModalOpen] = useState(false);
+  const [blForm,setBlForm] = useState(BL_BLANK);
+  const [blFormError,setBlFormError] = useState("");
+  const [blSaving,setBlSaving] = useState(false);
+  const blGridRef = useRef(null);
+  const blModalRef = useRef(null);
 
   const [editingMember,setEditingMember] = useState(null);
   const [editMemberForm,setEditMemberForm] = useState({});
@@ -2211,6 +2281,134 @@ export default function App() {
     return kioskDetails.filter(k=>[k.name,k.loginId,k.merchantCode,k.backendLink,...k.customFields.map(f=>f.label)].some(v=>String(v||"").toLowerCase().includes(q)));
   },[kioskDetails,kioskSearch]);
 
+  // ---- Blacklist Member ----------------------------------------------------
+  // Loaded once per session, like the other real-table pages. It's fetched even
+  // when the page isn't open, because the transaction entry form checks against
+  // it to warn about a blacklisted name/number — see blacklistIndex below.
+  useEffect(()=>{
+    if(!window.FINTRACK_BLACKLIST_API){ setBlLoaded(true); return; }
+    let alive = true;
+    (async()=>{
+      const res = await window.FINTRACK_BLACKLIST_API.list();
+      if(!alive) return;
+      if(res.ok) setBlacklist(res.rows); else setBlLoadError(res.error);
+      setBlLoaded(true);
+    })();
+    return ()=>{ alive = false; };
+  },[]);
+
+  const blShown = useMemo(()=>{
+    const q = blSearch.trim().toLowerCase();
+    const qDigits = digitsOnly(blSearch);
+    let arr = blacklist;
+    if(q){
+      // Numbers are searched by digits so spacing and punctuation don't matter.
+      // Both forms are checked: phoneDigits is NORMALISED (country code and the
+      // trunk zero stripped), while the raw phone still has them — so typing
+      // "0412 171" the way an Australian would has to hit the raw form, and
+      // typing "412171" hits the normalised one. Checking only one of them
+      // silently returns nothing for the more natural way of typing it.
+      const qBare = qDigits.replace(/^0+/, "");
+      arr = arr.filter(b=>
+        [b.name,b.payid,b.bsb,b.accountNo,b.reason,b.addedByCompany,b.addedByName]
+          .some(v=>String(v||"").toLowerCase().includes(q))
+        || (qDigits.length>=3 && (
+             digitsOnly(b.phone).includes(qDigits)
+             || (qBare.length>=3 && String(b.phoneDigits||"").includes(qBare))
+           ))
+      );
+    }
+    const by = [...arr];
+    if(blSort==="oldest")       by.sort((a,b)=>String(a.createdAt||"").localeCompare(String(b.createdAt||"")));
+    else if(blSort==="name")    by.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+    else if(blSort==="company") by.sort((a,b)=>(a.addedByCompany||"").localeCompare(b.addedByCompany||"") || String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+    else                        by.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||""))); // newest
+    return by;
+  },[blacklist,blSearch,blSort]);
+
+  /*
+   * Lookup index for the transaction-entry warning: normalised name -> entry and
+   * normalised phone -> entry. Built once per blacklist change rather than
+   * scanning the list on every keystroke, since the entry form checks on each
+   * character typed.
+   */
+  const blacklistIndex = useMemo(()=>{
+    const byName = new Map(), byPhone = new Map();
+    for(const b of blacklist){
+      const n = normalizeName(b.name);
+      if(n && !byName.has(n)) byName.set(n, b);
+      // phone_digits holds EVERY number on that entry, space-separated, so an
+      // entry naming someone's two numbers matches on either. Older/manual rows
+      // that only have the raw text fall back to parsing that.
+      const nums = String(b.phoneDigits||"").trim()
+        ? String(b.phoneDigits).trim().split(/\s+/)
+        : extractNumbers(b.phone);
+      for(const p of nums){ if(p && !byPhone.has(p)) byPhone.set(p, b); }
+    }
+    return { byName, byPhone };
+  },[blacklist]);
+
+  /* Returns the blacklist entry a typed name/phone matches, or null. */
+  const blacklistHit = (name, phone) => {
+    const p = normalizePhone(phone);
+    if(p && blacklistIndex.byPhone.has(p)) return blacklistIndex.byPhone.get(p);
+    const n = normalizeName(name);
+    if(n && blacklistIndex.byName.has(n)) return blacklistIndex.byName.get(n);
+    return null;
+  };
+
+  /*
+   * Live blacklist check on whatever is typed into the entry form's name and
+   * phone fields. Kept as two separate lookups rather than one combined hit, so
+   * the warning appears against the field that actually matched — telling
+   * someone "this name is blacklisted" when it was really the phone number that
+   * matched would send them looking in the wrong place.
+   */
+  const entryNameHit = useMemo(()=>{
+    const n = normalizeName(form.memberName);
+    return n ? (blacklistIndex.byName.get(n) || null) : null;
+  },[form.memberName,blacklistIndex]);
+  const entryPhoneHit = useMemo(()=>{
+    const p = normalizePhone(form.memberPhone);
+    return p ? (blacklistIndex.byPhone.get(p) || null) : null;
+  },[form.memberPhone,blacklistIndex]);
+
+  const openBlAdd = () => { setBlForm(BL_BLANK); setBlFormError(""); setBlModalOpen(true); };
+  const handleSaveBl = async () => {
+    if(!blForm.name.trim()){ setBlFormError("Name is required."); return; }
+    const api = window.FINTRACK_BLACKLIST_API;
+    if(!api?.add){ setBlFormError("Not authorised."); return; }
+    setBlSaving(true);
+    // File the entry under the country its PHONE says, falling back to this
+    // company's own country when the number isn't recognisable. RLS re-checks
+    // this, so a bad guess is rejected rather than landing in the wrong pool.
+    const country = countryFromPhone(blForm.phone) || SESSION.country || "";
+    const res = await api.add({
+      ...blForm,
+      name: blForm.name.trim(),
+      // Same normalisation the import uses, so a number added here and the same
+      // number imported from the shared list index identically.
+      phoneDigits: extractNumbers(blForm.phone).join(" "),
+      country,
+      companyName: SESSION.companyName,
+    });
+    setBlSaving(false);
+    if(!res.ok){ setBlFormError(res.error); return; }
+    setBlacklist(prev=>[res.row,...prev]);
+    setBlModalOpen(false);
+  };
+
+  const handleDeleteBl = (b) => setConfirm({
+    message:`Remove "${b.name}" from the blacklist? Every company in ${SESSION.country||"your country"} will stop seeing this entry. This can't be undone.`,
+    onConfirm: async ()=>{
+      setConfirm(null);
+      const api = window.FINTRACK_BLACKLIST_API;
+      if(!api?.remove) return;
+      const res = await api.remove(b.id);
+      if(res.ok) setBlacklist(prev=>prev.filter(x=>x.id!==b.id));
+      else window.showToast?.(res.error,"error");
+    }});
+
   const openKioskAdd = () => { setKioskEditId(null); setKioskForm(KIOSK_BLANK); setKioskFormError(""); setKioskModalOpen(true); };
   const openKioskEdit = kiosk => { setKioskEditId(kiosk.id); setKioskForm({name:kiosk.name,backendLink:kiosk.backendLink,loginId:kiosk.loginId,password:kiosk.password,merchantCode:kiosk.merchantCode,customFields:kiosk.customFields.map(f=>({...f}))}); setKioskFormError(""); setKioskModalOpen(true); };
   const closeKioskModal = () => setKioskModalOpen(false);
@@ -2310,6 +2508,32 @@ export default function App() {
     });
     return ()=>mm.revert();
   },{dependencies:[credModalOpen],scope:credModalRef});
+
+  // Motion: blacklist rows fade in on the way down the table. Capped at the
+  // first 25 rows — this list is shared across a whole country, so it can get
+  // long, and staggering 500 rows would be a slow crawl rather than a flourish.
+  useGSAP(()=>{
+    if(page!=="blacklist") return;
+    const rows = blGridRef.current ? blGridRef.current.querySelectorAll(".bl-row") : null;
+    if(!rows || !rows.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(Array.from(rows).slice(0,25),{autoAlpha:0,y:8,duration:0.3,stagger:0.025,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[page,blLoaded,blShown.length===0],scope:blGridRef});
+
+  // Motion: the add-to-blacklist form's fields stagger in, same as the others.
+  useGSAP(()=>{
+    if(!blModalOpen || !blModalRef.current) return;
+    const groups = blModalRef.current.querySelectorAll(".bl-form-group");
+    if(!groups.length) return;
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", ()=>{
+      gsap.from(groups,{autoAlpha:0,y:12,duration:0.35,stagger:0.06,ease:"power2.out"});
+    });
+    return ()=>mm.revert();
+  },{dependencies:[blModalOpen],scope:blModalRef});
 
   // Motion: a quiet staggered entrance for the card grid when Payment Gateway
   // Details first becomes visible — same pattern as Bank Details / Company Credentials.
@@ -2582,6 +2806,9 @@ export default function App() {
     // Unconditional — every role gets this page, own table (migration-024) but
     // RLS has no role restriction, just company isolation.
     {id:"kioskdetails",icon:"ti-device-desktop",label:"Game Kiosk Details"},
+    // Unconditional too — every role can view AND add. The one page whose data
+    // is shared with other companies in the same country (migration-027).
+    {id:"blacklist",icon:"ti-user-off",label:"Blacklist Member"},
     {id:"members",icon:"ti-users",label:"Members"},
     {id:"search",icon:"ti-search",label:"Search"},
     {id:"offdays",icon:"ti-calendar-off",label:"Work Shifts/Off Day"},
@@ -3109,6 +3336,59 @@ export default function App() {
 
       {pgPanel&&<PaymentGatewayPanel pg={pgPanel} onClose={()=>setPgPanel(null)} panelRef={pgPanelRef}/>}
 
+      {blModalOpen&&(
+        <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:"24px 16px"}} onClick={()=>setBlModalOpen(false)}>
+          <div ref={blModalRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:560,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+              <div>
+                <div style={{fontWeight:500,fontSize:17}}>Add to blacklist</div>
+                <div style={{fontSize:12,color:C.muted,marginTop:3}}>Shared with every company in {SESSION.country||"your country"}</div>
+              </div>
+              <button onClick={()=>setBlModalOpen(false)} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>
+                <i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/> Cancel
+              </button>
+            </div>
+            <div style={{padding:"18px 20px",overflowY:"auto",background:C.bg}}>
+              {/* Said up front, not after the fact: this cannot be undone by anyone. */}
+              <div style={{fontSize:12.5,color:"#d97706",background:dark?"#3a2a10":"#fef3c7",border:"1px solid #d9770655",borderRadius:10,padding:"10px 12px",marginBottom:16,display:"flex",alignItems:"flex-start",gap:8}}>
+                <i className="ti ti-alert-triangle" aria-hidden="true" style={{marginTop:1}}/>
+                <span>Once saved this can't be edited or deleted — by you or anyone else. Every company in your country will see it, along with your name and company. Please double-check the details.</span>
+              </div>
+              {BL_FIELDS.map(([key,label,icon,required])=>(
+                <div key={key} className="bl-form-group" style={{marginBottom:13}}>
+                  <label style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:C.muted,marginBottom:5}}>
+                    <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12.5}}/>{label}{required&&<span style={{color:"#dc2626"}}>*</span>}
+                  </label>
+                  {key==="reason" ? (
+                    <textarea rows={3} value={blForm[key]} onChange={e=>setBlForm(f=>({...f,[key]:e.target.value}))}
+                      placeholder="What happened? e.g. chargeback after withdrawal"
+                      style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",fontFamily:"inherit",resize:"vertical"}}/>
+                  ) : (
+                    <input type="text" value={blForm[key]} onChange={e=>setBlForm(f=>({...f,[key]:e.target.value}))}
+                      placeholder={key==="phone"?"e.g. 0412 345 678 or +60 12 345 6789":""}
+                      style={{width:"100%",boxSizing:"border-box",padding:"9px 11px"}}/>
+                  )}
+                  {key==="phone"&&blForm.phone.trim()&&(
+                    <div style={{fontSize:11,color:C.muted,marginTop:4}}>
+                      {countryFromPhone(blForm.phone)
+                        ? <>Recognised as a <strong style={{color:C.text}}>{countryFromPhone(blForm.phone)}</strong> number — filed under that country's list.</>
+                        : <>Number not recognised — this will be filed under {SESSION.country||"your company's country"}.</>}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {blFormError&&<div className="error-text" style={{marginBottom:10}}>{blFormError}</div>}
+            </div>
+            <div style={{display:"flex",justifyContent:"flex-end",gap:10,padding:"14px 20px",borderTop:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
+              <button onClick={()=>setBlModalOpen(false)} style={{cursor:"pointer",padding:"9px 18px",fontSize:13.5,fontWeight:500,background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8}}>Cancel</button>
+              <button onClick={handleSaveBl} disabled={blSaving} style={{cursor:blSaving?"default":"pointer",opacity:blSaving?0.6:1,padding:"9px 20px",fontSize:13.5,fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}>
+                <i className={`ti ti-${blSaving?"loader-2":"user-off"}`} aria-hidden="true"/> {blSaving?"Saving…":"Add to blacklist"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {kioskModalOpen&&(
         <div className="ft-modal" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:"24px 16px"}} onClick={closeKioskModal}>
           <div ref={kioskModalRef} style={{background:C.bg,border:`2px solid ${C.border}`,borderRadius:14,width:"100%",maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 50px rgba(0,0,0,0.5)",overflow:"hidden",color:C.text}} onClick={e=>e.stopPropagation()}>
@@ -3213,6 +3493,7 @@ export default function App() {
                       ))}
                     </div>
                   )}
+                  <BlacklistWarning hit={entryNameHit} matchedOn="name"/>
                 </div>
                 <div style={{position:"relative"}} ref={idSuggestRef}><label style={labelStyle}>Member ID <span style={{color:C.muted,fontWeight:400}}>(optional — auto-assigned if blank)</span></label>
                   <input type="text" placeholder="Type to search by ID…" value={form.memberId} onChange={e=>handleIdInput(e.target.value)} onKeyDown={e=>onSuggestKey(e,idSuggestions)} style={{width:"100%",boxSizing:"border-box"}}/>
@@ -3239,6 +3520,7 @@ export default function App() {
                       ))}
                     </div>
                   )}
+                  <BlacklistWarning hit={entryPhoneHit} matchedOn="number"/>
                 </div>
                 <div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Receipt number <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
                   <input type="text" placeholder="e.g. receipt / reference no." value={form.receipt} onChange={e=>setForm(f=>({...f,receipt:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
@@ -3894,6 +4176,83 @@ export default function App() {
                     onDelete={()=>handleDeleteKiosk(kiosk.id,kiosk.name)}/>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {page==="blacklist"&&(
+          <div>
+            <div style={sectionStyle}>
+              <SectionTitle icon="ti-user-off" right={canAddBlacklist?(
+                <button onClick={openBlAdd} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                  <i className="ti ti-plus" aria-hidden="true"/> Add to blacklist
+                </button>
+              ):null}>Blacklist Member</SectionTitle>
+              <div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.6}}>
+                Shared with every company in {SESSION.country||"your country"} — anything added here shows up on
+                their list too, and theirs shows up on yours. Anyone can add. <strong style={{color:C.text}}>Entries can't be edited or
+                deleted afterwards</strong>, so check the details before saving. {blacklist.length} {blacklist.length===1?"entry":"entries"}.
+              </div>
+              {!SESSION.country&&blLoaded&&!blLoadError&&(
+                <div style={{fontSize:12.5,color:"#d97706",background:dark?"#3a2a10":"#fef3c7",border:"1px solid #d9770655",borderRadius:10,padding:"10px 12px",marginBottom:14,display:"flex",alignItems:"flex-start",gap:8}}>
+                  <i className="ti ti-alert-triangle" aria-hidden="true" style={{marginTop:1}}/>
+                  <span>No country is set for this company yet, so this list can't be shared or added to. Ask your provider to set the company's country.</span>
+                </div>
+              )}
+              {blacklist.length>0&&(
+                <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+                  <div style={{position:"relative",flex:"1 1 300px",maxWidth:460}}>
+                    <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
+                    <input type="text" value={blSearch} onChange={e=>setBlSearch(e.target.value)} placeholder="Search name, phone, PayID, account, reason…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                    {blSearch&&<button type="button" onClick={()=>setBlSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>
+                    <span>Sort</span>
+                    <FluidDropdown width={150} value={blSort} ariaLabel="Sort blacklist" options={BL_SORTS} onChange={v=>setBlSort(v)}/>
+                  </div>
+                  <span style={{fontSize:12,color:C.muted,marginLeft:"auto"}}>{blShown.length===blacklist.length?`${blacklist.length} shown`:`${blShown.length} of ${blacklist.length}`}</span>
+                </div>
+              )}
+              {!blLoaded&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center"}}>Loading…</div>}
+              {blLoaded&&blLoadError&&<div style={{fontSize:13,color:"#dc2626",padding:"20px",textAlign:"center",border:"1px solid #dc262655",borderRadius:10}}>{blLoadError}</div>}
+              {blLoaded&&!blLoadError&&blacklist.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>Nobody on the blacklist yet.{canAddBlacklist?` Click "Add to blacklist" to report someone.`:""}</div>}
+              {blLoaded&&blacklist.length>0&&blShown.length===0&&<div style={{fontSize:13,color:C.muted,padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>Nobody matches “{blSearch}”.</div>}
+              {blShown.length>0&&(
+                <div ref={blGridRef} style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <thead>
+                      <tr style={{background:C.header}}>
+                        {["Name","Phone","PayID","BSB","Account no.","Reason","Reported by",...(canDeleteBlacklist?[""]:[])].map((h,i)=>(
+                          <th key={i} style={{textAlign:"left",padding:"10px",color:C.muted,fontWeight:500,whiteSpace:"nowrap",borderBottom:`1px solid ${C.border}`}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blShown.map((b,idx)=>(
+                        <tr key={b.id} className="bl-row" style={{borderBottom:`1px solid ${C.border}`,background:idx%2?C.surface:"transparent"}}>
+                          <td style={{padding:"9px 10px",color:C.text,fontWeight:500}}>{b.name}</td>
+                          <td style={{padding:"9px 10px",whiteSpace:"nowrap",fontFamily:"var(--font-mono)"}}>{b.phone||"—"}</td>
+                          <td style={{padding:"9px 10px",color:C.muted}}>{b.payid||"—"}</td>
+                          <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",fontFamily:"var(--font-mono)"}}>{b.bsb||"—"}</td>
+                          <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap",fontFamily:"var(--font-mono)"}}>{b.accountNo||"—"}</td>
+                          <td style={{padding:"9px 10px",color:C.text,maxWidth:280}}>{b.reason||"—"}</td>
+                          <td style={{padding:"9px 10px",color:C.muted,whiteSpace:"nowrap"}}>
+                            <span style={{display:"block"}}>{b.addedByCompany||"—"}</span>
+                            <span style={{fontSize:11}}>{b.addedByName}{b.createdAt?` · ${fmtDate(String(b.createdAt).slice(0,10))}`:""}</span>
+                          </td>
+                          {canDeleteBlacklist&&(
+                            <td style={{padding:"9px 8px"}}>
+                              <button onClick={()=>handleDeleteBl(b)} style={deleteBtnStyle} title="Remove from the shared blacklist">
+                                <i className="ti ti-trash" aria-hidden="true"/> Remove
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

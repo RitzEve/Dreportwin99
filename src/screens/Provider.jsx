@@ -24,6 +24,14 @@ import {
   updateCompanyBilling,
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
+
+/*
+ * Countries a company can operate in. Deliberately a short, explicit list
+ * rather than every country on earth — this drives which companies share a
+ * Blacklist Member list, so a typo or a near-duplicate ("Aus" vs "Australia")
+ * would silently split a pool in two. Add to it as new markets open.
+ */
+const COUNTRIES = ['Australia', 'Malaysia', 'Singapore', 'New Zealand'];
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
@@ -832,6 +840,7 @@ function CompanyCard({ company, billing, isFullProvider, onChanged }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(company.name);
   const [tzDraft, setTzDraft] = useState(company.timezone || DEFAULT_TIMEZONE);
+  const [countryDraft, setCountryDraft] = useState(company.country || '');
   const [editingMasterId, setEditingMasterId] = useState(null);
   const [masterDraft, setMasterDraft] = useState({ name: '', email: '' });
 
@@ -841,6 +850,7 @@ function CompanyCard({ company, billing, isFullProvider, onChanged }) {
     const payload = {};
     if (nameDraft.trim() !== (company.name || '')) payload.name = nameDraft;
     if (tzDraft !== (company.timezone || DEFAULT_TIMEZONE)) payload.timezone = tzDraft;
+    if (countryDraft !== (company.country || '')) payload.country = countryDraft;
     if (!Object.keys(payload).length) { setBusy(false); setEditingName(false); return; }
     const res = await updateCompany(company.id, payload);
     setBusy(false);
@@ -906,12 +916,20 @@ function CompanyCard({ company, billing, isFullProvider, onChanged }) {
               <FluidDropdown value={tzDraft} ariaLabel="Time zone"
                 options={TIMEZONES.map((t) => ({ value: t.value, label: t.label }))}
                 onChange={(v) => setTzDraft(v)} />
+              {/* Country, not timezone, decides who shares a Blacklist Member
+                  list — Perth and Sydney are two timezones but one country. */}
+              <FluidDropdown value={countryDraft} ariaLabel="Country" placeholder="— Country not set —"
+                options={[{ value: '', label: '— Country not set —' }, ...COUNTRIES.map((c) => ({ value: c, label: c }))]}
+                onChange={(v) => setCountryDraft(v)} />
+              <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+                Companies sharing a country share one Blacklist Member list.
+              </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button type="submit" className="btn btn-primary btn-sm" disabled={!nameDraft.trim() || busy}>
                   <i className={`ti ti-${busy ? 'loader-2' : 'check'}`} aria-hidden="true" /> Save
                 </button>
                 <button type="button" className="btn btn-ghost btn-sm"
-                  onClick={() => { setEditingName(false); setNameDraft(company.name); setTzDraft(company.timezone || DEFAULT_TIMEZONE); }}>Cancel</button>
+                  onClick={() => { setEditingName(false); setNameDraft(company.name); setTzDraft(company.timezone || DEFAULT_TIMEZONE); setCountryDraft(company.country || ''); }}>Cancel</button>
               </div>
             </form>
           ) : (
@@ -922,6 +940,12 @@ function CompanyCard({ company, billing, isFullProvider, onChanged }) {
               </div>
               <div style={styles.sub}>{company.masters.length} master · {company.managerCount} manager · {company.staffCount} staff</div>
               <div style={styles.sub}><i className="ti ti-clock-hour-4" aria-hidden="true" /> {tzLabel(company.timezone)}</div>
+              <div style={styles.sub}>
+                <i className="ti ti-world" aria-hidden="true" />{' '}
+                {company.country
+                  ? company.country
+                  : <span style={{ color: 'var(--danger)' }}>No country set — Blacklist Member unavailable</span>}
+              </div>
               {myBilling?.startedAt && (
                 <div style={styles.sub}><i className="ti ti-calendar-event" aria-hidden="true" /> Started {fmtDate(myBilling.startedAt)}</div>
               )}
@@ -930,7 +954,7 @@ function CompanyCard({ company, billing, isFullProvider, onChanged }) {
         </div>
         {!editingName && (
           <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingName(true); setNameDraft(company.name); setTzDraft(company.timezone || DEFAULT_TIMEZONE); setError(''); setOk(''); }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingName(true); setNameDraft(company.name); setTzDraft(company.timezone || DEFAULT_TIMEZONE); setCountryDraft(company.country || ''); setError(''); setOk(''); }}>
               <i className="ti ti-pencil" aria-hidden="true" /> Edit
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => { setShowLogo((s) => !s); setError(''); setOk(''); }}>

@@ -1,10 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.5.9",
+  "version": "2.6.0",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "New Blacklist Member page in the sidebar, starting with 3,441 imported records. Unlike every other page, this list is SHARED — every company in the same country sees the same entries, so anything you report shows up for them and theirs shows up for you. Anyone can add. Entries can never be edited, and only a master can remove one.",
+    "When you record a transaction, the name and phone fields now warn you if that person is on the blacklist — showing what they were reported for and by whom. It's only a warning: it never blocks you from saving the entry.",
     "The console team list now shows who's signed in right now — a green \"Online\" dot with the address they're connected from, or \"Last seen 20 minutes ago\" plus the address they last signed in from for anyone who isn't. Only master and manager accounts can see this.",
     "Staff accounts no longer have the CSV, Excel and PDF download buttons. Owners, masters and managers still export as before.",
     "On the Members page, the \"Newest joined\" and \"Oldest joined\" sort options now follow each member's Joined date. Pick \"Oldest joined\" to put your longest-standing members at the top, or \"Newest joined\" for the most recent sign-ups first. (Members who joined on the same day keep the order they were entered in.)",

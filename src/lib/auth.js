@@ -250,7 +250,7 @@ export async function createCompany(name, timezone) {
 }
 
 /** Provider edits a company's name and/or time zone. Pass only what changed. */
-export async function updateCompany(companyId, { name, timezone } = {}) {
+export async function updateCompany(companyId, { name, timezone, country } = {}) {
   const me = await getCurrentUser();
   if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   const fields = {};
@@ -259,6 +259,9 @@ export async function updateCompany(companyId, { name, timezone } = {}) {
     fields.name = name.trim();
   }
   if (timezone != null) fields.timezone = timezone;
+  // Country decides which shared Blacklist Member pool this company reads and
+  // writes (migration-027) — companies in the same country share one list.
+  if (country != null) fields.country = country || null;
   if (Object.keys(fields).length === 0) return { ok: true };
 
   let { error } = await supabase.from('companies').update(fields).eq('id', companyId);
@@ -270,6 +273,9 @@ export async function updateCompany(companyId, { name, timezone } = {}) {
     } else {
       return { ok: false, error: 'Time zone needs a one-time database setup (run migration-004.sql in Supabase).' };
     }
+  }
+  if (error && country != null && /country|column/i.test(error.message || '')) {
+    return { ok: false, error: 'Country needs a one-time database setup (run migration-027.sql in Supabase).' };
   }
   if (error) return { ok: false, error: friendly(error) };
   return { ok: true };
@@ -1117,5 +1123,112 @@ export async function deleteKioskDetail(id) {
   if (!me) return { ok: false, error: 'Not authorised.' };
   const { error } = await supabase.from('kiosk_details').delete().eq('id', id);
   if (error) return { ok: false, error: isKioskMissing(error) ? KIOSK_SETUP_ERROR : friendly(error) };
+  return { ok: true };
+}
+
+// ---- blacklist members (shared across companies in the same country) -------
+/*
+ * The one table in this app that is NOT walled off per company (migration-027):
+ * every company in a country reads and writes one shared pool of problem
+ * customers. Append-only — there is no update or delete policy on the table at
+ * all, so entries can't be quietly edited or erased by whoever added them.
+ *
+ * Country comes from the phone number where it can be recognised (04/61 =
+ * Australia, 60 = Malaysia), otherwise from the adding company. RLS then
+ * refuses anything that doesn't match the adder's own country, so a wrong guess
+ * fails loudly at the database rather than landing in another country's list.
+ */
+
+const BLACKLIST_SETUP_ERROR = 'This needs a one-time database setup (run migration-027.sql in Supabase).';
+const isBlacklistMissing = (error) => /blacklist_members|my_country|country|does not exist|could not find|schema cache/i.test(error?.message || '');
+
+function blacklistRowToObj(r) {
+  return {
+    id: r.id,
+    country: r.country || '',
+    name: r.name || '',
+    phone: r.phone || '',
+    phoneDigits: r.phone_digits || '',
+    payid: r.payid || '',
+    bsb: r.bsb || '',
+    accountNo: r.account_no || '',
+    reason: r.reason || '',
+    addedByCompany: r.added_by_company || '',
+    addedByName: r.added_by_name || '',
+    createdAt: r.created_at,
+  };
+}
+
+// Supabase caps a single select at 1000 rows (db.max_rows), silently — you get
+// 1000 back with no error. The shared list is already over 3000, so it MUST be
+// paged or the tail is invisible; worse, the transaction warning would quietly
+// stop flagging anyone past the first 1000, which is a safety feature failing
+// without a symptom. Explicit column list rather than '*' to keep the payload
+// down, since the whole list is pulled for the warning index.
+const BLACKLIST_PAGE = 1000;
+const BLACKLIST_COLUMNS =
+  'id, country, name, phone, phone_digits, payid, bsb, account_no, reason, added_by_company, added_by_name, created_at';
+
+/** Anyone signed in at a company: the whole shared list for their country. */
+export async function listBlacklistMembers() {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not authorised.', rows: [] };
+  const rows = [];
+  for (let from = 0; ; from += BLACKLIST_PAGE) {
+    // RLS already restricts this to the caller's country — no client-side
+    // filter needed, and none wanted: a filter here would be a suggestion, the
+    // policy is the actual boundary.
+    const { data, error } = await supabase.from('blacklist_members')
+      .select(BLACKLIST_COLUMNS)
+      .order('created_at', { ascending: false })
+      .range(from, from + BLACKLIST_PAGE - 1);
+    if (error) return { ok: false, error: isBlacklistMissing(error) ? BLACKLIST_SETUP_ERROR : friendly(error), rows: [] };
+    rows.push(...(data || []));
+    if (!data || data.length < BLACKLIST_PAGE) break;
+  }
+  return { ok: true, rows: rows.map(blacklistRowToObj) };
+}
+
+/**
+ * Any company role (staff included) may add. `country` is resolved by the
+ * caller; the database independently re-checks it against the adder's own
+ * company, so this is convenience, not the security boundary.
+ */
+export async function addBlacklistMember(fields) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not authorised.' };
+  if (!me.companyId) return { ok: false, error: 'Only a company account can add to the blacklist.' };
+  if (!fields.name || !fields.name.trim()) return { ok: false, error: 'Name is required.' };
+  const row = {
+    country: fields.country || null,
+    name: fields.name.trim(),
+    phone: fields.phone || null,
+    phone_digits: fields.phoneDigits || null,
+    payid: fields.payid || null,
+    bsb: fields.bsb || null,
+    account_no: fields.accountNo || null,
+    reason: fields.reason || null,
+    added_by_company_id: me.companyId,
+    added_by_company: fields.companyName || null,
+    added_by_user_id: me.id,
+    added_by_name: me.name || me.operatorId || null,
+  };
+  const { data, error } = await supabase.from('blacklist_members').insert(row).select().single();
+  if (error) return { ok: false, error: isBlacklistMissing(error) ? BLACKLIST_SETUP_ERROR : friendly(error) };
+  return { ok: true, row: blacklistRowToObj(data) };
+}
+
+/**
+ * MASTER only: withdraw a blacklist entry. Deletes, never edits — the table has
+ * no update policy, so what an entry says about someone can't be rewritten,
+ * only removed. RLS re-checks the role and the country, so this client-side
+ * check is convenience rather than the boundary.
+ */
+export async function deleteBlacklistMember(id) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false, error: 'Not authorised.' };
+  if (me.role !== ROLES.MASTER) return { ok: false, error: 'Only a master can remove a blacklist entry.' };
+  const { error } = await supabase.from('blacklist_members').delete().eq('id', id);
+  if (error) return { ok: false, error: isBlacklistMissing(error) ? BLACKLIST_SETUP_ERROR : friendly(error) };
   return { ok: true };
 }

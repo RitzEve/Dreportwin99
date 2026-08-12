@@ -35,6 +35,9 @@ export default function FluidDropdown({
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const listRef = useRef(null);
+  const typeBuf = useRef('');       // letters typed so far (type-ahead)
+  const typeTimer = useRef(null);
+  const openedByTyping = useRef(false);
 
   const selected = options.find((o) => String(o.value) === String(value)) || null;
   const selIdx = options.findIndex((o) => String(o.value) === String(value));
@@ -81,10 +84,19 @@ export default function FluidDropdown({
 
   // Reset the keyboard cursor to the selected row each time the panel opens.
   useEffect(() => {
-    if (open) setKbIndex(selIdx < 0 ? 0 : selIdx);
-    else { setKbIndex(-1); setHovered(null); }
+    if (open) {
+      // …unless a keystroke opened it, in which case type-ahead has already
+      // picked the row and resetting here would immediately undo it.
+      if (!openedByTyping.current) setKbIndex(selIdx < 0 ? 0 : selIdx);
+      openedByTyping.current = false;
+    } else {
+      setKbIndex(-1); setHovered(null); typeBuf.current = '';
+    }
     /* eslint-disable-next-line */
   }, [open]);
+
+  // Drop the pending type-ahead timer if the dropdown unmounts mid-search.
+  useEffect(() => () => { if (typeTimer.current) clearTimeout(typeTimer.current); }, []);
 
   // Keep the keyboard-highlighted row scrolled into view.
   useEffect(() => {
@@ -107,12 +119,49 @@ export default function FluidDropdown({
       return Math.min(options.length - 1, Math.max(0, base + delta));
     });
   };
+  /*
+   * Type-ahead, the way a native <select> behaves: type a letter and jump to the
+   * first option starting with it. On a ~190-row country list this is the
+   * difference between finding "Singapore" and scrolling for it.
+   *
+   * Accents are folded away, so "tur" reaches "Türkiye" and "cot" reaches
+   * "Côte d'Ivoire" — nobody hunts for the ü key.
+   */
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const typeAhead = (ch) => {
+    if (typeTimer.current) clearTimeout(typeTimer.current);
+    typeTimer.current = setTimeout(() => { typeBuf.current = ''; }, 700);
+
+    // Pressing ONE letter repeatedly steps through the entries beginning with
+    // it (a, a, a → Afghanistan, Albania, Algeria); anything else extends the
+    // search text and matches from the top.
+    const prev = typeBuf.current;
+    const cycling = prev.length > 0 && prev.split('').every((c) => c === ch);
+    const needle = fold(cycling ? ch : prev + ch);
+    typeBuf.current = prev + ch;
+
+    const n = options.length;
+    if (!n) return;
+    const from = cycling ? (kbIndex < 0 ? 0 : kbIndex) + 1 : 0;
+    for (let i = 0; i < n; i++) {
+      const idx = (from + i) % n;
+      if (fold(options[idx].label).startsWith(needle)) {
+        setHovered(null);
+        setKbIndex(idx);
+        return;
+      }
+    }
+  };
+
   const onTriggerKey = (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!open) setOpen(true);
       else moveKb(e.key === 'ArrowDown' ? 1 : -1);
     } else if (e.key === 'Enter' || e.key === ' ') {
+      // A space part-way through typing belongs to the search — otherwise
+      // "New Zealand" and "United Kingdom" can't be reached by keyboard at all.
+      if (e.key === ' ' && typeBuf.current) { e.preventDefault(); typeAhead(' '); return; }
       if (open) {
         e.preventDefault(); e.stopPropagation();
         if (activeIndex >= 0) onChange(options[activeIndex].value);
@@ -129,6 +178,12 @@ export default function FluidDropdown({
       if (open) { e.preventDefault(); setHovered(null); setKbIndex(options.length - 1); }
     } else if (e.key === 'Tab') {
       if (open) setOpen(false);
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Any other single printable character starts or continues a search.
+      // Typing while closed opens the panel on the match, same as a native select.
+      e.preventDefault();
+      if (!open) { openedByTyping.current = true; setOpen(true); }
+      typeAhead(e.key);
     }
   };
 

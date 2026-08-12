@@ -235,9 +235,12 @@ export async function listCompaniesWithMasters() {
   });
 }
 
-export async function createCompany(name, timezone) {
+export async function createCompany(name, timezone, country) {
   if (!name || !name.trim()) return { ok: false, error: 'Enter a company name.' };
   const base = { name: name.trim() };
+  // Country is optional and stored as NULL when not chosen, matching what
+  // updateCompany writes — the Blacklist Member page keys off this exact value.
+  if (country) base.country = country;
   const row = timezone ? { ...base, timezone } : base;
   let { data, error } = await supabase.from('companies').insert(row).select().single();
   // If the timezone column hasn't been added yet (migration-004 not run), retry
@@ -340,7 +343,7 @@ export async function setOwnCompanyLogo(logo) {
 }
 
 /** Create a company, and (optionally) its first master account in one go. */
-export async function provisionCompany({ companyName, masterName, masterEmail, password, timezone }) {
+export async function provisionCompany({ companyName, masterName, masterEmail, password, timezone, country }) {
   const me = await getCurrentUser();
   if (!me || !isProviderTier(me.role)) return { ok: false, error: 'Not authorised.' };
   if (!companyName || !companyName.trim()) return { ok: false, error: 'Enter a company name.' };
@@ -352,7 +355,7 @@ export async function provisionCompany({ companyName, masterName, masterEmail, p
     if (!validatePassword(password)) return { ok: false, error: 'Master password must be at least 6 characters.' };
   }
 
-  const created = await createCompany(companyName, timezone || 'Australia/Sydney');
+  const created = await createCompany(companyName, timezone || 'Australia/Sydney', country);
   if (!created.ok) return created;
   // Best-effort: seed a billing row with today as the start date (migration-016).
   // Never blocks company creation — the provider can still set this later.

@@ -25,13 +25,9 @@ import {
 } from '../lib/auth.js';
 import { TIMEZONES, DEFAULT_TIMEZONE, tzLabel } from '../lib/timezones.js';
 
-/*
- * Countries a company can operate in. Deliberately a short, explicit list
- * rather than every country on earth — this drives which companies share a
- * Blacklist Member list, so a typo or a near-duplicate ("Aus" vs "Australia")
- * would silently split a pool in two. Add to it as new markets open.
- */
-const COUNTRIES = ['Australia', 'Malaysia', 'Singapore', 'New Zealand'];
+// The full country list now lives in lib/countries.js — see the note there on
+// why the values must never be re-spelled once a company is using one.
+import { COUNTRY_OPTIONS } from '../lib/countries.js';
 import AccountMenu from '../components/AccountMenu.jsx';
 import LogoManager from '../components/LogoManager.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
@@ -228,7 +224,7 @@ function CompanySkeletonCard() {
 }
 
 function CreateCompany({ onCreated }) {
-  const blank = { companyName: '', masterName: '', masterEmail: '', password: '', timezone: DEFAULT_TIMEZONE };
+  const blank = { companyName: '', masterName: '', masterEmail: '', password: '', timezone: DEFAULT_TIMEZONE, country: '' };
   const [form, setForm] = useState(blank);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
@@ -256,6 +252,13 @@ function CreateCompany({ onCreated }) {
           <FluidDropdown value={form.timezone} ariaLabel="Time zone"
             options={TIMEZONES.map((t) => ({ value: t.value, label: t.label }))}
             onChange={(v) => setForm({ ...form, timezone: v })} /></div>
+        {/* Set here rather than only after the fact, so a new company can reach
+            its shared Blacklist Member list from the moment it's created —
+            country, not time zone, decides which pool that is. */}
+        <div className="field"><label>Country <span style={styles.opt}>(shares the Blacklist Member list)</span></label>
+          <FluidDropdown value={form.country} ariaLabel="Country" placeholder="— Country not set —"
+            options={COUNTRY_OPTIONS}
+            onChange={(v) => setForm({ ...form, country: v })} /></div>
         <div className="field"><label>Master Name / ID <span style={styles.opt}>(optional)</span></label>
           <input value={form.masterName} onChange={(e) => setForm({ ...form, masterName: e.target.value })} placeholder="e.g. Mario (used for login)" /></div>
         <div className="field"><label>Master email <span style={styles.opt}>(optional)</span></label>
@@ -919,7 +922,7 @@ function CompanyCard({ company, billing, isFullProvider, onChanged }) {
               {/* Country, not timezone, decides who shares a Blacklist Member
                   list — Perth and Sydney are two timezones but one country. */}
               <FluidDropdown value={countryDraft} ariaLabel="Country" placeholder="— Country not set —"
-                options={[{ value: '', label: '— Country not set —' }, ...COUNTRIES.map((c) => ({ value: c, label: c }))]}
+                options={COUNTRY_OPTIONS}
                 onChange={(v) => setCountryDraft(v)} />
               <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5 }}>
                 Companies sharing a country share one Blacklist Member list.

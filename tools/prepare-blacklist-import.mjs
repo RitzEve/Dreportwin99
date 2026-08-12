@@ -68,8 +68,37 @@ function extractNumbers(text){
 }
 
 const rows = parseCSV(fs.readFileSync(SRC,'utf8')).filter(r=>r.length>1);
-const head = rows[0].map(h=>h.replace(/^\uFEFF/,'').trim());
-const col  = n => head.indexOf(n);
+
+/* Two different exports feed this script and they name their columns
+   differently: the database dump uses snake_case ("phone_number"), while the
+   browser scraper copies the column headings off the page ("Phone No"). Strip
+   case, spaces and underscores, then look the column up through a list of
+   known spellings, so either file works without editing anything. */
+const norm = h => h.replace(/^\uFEFF/,'').trim().toLowerCase().replace(/[\s_]+/g,'');
+const head = rows[0].map(norm);
+const ALIASES = {
+  name:           ['name'],
+  phone_number:   ['phonenumber','phoneno','phone'],
+  pay_id:         ['payid'],
+  bsb:            ['bsb'],
+  account_number: ['accountnumber','accountno'],
+  reason:         ['reason'],
+  added_by:       ['addedby'],
+  added_by_user:  ['addedbyuser'],
+  created_at:     ['createdat'],
+};
+const col = n => {
+  for (const a of ALIASES[n]) { const i = head.indexOf(a); if (i !== -1) return i; }
+  return -1;
+};
+
+// Without a name column every row gets skipped as nameless and the output is
+// an empty file \u2014 a silent, very confusing failure. Stop and say so instead.
+if (col('name') === -1) {
+  console.error(`No "name" column found. Headings in this file: ${rows[0].join(' | ')}`);
+  process.exit(1);
+}
+
 const data = rows.slice(1);
 
 const OUT_COLS = ['country','name','phone','phone_digits','payid','bsb','account_no','reason','added_by_company','added_by_name','created_at'];
@@ -84,7 +113,18 @@ for (const r of data) {
   const nums = extractNumbers(phoneRaw);
   if (nums.length) withNumbers++;
   if (nums.length > 1) multi++;
-  const addedBy = (r[col('added_by')]||'').trim();
+  /* Who reported it. The browser scrape carries a nested added_by_user object
+     with the reporter's actual name ("ausstaff"), which is what staff want to
+     see; the older database dump only had a numeric id, which reads sensibly
+     as "user #7" and nothing better. Prefer the real name when it is there. */
+  let addedBy = (r[col('added_by')]||'').trim();
+  const userJson = col('added_by_user') === -1 ? '' : (r[col('added_by_user')]||'').trim();
+  if (userJson) {
+    try {
+      const u = JSON.parse(userJson);
+      if (u && (u.name || u.username)) addedBy = String(u.name || u.username).trim();
+    } catch { /* malformed - fall back to the id below */ }
+  }
   out.push([
     'Australia',
     name,
@@ -95,7 +135,9 @@ for (const r of data) {
     (r[col('account_number')]||'').trim(),
     (r[col('reason')]||'').trim(),
     'blacklistaus (imported)',
-    addedBy ? `user #${addedBy}` : '',
+    // The database dump gives a numeric user id, which only reads sensibly as
+    // "user #7"; the scraped page gives the actual name, which stands alone.
+    addedBy ? (/^\d+$/.test(addedBy) ? `user #${addedBy}` : addedBy) : '',
     (r[col('created_at')]||'').trim(),
   ].map(esc).join(','));
 }

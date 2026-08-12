@@ -5,9 +5,7 @@
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
-    "Every country is now available when setting a company's country, instead of just four. Start typing while the list is open and it jumps straight there — type \"sin\" for Singapore or \"new z\" for New Zealand rather than scrolling.",
-    "The country can also be chosen while creating a new company, so it can use the shared Blacklist Member list straight away instead of waiting for someone to edit it afterwards.",
-    "Typing to jump works in every dropdown in the app now, not only the country one.",
+    "Every dropdown in the app now jumps as you type. Open one, start typing, and a few letters is usually enough to land on what you want instead of scrolling — press the same letter again to step through the entries that start with it.",
     "The same bank account or PayID can no longer be added to the Blacklist Member list twice. If you type one that's already there, the form tells you straight away who it's listed under and won't let it be saved again.",
     "Phone numbers work differently on purpose: if a number is already on the list you'll see a note saying who it belongs to, but you can still save. One person is often reported under several different names on the same number, and those are all worth recording.",
     "The Blacklist Member page is easier to read: everything about a person now fits on screen without dragging left and right, and the list is paged like the Members directory — 50 at a time by default, or pick 100, 200, 500 or 1000.",

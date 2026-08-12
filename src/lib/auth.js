@@ -1189,6 +1189,26 @@ export async function listBlacklistMembers() {
   return { ok: true, rows: rows.map(blacklistRowToObj) };
 }
 
+/*
+ * migration-029 makes PayID and BSB+account unique per country, so the same
+ * payment details can't be listed twice. Postgres reports that as a bare
+ * "duplicate key value violates unique constraint ..." naming the index, which
+ * means nothing to the person filling in the form — translate it into the field
+ * they need to look at. Name and phone are deliberately NOT unique (one person
+ * uses several aliases and numbers), so there is nothing to translate for those.
+ */
+function blacklistDuplicateError(error) {
+  const m = error?.message || String(error || '');
+  if (!/duplicate key|unique constraint/i.test(m)) return null;
+  if (/blacklist_members_payid_uniq/i.test(m)) {
+    return 'That PayID is already on the blacklist — search the list for it to see the existing entry.';
+  }
+  if (/blacklist_members_account_uniq/i.test(m)) {
+    return 'That BSB and account number are already on the blacklist — search the list for the account number to see the existing entry.';
+  }
+  return null;
+}
+
 /**
  * Any company role (staff included) may add. `country` is resolved by the
  * caller; the database independently re-checks it against the adder's own
@@ -1214,7 +1234,15 @@ export async function addBlacklistMember(fields) {
     added_by_name: me.name || me.operatorId || null,
   };
   const { data, error } = await supabase.from('blacklist_members').insert(row).select().single();
-  if (error) return { ok: false, error: isBlacklistMissing(error) ? BLACKLIST_SETUP_ERROR : friendly(error) };
+  if (error) {
+    if (isBlacklistMissing(error)) return { ok: false, error: BLACKLIST_SETUP_ERROR };
+    const dup = blacklistDuplicateError(error);
+    // Must be checked BEFORE friendly(), which maps any "duplicate key" to
+    // "That email is already in use." — true for the signup path it was written
+    // for, nonsense here.
+    if (dup) return { ok: false, error: dup };
+    return { ok: false, error: friendly(error) };
+  }
   return { ok: true, row: blacklistRowToObj(data) };
 }
 

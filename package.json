@@ -1,10 +1,12 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.6.1",
+  "version": "2.6.2",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "The same bank account or PayID can no longer be added to the Blacklist Member list twice. If you type one that's already there, the form tells you straight away who it's listed under and won't let it be saved again.",
+    "Phone numbers work differently on purpose: if a number is already on the list you'll see a note saying who it belongs to, but you can still save. One person is often reported under several different names on the same number, and those are all worth recording.",
     "The Blacklist Member page is easier to read: everything about a person now fits on screen without dragging left and right, and the list is paged like the Members directory — 50 at a time by default, or pick 100, 200, 500 or 1000.",
     "New Blacklist Member page in the sidebar, starting with 3,441 imported records. Unlike every other page, this list is SHARED — every company in the same country sees the same entries, so anything you report shows up for them and theirs shows up for you. Anyone can add. Entries can never be edited, and only a master can remove one.",
     "When you record a transaction, the name and phone fields now warn you if that person is on the blacklist — showing what they were reported for and by whom. It's only a warning: it never blocks you from saving the entry.",

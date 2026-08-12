@@ -422,6 +422,39 @@ function BlacklistWarning({hit, matchedOn}) {
   );
 }
 
+/*
+ * Duplicate notice under a field of the blacklist ADD form. Two distinct jobs,
+ * hence `blocking`:
+ *
+ *  blocking  — PayID / BSB+account are unique in the database (migration-029),
+ *              so this entry WILL be refused. Says so before the person fills
+ *              in the rest of the form and presses save.
+ *  advisory  — the phone number is already listed, which is allowed. One person
+ *              is often reported under several aliases on one number, so this
+ *              points at the existing entry and leaves the decision alone.
+ */
+function BlDuplicateNotice({hit, field, blocking}) {
+  if(!hit) return null;
+  const tone = blocking ? "#dc2626" : "#d97706";
+  const bg = blocking ? (dark?"#3a1515":"#fee2e2") : (dark?"#3a2c10":"#fef3c7");
+  return (
+    <div role="status" style={{marginTop:6,display:"flex",alignItems:"flex-start",gap:7,fontSize:11.5,lineHeight:1.5,
+      color:tone,background:bg,border:`1px solid ${tone}55`,borderRadius:8,padding:"7px 9px"}}>
+      <i className={`ti ti-${blocking?"ban":"info-circle"}`} aria-hidden="true" style={{fontSize:13,marginTop:1,flexShrink:0}}/>
+      <span>
+        <strong>{blocking?`This ${field} is already listed`:`This number is already listed`}</strong>
+        {" — "}under <strong>{hit.name}</strong>{hit.reason?`: ${hit.reason}`:""}
+        <span style={{display:"block",marginTop:2,color:C.muted}}>
+          {blocking
+            ? "Saving will be refused. Each PayID and bank account can only appear once."
+            : "You can still save — the same person is often reported under more than one name."}
+          {hit.addedByCompany?` Reported by ${hit.addedByCompany}.`:""}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 function StatCard({label,count,amount,color,onClick,note}) {
   const accent = color||C.accent;
   const viewHint = <span style={{display:"inline-flex",alignItems:"center",gap:2,fontWeight:500,whiteSpace:"nowrap",...((isPaleColor(accent)&&!dark)?goldChip:{color:accent})}}>View <i className="ti ti-arrow-right" aria-hidden="true" style={{fontSize:12}}/></span>;
@@ -2344,9 +2377,15 @@ export default function App() {
    * normalised phone -> entry. Built once per blacklist change rather than
    * scanning the list on every keystroke, since the entry form checks on each
    * character typed.
+   *
+   * byPayid and byAccount serve the blacklist ADD form rather than the
+   * transaction form: migration-029 makes those two genuinely unique in the
+   * database, so showing the clash while the person is still typing beats
+   * letting them fill the whole form and press save only to be rejected. Built
+   * in the same pass — they cost nothing extra.
    */
   const blacklistIndex = useMemo(()=>{
-    const byName = new Map(), byPhone = new Map();
+    const byName = new Map(), byPhone = new Map(), byPayid = new Map(), byAccount = new Map();
     for(const b of blacklist){
       const n = normalizeName(b.name);
       if(n && !byName.has(n)) byName.set(n, b);
@@ -2357,8 +2396,23 @@ export default function App() {
         ? String(b.phoneDigits).trim().split(/\s+/)
         : extractNumbers(b.phone);
       for(const p of nums){ if(p && !byPhone.has(p)) byPhone.set(p, b); }
+      // Keyed EXACTLY as the database indexes them — country included, trimmed,
+      // and lowercased for PayID. Country matters: the rule is per-country, and
+      // an entry is filed under the country its phone number implies, so an
+      // Australian company logging a Malaysian number lands in a different pool.
+      // Leave country out and the form predicts a refusal that never happens.
+      const pay = String(b.payid||"").trim().toLowerCase();
+      if(pay){
+        const key = `${b.country||""}|${pay}`;
+        if(!byPayid.has(key)) byPayid.set(key, b);
+      }
+      const acct = String(b.accountNo||"").trim();
+      if(acct){
+        const key = `${b.country||""}|${String(b.bsb||"").trim()}|${acct}`;
+        if(!byAccount.has(key)) byAccount.set(key, b);
+      }
     }
-    return { byName, byPhone };
+    return { byName, byPhone, byPayid, byAccount };
   },[blacklist]);
 
   /* Returns the blacklist entry a typed name/phone matches, or null. */
@@ -2385,6 +2439,41 @@ export default function App() {
     const p = normalizePhone(form.memberPhone);
     return p ? (blacklistIndex.byPhone.get(p) || null) : null;
   },[form.memberPhone,blacklistIndex]);
+
+  /*
+   * Live duplicate checks for the blacklist ADD form, against the list already
+   * in memory — no extra queries.
+   *
+   * The two payment ones and the phone one mean different things on purpose.
+   * PayID and BSB+account are unique in the database (migration-029), so a
+   * match there WILL be refused and the warning says so. A repeated phone
+   * number is allowed: one scammer runs several aliases off one number, and
+   * blocking that would throw away the very link worth recording — so it warns
+   * and gets out of the way.
+   */
+  const blDupPhone = useMemo(()=>{
+    // The field may hold more than one number; flag the first already listed.
+    for(const p of extractNumbers(blForm.phone)){
+      const hit = blacklistIndex.byPhone.get(p);
+      if(hit) return hit;
+    }
+    return null;
+  },[blForm.phone,blacklistIndex]);
+  // The country this entry would be filed under — same expression handleSaveBl
+  // uses, so the check and the insert can't disagree about which pool applies.
+  const blTargetCountry = useMemo(
+    ()=> countryFromPhone(blForm.phone) || SESSION.country || "",
+    [blForm.phone]);
+  const blDupPayid = useMemo(()=>{
+    const k = blForm.payid.trim().toLowerCase();
+    return k ? (blacklistIndex.byPayid.get(`${blTargetCountry}|${k}`) || null) : null;
+  },[blForm.payid,blTargetCountry,blacklistIndex]);
+  const blDupAccount = useMemo(()=>{
+    const acct = blForm.accountNo.trim();
+    return acct
+      ? (blacklistIndex.byAccount.get(`${blTargetCountry}|${blForm.bsb.trim()}|${acct}`) || null)
+      : null;
+  },[blForm.bsb,blForm.accountNo,blTargetCountry,blacklistIndex]);
 
   const openBlAdd = () => { setBlForm(BL_BLANK); setBlFormError(""); setBlModalOpen(true); };
   const handleSaveBl = async () => {
@@ -3390,6 +3479,14 @@ export default function App() {
                         : <>Number not recognised — this will be filed under {SESSION.country||"your company's country"}.</>}
                     </div>
                   )}
+                  {/* Duplicate checks. Phone advises; the two payment fields
+                      warn that the database will refuse the entry. The account
+                      notice hangs off the account field rather than BSB, since
+                      BSB alone is a bank branch shared by thousands of people
+                      and means nothing on its own. */}
+                  {key==="phone"    && <BlDuplicateNotice hit={blDupPhone}   field="number"         blocking={false}/>}
+                  {key==="payid"    && <BlDuplicateNotice hit={blDupPayid}   field="PayID"          blocking/>}
+                  {key==="accountNo"&& <BlDuplicateNotice hit={blDupAccount} field="account number" blocking/>}
                 </div>
               ))}
               {blFormError&&<div className="error-text" style={{marginBottom:10}}>{blFormError}</div>}

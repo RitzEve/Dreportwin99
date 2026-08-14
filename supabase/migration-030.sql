@@ -1,0 +1,33 @@
+-- migration-030: drop the one genuinely dead index on blacklist_members
+--
+-- Supabase's performance advisor flagged 5 "unused" indexes. Four of them back
+-- FOREIGN KEYS (idx_blacklist_members_added_by_company,
+-- idx_company_billing_payments_company, idx_company_billing_payments_recorded_by,
+-- idx_company_owners_company_id) and are deliberately kept: Postgres does not
+-- index FK columns automatically, and without them every delete/update on the
+-- parent table degrades to a sequential scan of the child table to validate the
+-- constraint. They total ~120 kB on a 20 MB database — not worth the risk.
+-- Two of those also sit on tables that are empty / never analysed, so "0 scans"
+-- says nothing about whether they are needed.
+--
+-- idx_blacklist_members_name is different: it backs no constraint, and the app
+-- never filters by name in SQL. listBlacklist() in src/lib/auth.js selects the
+-- whole table ordered by created_at (paged via .range()) and matches names
+-- client-side, so a btree index on `name` is unreachable by any query the app
+-- issues. It is pure write overhead on every insert into a table that all
+-- companies in a country share.
+--
+-- Safe + reversible. The index is ~280 kB over 3,471 rows, so the brief lock is
+-- measured in milliseconds. To restore it, see the commented statement at the end.
+
+drop index if exists public.idx_blacklist_members_name;
+
+-- Rollback (only if a future feature adds a real SQL-side name filter):
+-- create index idx_blacklist_members_name on public.blacklist_members (name);
+--
+-- NOTE for that future feature: if the name search is a "contains" match
+-- (ILIKE '%foo%'), a plain btree index like the one above still will NOT be used.
+-- That case needs a trigram index instead:
+--   create extension if not exists pg_trgm;
+--   create index idx_blacklist_members_name_trgm
+--     on public.blacklist_members using gin (name gin_trgm_ops);

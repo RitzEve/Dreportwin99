@@ -5,9 +5,10 @@
  *
  * Transactions are matched by their unique `uid` (older rows fall back to `#id`); an
  * entry deleted on EITHER side stays deleted. Members union by id (newer lastActivity
- * wins); banks union by id (newer `updatedAt` wins, so an active/inactive toggle or edit
- * on one device reaches the others); off-days union by uid (delete-wins) like transactions;
- * nextId takes the higher of the two.
+ * wins, and delete-wins like transactions — see the members block below); banks union by
+ * id (newer `updatedAt` wins, so an active/inactive toggle or edit on one device reaches
+ * the others); off-days union by uid (delete-wins) like transactions; nextId takes the
+ * higher of the two.
  *
  * Shared by src/app/FinTrack.jsx (the live merge-on-poll) and src/lib/storageBridge.js
  * (the fallback merge when the atomic server-side RPC isn't installed).
@@ -49,7 +50,13 @@ export function mergeData(remote, local) {
   for (const m of (remote.members || [])) memMap.set(m.id, m);
   for (const m of (local.members || [])) {
     const prev = memMap.get(m.id);
-    memMap.set(m.id, !prev ? m : ((m.lastActivity || '') >= (prev.lastActivity || '') ? { ...prev, ...m } : { ...m, ...prev }));
+    if (!prev) { memMap.set(m.id, m); continue; }
+    const win = (m.lastActivity || '') >= (prev.lastActivity || '') ? { ...prev, ...m } : { ...m, ...prev };
+    // A member removed on EITHER side stays removed — delete-wins, same rule as
+    // transactions/offDays. Editing a member's ID rewrites its key, so the edit
+    // tombstones the OLD id; without this the union here would resurrect that row
+    // and the member would show up twice (once per id).
+    memMap.set(m.id, { ...win, deleted: !!(prev.deleted || m.deleted) });
   }
   const members = [...memMap.values()];
   const bankMap = new Map();

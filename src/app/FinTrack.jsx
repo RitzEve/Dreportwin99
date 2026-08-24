@@ -1335,6 +1335,11 @@ export default function App() {
   const [transactions,setTransactions] = useState(initTx);
   const [banks,setBanks] = useState(initBanks);
   const [members,setMembers] = useState(initMembers);
+  // Removed members are TOMBSTONED (deleted:true), never dropped from the array — the
+  // merge unions by id, so a row that just disappears locally is resurrected from the
+  // other side on the next save. `members` therefore stays the full array (that's what
+  // gets saved); everything that reads or displays members uses `liveMembers`.
+  const liveMembers = useMemo(()=>members.filter(m=>!m.deleted),[members]);
   const [nextId,setNextId] = useState(1);
   const [offDays,setOffDays] = useState([]);
   const [offForm,setOffForm] = useState({employeeId:"",reason:""});
@@ -1792,15 +1797,15 @@ export default function App() {
 
   const handleNameInput = val => {
     setForm(f=>({...f,memberName:val})); setSuggestIndex(-1); setIdSuggestions([]); setPhoneSuggestions([]);
-    setNameSuggestions(val.length>0 ? members.filter(m=>m.name.toLowerCase().includes(val.toLowerCase())) : []);
+    setNameSuggestions(val.length>0 ? liveMembers.filter(m=>m.name.toLowerCase().includes(val.toLowerCase())) : []);
   };
   const handleIdInput = val => {
     setForm(f=>({...f,memberId:val})); setSuggestIndex(-1); setNameSuggestions([]); setPhoneSuggestions([]);
-    setIdSuggestions(val.length>0 ? members.filter(m=>(m.id||"").toLowerCase().includes(val.toLowerCase())) : []);
+    setIdSuggestions(val.length>0 ? liveMembers.filter(m=>(m.id||"").toLowerCase().includes(val.toLowerCase())) : []);
   };
   const handlePhoneInput = val => {
     setForm(f=>({...f,memberPhone:val})); setSuggestIndex(-1); setNameSuggestions([]); setIdSuggestions([]);
-    setPhoneSuggestions(val.length>0 ? members.filter(m=>(m.phone||"").toLowerCase().includes(val.toLowerCase())) : []);
+    setPhoneSuggestions(val.length>0 ? liveMembers.filter(m=>(m.phone||"").toLowerCase().includes(val.toLowerCase())) : []);
   };
   // Picking any suggestion fills the member's name + ID + phone, and closes all lists.
   const selectMember = m => { setForm(f=>({...f,memberName:m.name,memberId:m.id,memberPhone:m.phone||""})); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setSuggestIndex(-1); };
@@ -1957,7 +1962,7 @@ export default function App() {
       const availForDate = unclaimedByDate[claimFrom] || 0;
       if(amt > availForDate + 1e-9){ setFormError(`Not enough unclaimed credit on ${fmtDate(claimFrom)} to claim. Available that day: ${fmt(availForDate)}.`); window.showToast?.("Error , Please Try Again","error"); return; }
       const pairId = `UC-${nextId}`;
-      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const existingMember = liveMembers.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || `M${String(nextId).padStart(3,"0")}`;
       const depLeg = {id:nextId,date:txDate,time,type:"Regular Deposit",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew,deleted:false,pairId,fromUnclaimed:true,claimedFromDate:claimFrom};
@@ -1965,7 +1970,7 @@ export default function App() {
       setTransactions(prev=>[ucLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
-        setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate}]);
+        setMembers(prev=>[...prev.filter(m=>m.id!==assignedId),{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate,deleted:false}]);
       } else if(existingMember){
         setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:txDate}:m));
       }
@@ -1997,7 +2002,7 @@ export default function App() {
       if(storeAmt + paidAmt > amt + 1e-9){ setFormError("Store + bank amounts can't be more than the withdrawal amount above."); window.showToast?.("Error , Please Try Again","error"); return; }
       const leftover = Math.round((amt - storeAmt - paidAmt)*100)/100;   // remainder becomes unclaimed credit
       const pairId = `SP-${nextId}`;
-      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const existingMember = liveMembers.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
       const common = {memberId:assignedId,memberName:ref,notes:form.notes,receipt:rcpt,operator:op,pairId,storeAndPaid:true,isNew:false,deleted:false};
       const rows = [
@@ -2028,7 +2033,7 @@ export default function App() {
       if(paidAmt > amt + 1e-9){ setFormError("The actual paid amount can't be more than the withdrawal amount above."); window.showToast?.("Error , Please Try Again","error"); return; }
       const leftover = Math.round((amt - paidAmt)*100)/100;   // any remainder becomes unclaimed credit
       const pairId = `AP-${nextId}`;
-      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const existingMember = liveMembers.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
       const common = {memberId:assignedId,memberName:ref,notes:form.notes,receipt:rcpt,operator:op,pairId,actualPaid:true,isNew:false,deleted:false};
       const rows = [
@@ -2059,7 +2064,7 @@ export default function App() {
       // to go negative (the user wants to record it even when it overdraws the store).
       const leftover = Math.round((amt - storeAmt)*100)/100;   // any remainder becomes unclaimed credit
       const pairId = `SW-${nextId}`;
-      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const existingMember = liveMembers.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
       const common = {memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,pairId,storeWithdraw:true,isNew:false,deleted:false};
       const rows = [
@@ -2089,7 +2094,7 @@ export default function App() {
       if(buyAmt > amt + 1e-9){ setFormError("The Buy AUD amount can't be more than the withdrawal amount above."); window.showToast?.("Error , Please Try Again","error"); return; }
       const leftover = Math.round((amt - buyAmt)*100)/100;   // any remainder becomes unclaimed credit
       const pairId = `BA-${nextId}`;
-      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const existingMember = liveMembers.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
       const common = {memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,operator:op,pairId,buyAud:true,isNew:false,deleted:false};
       const rows = [
@@ -2107,7 +2112,7 @@ export default function App() {
 
     if(form.type==="Regular Withdrawal" && form.redeposit){
       const pairId = `RD-${nextId}`;
-      const existingMember = members.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
+      const existingMember = liveMembers.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
       const isNew = !existingMember && !!ref;
       const assignedId = form.memberId.trim() || (existingMember?existingMember.id:`M${String(nextId).padStart(3,"0")}`);
       const wdLeg  = {id:nextId,date:txDate,time,type:"Regular Withdrawal",amount:amt,memberId:assignedId,memberName:ref,bank:"",bankId:null,bankHolder:"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew:false,deleted:false,pairId,redeposit:true};
@@ -2115,7 +2120,7 @@ export default function App() {
       setTransactions(prev=>[wdLeg,depLeg,...prev]);
       setNextId(n=>n+2);
       if(isNew){
-        setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate}]);
+        setMembers(prev=>[...prev.filter(m=>m.id!==assignedId),{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate,deleted:false}]);
       } else if(existingMember){
         setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:txDate}:m));
       }
@@ -2126,7 +2131,7 @@ export default function App() {
     // ---- Single-entry types: Regular Deposit/Withdrawal, Unclaimed Credit,
     // Rental, Adjust, Other. Bank is optional for all of them. ----
     const isDeposit = form.type==="Regular Deposit";
-    const existingMember = members.find(m=>
+    const existingMember = liveMembers.find(m=>
       (form.memberId && m.id===form.memberId) ||
       (ref && m.name.toLowerCase()===ref.toLowerCase())
     );
@@ -2135,7 +2140,7 @@ export default function App() {
     const newTx = {id:nextId,date:txDate,time,type:form.type,amount:amt,memberId:assignedId,memberName:ref,bank:srcBank?srcBank.name:"",bankId:srcBank?srcBank.id:null,bankHolder:srcBank?srcBank.holder||"":"",notes:form.notes,receipt:rcpt,uid:mkUid(),operator:op,isNew,deleted:false};
     setTransactions(prev=>[newTx,...prev]); setNextId(n=>n+1);
     if(isNew){
-      setMembers(prev=>[...prev,{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate}]);
+      setMembers(prev=>[...prev.filter(m=>m.id!==assignedId),{id:assignedId,name:ref,phone:form.memberPhone||"",joined:txDate,lastActivity:txDate,deleted:false}]);
     } else if(existingMember){
       setMembers(prev=>prev.map(m=>m.id===existingMember.id?{...m,lastActivity:txDate}:m));
     }
@@ -2822,10 +2827,22 @@ export default function App() {
 
   const startEditMember = m => { setEditingMember(m.id); setEditMemberForm({id:m.id,name:m.name,phone:m.phone||""}); setEditMemberError(""); };
   const handleSaveMember = id => {
-    if(!editMemberForm.id.trim()||!editMemberForm.name.trim()){setEditMemberError("ID and name are required.");return;}
-    setMembers(prev=>prev.map(m=>m.id===id?{...m,id:editMemberForm.id,name:editMemberForm.name,phone:editMemberForm.phone}:m)); setEditingMember(null);
+    const nid = editMemberForm.id.trim(), nname = editMemberForm.name.trim(), nphone = (editMemberForm.phone||"").trim();
+    if(!nid||!nname){setEditMemberError("ID and name are required.");return;}
+    if(nid!==id && liveMembers.some(m=>m.id===nid)){setEditMemberError("That Member ID already exists.");return;}
+    setMembers(prev=>{
+      const cur = prev.find(m=>m.id===id);
+      if(!cur) return prev;
+      const row = {...cur,id:nid,name:nname,phone:nphone,deleted:false};
+      if(nid===id) return prev.map(m=>m.id===id?row:m);
+      // The ID *is* the merge key, so changing it can't be an in-place rewrite: the old
+      // id must be tombstoned, or the merge pairs it with the copy still in the database
+      // and the member reappears as a second row under the old id.
+      return [...prev.filter(m=>m.id!==nid).map(m=>m.id===id?{...m,deleted:true}:m), row];
+    });
+    setEditingMember(null); setEditMemberError("");
   };
-  const handleDeleteMember = (id,name) => setConfirm({message:`Delete member "${name}"? Their transaction history will be kept.`,onConfirm:()=>{setMembers(prev=>prev.filter(m=>m.id!==id));setConfirm(null);}});
+  const handleDeleteMember = (id,name) => setConfirm({message:`Delete member "${name}"? Their transaction history will be kept.`,onConfirm:()=>{setMembers(prev=>prev.map(m=>m.id===id?{...m,deleted:true}:m));setConfirm(null);}});
 
   const closeMemberModal = () => { setNewMember({name:"",phone:"",id:""}); setNewMemberError(""); setShowMemberModal(false); };
 
@@ -2850,14 +2867,16 @@ export default function App() {
   const handleAddMember = () => {
     if(!newMember.name.trim()){setNewMemberError("Member name is required.");return;}
     const assignedId = newMember.id.trim() || `M${String(nextId).padStart(3,"0")}`;
-    if(members.some(m=>m.id===assignedId)){setNewMemberError("That Member ID already exists.");return;}
-    if(members.some(m=>m.name.toLowerCase()===newMember.name.trim().toLowerCase())){setNewMemberError("A member with that name already exists.");return;}
-    setMembers(prev=>[...prev,{id:assignedId,name:newMember.name.trim(),phone:newMember.phone.trim(),joined:today,lastActivity:today}]);
+    if(liveMembers.some(m=>m.id===assignedId)){setNewMemberError("That Member ID already exists.");return;}
+    if(liveMembers.some(m=>m.name.toLowerCase()===newMember.name.trim().toLowerCase())){setNewMemberError("A member with that name already exists.");return;}
+    // Re-using an id that was previously removed revives that one key instead of leaving
+    // a tombstone and a live row fighting over it.
+    setMembers(prev=>[...prev.filter(m=>m.id!==assignedId),{id:assignedId,name:newMember.name.trim(),phone:newMember.phone.trim(),joined:today,lastActivity:today,deleted:false}]);
     if(!newMember.id.trim()) setNextId(n=>n+1);
     setNewMember({name:"",phone:"",id:""}); setNewMemberError(""); setShowMemberModal(false);
   };
 
-  const memberRows = () => members.map(m=>{
+  const memberRows = () => liveMembers.map(m=>{
     const mTx = transactions.filter(t=>(t.memberId===m.id||t.memberName===m.name)&&!t.deleted);
     const totalDep = mTx.filter(t=>t.type==="Regular Deposit").reduce((a,b)=>a+b.amount,0);
     return {id:m.id,name:m.name,phone:m.phone||"",joined:m.joined,transactions:mTx.length,totalDeposits:totalDep,lastActivity:m.lastActivity};
@@ -2921,14 +2940,14 @@ export default function App() {
   // Members list: optional search (name / ID / phone) then pagination.
   const memberFiltered = useMemo(()=>{
     const q = memberSearch.trim().toLowerCase();
-    if(!q) return members;
-    return members.filter(m=>(m.name||"").toLowerCase().includes(q)||(m.id||"").toLowerCase().includes(q)||(m.phone||"").toLowerCase().includes(q));
-  },[members,memberSearch]);
+    if(!q) return liveMembers;
+    return liveMembers.filter(m=>(m.name||"").toLowerCase().includes(q)||(m.id||"").toLowerCase().includes(q)||(m.phone||"").toLowerCase().includes(q));
+  },[liveMembers,memberSearch]);
   // Members are appended as they're added, so a member's index in `members` is its join
   // ORDER. Every sort reuses that index as a stable tiebreaker — and for the joined
   // sorts it's the only signal left when two members share a joined date, since
   // `joined` records a day with no time-of-day.
-  const memberOrderIndex = useMemo(()=>{ const m=new Map(); members.forEach((mem,i)=>m.set(mem.id,i)); return m; },[members]);
+  const memberOrderIndex = useMemo(()=>{ const m=new Map(); liveMembers.forEach((mem,i)=>m.set(mem.id,i)); return m; },[liveMembers]);
   const memberSorted = useMemo(()=>{
     const ix = m => (memberOrderIndex.get(m.id) ?? 0);
     // Newest/Oldest follow the member's JOINED date — the same value shown in the
@@ -3076,9 +3095,9 @@ export default function App() {
 
     {canExport&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
       <span style={{fontSize:12,color:C.muted,marginRight:2}}>Export this view:</span>
-      <button onClick={()=>exportCSV(dashTx,`fintrack_${scopeName}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
-      <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
-      <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`,members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
+      <button onClick={()=>exportCSV(dashTx,`fintrack_${scopeName}`,liveMembers)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
+      <button onClick={()=>exportExcel(dashTx,`fintrack_${scopeName}`,liveMembers)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
+      <button onClick={()=>exportPDF(dashTx,`FinTrack — ${dashScopeLabel}`,liveMembers)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"6px 12px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
     </div>}
   </>);
 
@@ -4515,7 +4534,7 @@ export default function App() {
               <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Search across all saved transactions — any date, member, bank, or type.</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
                 <div><label style={labelStyle}>Keyword</label><input type="text" placeholder="Name, ID, bank, amount, notes..." value={search.term} onChange={e=>setSearch(s=>({...s,term:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                <div><label style={labelStyle}>Member</label><FluidDropdown value={search.member} placeholder="All members" ariaLabel="Filter by member" options={[{value:"",label:"All members"},...members.map(m=>({value:String(m.id),label:`${m.name} (${m.id})`}))]} onChange={v=>setSearch(s=>({...s,member:v}))}/></div>
+                <div><label style={labelStyle}>Member</label><FluidDropdown value={search.member} placeholder="All members" ariaLabel="Filter by member" options={[{value:"",label:"All members"},...liveMembers.map(m=>({value:String(m.id),label:`${m.name} (${m.id})`}))]} onChange={v=>setSearch(s=>({...s,member:v}))}/></div>
                 <div><label style={labelStyle}>Bank</label><FluidDropdown value={search.bank} placeholder="All banks" ariaLabel="Filter by bank" options={[{value:"",label:"All banks"},...banksLive.map(b=>({value:String(b.id),label:b.holder?`${b.holder} — ${b.name}`:b.name}))]} onChange={v=>setSearch(s=>({...s,bank:v}))}/></div>
                 <div><label style={labelStyle}>From date</label><input type="date" value={search.dateFrom} onChange={e=>setSearch(s=>({...s,dateFrom:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>To date</label><input type="date" value={search.dateTo} onChange={e=>setSearch(s=>({...s,dateTo:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
@@ -4529,15 +4548,15 @@ export default function App() {
             <div style={sectionStyle}>
               <SectionTitle icon="ti-list" right={canExport?(
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button onClick={()=>exportCSV(filteredTx,"fintrack_search",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
-                  <button onClick={()=>exportExcel(filteredTx,"fintrack_search",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
-                  <button onClick={()=>exportPDF(filteredTx,"FinTrack — Search results",members)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
+                  <button onClick={()=>exportCSV(filteredTx,"fintrack_search",liveMembers)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface2,color:C.text,display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-text" aria-hidden="true"/> CSV</button>
+                  <button onClick={()=>exportExcel(filteredTx,"fintrack_search",liveMembers)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #16a34a`,borderRadius:6,background:dark?"#163524":"#16a34a14",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-spreadsheet" aria-hidden="true"/> Excel</button>
+                  <button onClick={()=>exportPDF(filteredTx,"FinTrack — Search results",liveMembers)} style={{cursor:"pointer",fontSize:12,fontWeight:500,padding:"5px 11px",border:`1px solid #dc2626`,borderRadius:6,background:dark?"#3a1515":"#dc262614",color:"#dc2626",display:"inline-flex",alignItems:"center",gap:5}}><i className="ti ti-file-type-pdf" aria-hidden="true"/> PDF</button>
                 </div>
               ):null}>Results</SectionTitle>
               {(search.bank||search.member)&&(
                 <div style={{marginBottom:12,padding:"10px 14px",background:C.accentBg,borderRadius:8,fontSize:13,border:`1px solid ${C.accent}55`,color:C.text}}>
                   Showing all history for:
-                  {search.member&&<strong style={{marginLeft:6}}>{members.find(m=>m.id===search.member)?.name}</strong>}
+                  {search.member&&<strong style={{marginLeft:6}}>{liveMembers.find(m=>m.id===search.member)?.name}</strong>}
                   {search.member&&search.bank&&<span style={{margin:"0 6px",color:C.muted}}>+</span>}
                   {search.bank&&<strong style={{marginLeft:search.member?0:6}}>{search.bank}</strong>}
                 </div>

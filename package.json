@@ -1,10 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.6.5",
+  "version": "2.6.6",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "Deleting a bank account now erases its Login PIN and VPN along with it. Until now a deleted bank kept both values stored quietly in the background — out of sight on screen, but still there. The confirmation message tells you this before you delete, and deleting a bank still doesn't touch any other account's details.",
     "Bank accounts now carry a Login PIN and a VPN of their own. Add them when you create a bank account, or use Edit on any existing card. The PIN sits behind a SHOW button so it isn't left in the open on a card that stays on screen all day, and copying a record over from Bank Details brings both fields with it.",
     "Editing a member no longer leaves a duplicate behind. Changing someone's Member ID used to add a second entry under the new ID while the old one stayed in the list — two rows for the same person, both showing the same transactions. Deleting a member sticks now as well, instead of the entry reappearing a moment later.",
     "Three members who had already been split into two entries this way have been put back together, keeping every transaction. The Member ID and name you type when editing are also trimmed now, so a stray space at the end can't quietly create a separate record.",

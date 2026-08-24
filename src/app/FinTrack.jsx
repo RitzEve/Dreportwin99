@@ -2733,7 +2733,12 @@ export default function App() {
   // Soft-delete: tag the bank deleted (with a fresh updatedAt) instead of dropping it, so the
   // newest-wins merge carries the deletion to other devices. The UI filters deleted banks out
   // (see banksLive); transaction logs still resolve a deleted bank's NAME from the full list.
-  const handleDeleteBank = (id,name) => setConfirm({message:`Delete "${name}"? This cannot be undone.`,onConfirm:()=>{setBanks(prev=>prev.map(b=>b.id===id?{...b,deleted:true,updatedAt:Date.now()}:b));setConfirm(null);}});
+  // The credentials are WIPED rather than carried along, because the tombstone itself never
+  // leaves the company blob — and that blob is downloaded whole by every session, staff
+  // included. Without this the PIN would keep being handed out after the bank was "deleted":
+  // invisible in the UI, still sitting in the data. Deletion is one-way ("cannot be undone"),
+  // so there is nothing to restore them for.
+  const handleDeleteBank = (id,name) => setConfirm({message:`Delete "${name}"? Its Login PIN and VPN are erased with it. This cannot be undone.`,onConfirm:()=>{setBanks(prev=>prev.map(b=>b.id===id?{...b,loginPin:"",vpn:"",deleted:true,updatedAt:Date.now()}:b));setConfirm(null);}});
   // Toggle a bank between active and inactive. Inactive hides it from the
   // dashboard per-bank list and the entry-form dropdowns (history is kept).
   const handleToggleBankActive = id => setBanks(prev=>prev.map(b=>{

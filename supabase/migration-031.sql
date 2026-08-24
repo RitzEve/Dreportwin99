@@ -182,11 +182,12 @@ declare
   v_after  int;
 begin
   for r in
+    -- An alias list names columns only — types are declared on the first row instead.
     select * from (values
-      ('Megabet26', '231A73105', array['M3050'], 'CHRISTY MCCONNACHY'),
-      ('Megabet26', '38A955095', array['M177'],  'Hayley Margaret greenfield'),
-      ('Mario96',   '370259688', array['M4677'], 'MELISSA CONNOR')
-    ) as f(company text, keep_id text, drop_ids text[], keep_name text)
+      ('Megabet26'::text, '231A73105'::text, array['M3050']::text[], 'CHRISTY MCCONNACHY'::text),
+      ('Megabet26',       '38A955095',       array['M177'],          'Hayley Margaret greenfield'),
+      ('Mario96',         '370259688',       array['M4677'],         'MELISSA CONNOR')
+    ) as f(company, keep_id, drop_ids, keep_name)
   loop
     select id into v_cid from public.companies where name = r.company;
     if v_cid is null then

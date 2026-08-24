@@ -201,7 +201,7 @@ export default function Login({ onAuthed }) {
         <InstallPrompt />
 
         <div style={styles.footer}>
-          Secure access · authorised accounts only · V2.6.4
+          Secure access · authorised accounts only · V2.6.5
         </div>
       </div>
     </div>

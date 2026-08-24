@@ -1371,7 +1371,7 @@ export default function App() {
   const idSuggestRef = useRef(null);
   const phoneSuggestRef = useRef(null);
 
-  const [newBank,setNewBank] = useState({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""});
+  const [newBank,setNewBank] = useState({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",loginPin:"",vpn:"",balance:""});
   const [bankError,setBankError] = useState("");
   const [bankSearch,setBankSearch] = useState(""); // Bank Accounts page: filter by holder / bank / account / PayID
   const [bankAsOfSel,setBankAsOfSel] = useState(""); // Bank Accounts page: "" = today/live, else a date → show closing balances as of that day
@@ -1792,7 +1792,7 @@ export default function App() {
   const closeEntryModal = () => { setForm({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:activeBanks[0]?.id??null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false,rate:"",buyAud:false,buyAudAmount:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowEntryModal(false); };
   // Open the entry form pre-set to a given type (shared by the type tiles + "More" drawer).
   const openEntryType = (t) => { setForm({type:t,amount:"",memberId:"",memberName:"",memberPhone:"",bankId:(t==="Bank Block"||t==="Buy/Sell AUD")?null:(activeBanks[0]?.id??null),notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false,rate:"",buyAud:false,buyAudAmount:""}); setFormError(""); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setShowMoreTypes(false); setShowEntryModal(true); };
-  const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""}); setBankError(""); setShowBankModal(false); };
+  const closeBankModal = () => { setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",loginPin:"",vpn:"",balance:""}); setBankError(""); setShowBankModal(false); };
   const closePasswordModal = () => { setPwForm({current:"",next:"",confirm:""}); setPwError(""); setPwSuccess(""); setShowPasswordModal(false); };
 
   const handleNameInput = val => {
@@ -2197,15 +2197,19 @@ export default function App() {
     const res = await api.setFrozen(bd.id,next);
     if(res.ok) setBankDetails(prev=>prev.map(b=>b.id===bd.id?{...b,frozen:next}:b));
   };
-  // Copies the record's Name/Holder/BSB/Acc/PayID/OTP link into a brand new Bank
-  // Accounts entry (opening balance $0.00) via the exact same path "+ Add bank"
+  // Copies the record's Name/Holder/BSB/Acc/PayID/OTP link/Login PIN/VPN into a brand
+  // new Bank Accounts entry (opening balance $0.00) via the exact same path "+ Add bank"
   // uses, then stamps the record as added so the card can show the badge.
+  // NOTE: Login PIN and VPN ride along from V2.6.5 on. Bank Accounts is visible to EVERY
+  // role including staff, while this page is master/manager/owner only — so copying a
+  // record here now puts those two credentials in front of staff. That is deliberate and
+  // was asked for; it is not an oversight of the role split.
   // Repeatable on purpose — the button stays enabled in case a second copy is
   // genuinely wanted (e.g. the first one was deleted from Bank Accounts).
   const handleAddBdToBankAccounts = async bd => {
     const api = window.FINTRACK_BANK_DETAILS_API;
     if(!api?.markAdded) return;   // read-only session — don't touch `banks` either
-    setBanks(prev=>[...prev,{id:Date.now(),name:bd.bankName,holder:bd.holderName,bsb:bd.bsb,account:bd.account,payid:bd.payid,otpLink:bd.otpLink,openingBalance:0,activatedAt:Date.now(),updatedAt:Date.now()}]);
+    setBanks(prev=>[...prev,{id:Date.now(),name:bd.bankName,holder:bd.holderName,bsb:bd.bsb,account:bd.account,payid:bd.payid,otpLink:bd.otpLink,loginPin:bd.loginPin||"",vpn:bd.vpn||"",openingBalance:0,activatedAt:Date.now(),updatedAt:Date.now()}]);
     const res = await api.markAdded(bd.id);
     if(res.ok) setBankDetails(prev=>prev.map(b=>b.id===bd.id?{...b,addedToBankAccountsAt:new Date().toISOString()}:b));
   };
@@ -2717,14 +2721,14 @@ export default function App() {
   const handleAddBank = () => {
     if(!newBank.name.trim()||!newBank.holder.trim()||isNaN(newBank.balance)){setBankError("Bank name, holder's name, and opening balance are required.");return;}
     setBankError("");
-    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,otpLink:newBank.otpLink,openingBalance:Number(newBank.balance),activatedAt:Date.now(),updatedAt:Date.now()}]);
-    setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""});
+    setBanks(prev=>[...prev,{id:Date.now(),name:newBank.name,holder:newBank.holder,bsb:newBank.bsb,account:newBank.account,payid:newBank.payid,otpLink:newBank.otpLink,loginPin:newBank.loginPin,vpn:newBank.vpn,openingBalance:Number(newBank.balance),activatedAt:Date.now(),updatedAt:Date.now()}]);
+    setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",loginPin:"",vpn:"",balance:""});
     setShowBankModal(false);
   };
-  const startEditBank = b => { setEditingBank(b.id); setEditBankForm({name:b.name,holder:b.holder,bsb:b.bsb||"",account:b.account||"",payid:b.payid||"",otpLink:b.otpLink||"",balance:String(b.openingBalance??0)}); setEditBankError(""); };
+  const startEditBank = b => { setEditingBank(b.id); setEditBankForm({name:b.name,holder:b.holder,bsb:b.bsb||"",account:b.account||"",payid:b.payid||"",otpLink:b.otpLink||"",loginPin:b.loginPin||"",vpn:b.vpn||"",balance:String(b.openingBalance??0)}); setEditBankError(""); };
   const handleSaveBank = id => {
     if(!editBankForm.name.trim()||!editBankForm.holder.trim()||isNaN(editBankForm.balance)){setEditBankError("Bank name, holder, and opening balance are required.");return;}
-    setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,otpLink:editBankForm.otpLink,openingBalance:Number(editBankForm.balance),updatedAt:Date.now()}:b)); setEditingBank(null);
+    setBanks(prev=>prev.map(b=>b.id===id?{...b,name:editBankForm.name,holder:editBankForm.holder,bsb:editBankForm.bsb,account:editBankForm.account,payid:editBankForm.payid,otpLink:editBankForm.otpLink,loginPin:editBankForm.loginPin,vpn:editBankForm.vpn,openingBalance:Number(editBankForm.balance),updatedAt:Date.now()}:b)); setEditingBank(null);
   };
   // Soft-delete: tag the bank deleted (with a fresh updatedAt) instead of dropping it, so the
   // newest-wins merge carries the deletion to other devices. The UI filters deleted banks out
@@ -3280,7 +3284,7 @@ export default function App() {
                   <FluidDropdown value={newBank.name} placeholder="— Select bank —" ariaLabel="Bank name"
                     options={[{value:"",label:"— Select bank —"},...BANK_CHOICES.map(b=>({value:b,label:b}))]}
                     onChange={v=>setNewBank(b=>({...b,name:v}))}/></div>
-                {[["holder","Holder's name","e.g. Company Ltd"],["bsb","BSB number (optional)","e.g. 062-000"],["account","Account number (optional)","e.g. 1234567890"],["payid","PayID (optional)","e.g. name@company.com"],["otpLink","OTP link (optional)","e.g. https://…"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
+                {[["holder","Holder's name","e.g. Company Ltd"],["bsb","BSB number (optional)","e.g. 062-000"],["account","Account number (optional)","e.g. 1234567890"],["payid","PayID (optional)","e.g. name@company.com"],["otpLink","OTP link (optional)","e.g. https://…"],["loginPin","Login PIN (optional)","e.g. 1234"],["vpn","VPN (optional)","e.g. Melbourne node"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
                   <div key={k}><label style={labelStyle}>{label}</label>
                     <input type={k==="balance"?"number":"text"} placeholder={ph} value={newBank[k]} onChange={e=>setNewBank(b=>({...b,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 ))}
@@ -4084,7 +4088,7 @@ export default function App() {
           <div>
             <div style={sectionStyle}>
               <SectionTitle icon="ti-building-bank" right={
-                <button onClick={()=>{ setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",balance:""}); setBankError(""); setShowBankModal(true); }} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
+                <button onClick={()=>{ setNewBank({name:"",holder:"",bsb:"",account:"",payid:"",otpLink:"",loginPin:"",vpn:"",balance:""}); setBankError(""); setShowBankModal(true); }} style={{cursor:"pointer",padding:"9px 20px",fontWeight:500,background:C.accent,color:C.onAccent,border:"none",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6,fontSize:14}}>
                   <i className="ti ti-plus" aria-hidden="true"/> Add bank
                 </button>
               }>Bank accounts</SectionTitle>
@@ -4117,7 +4121,7 @@ export default function App() {
                     {editingBank===b.id?(
                       <div onClick={e=>e.stopPropagation()}>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                          {[["name","Bank name"],["holder","Holder's name"],["bsb","BSB number"],["account","Account number"],["payid","PayID"],["otpLink","OTP link"],["balance","Opening balance"]].map(([k,lbl])=>(
+                          {[["name","Bank name"],["holder","Holder's name"],["bsb","BSB number"],["account","Account number"],["payid","PayID"],["otpLink","OTP link"],["loginPin","Login PIN"],["vpn","VPN"],["balance","Opening balance"]].map(([k,lbl])=>(
                             <div key={k}><label style={{fontSize:11,color:C.muted,display:"block",marginBottom:2}}>{lbl}</label>
                               <input type={k==="balance"?"number":"text"} value={editBankForm[k]} onChange={e=>setEditBankForm(f=>({...f,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box",fontSize:12,padding:"4px 8px"}}/></div>
                           ))}
@@ -4138,7 +4142,11 @@ export default function App() {
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Bank: {b.name}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
-                        <div style={{fontSize:12,color:C.muted,marginBottom:b.otpLink?6:8}}>PayID: {b.payid||"—"}</div>
+                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>PayID: {b.payid||"—"}</div>
+                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>VPN: {b.vpn||"—"}</div>
+                        {/* Same masked reveal the Bank Details page uses for its Login PIN, so the
+                            value isn't sitting in the open on a card that stays on screen all day. */}
+                        <div style={{fontSize:12,color:C.muted,marginBottom:b.otpLink?6:8,display:"flex",alignItems:"center",gap:5}}>Login PIN: <Masked value={b.loginPin}/></div>
                         {b.otpLink&&(isSafeHttpUrl(b.otpLink)
                           ? <a href={b.otpLink} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:6,padding:"3px 9px",marginBottom:8,textDecoration:"none"}}><i className="ti ti-link" aria-hidden="true"/> OTP link</a>
                           : <div style={{fontSize:12,color:C.muted,marginBottom:8,wordBreak:"break-all"}}>OTP link: {b.otpLink}</div>)}

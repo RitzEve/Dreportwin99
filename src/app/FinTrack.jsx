@@ -544,6 +544,20 @@ const BD_BLANK = Object.fromEntries(BD_FIELDS.map(k=>[k,""]));
 // The 8 fields shown on the compact card face (everything else lives in the record panel).
 const BD_CARD_FIELDS = [["phoneModel","Phone model"],["agent","Agent"],["bsb","BSB"],["account","Account"],["vpn","VPN"],["loginPin","Login PIN",true]];
 
+// One "Label value" pair for a DetailModal subtitle. The label stays quiet and the
+// value takes the body colour, so an account number reads as data rather than
+// disappearing into a grey run-on line. `mono` for digit strings (BSB / account /
+// PayID), where a tabular face makes the figures far easier to check against a
+// bank statement.
+function KV({label,value,mono}) {
+  return (
+    <span style={{whiteSpace:"nowrap"}}>
+      <span style={{color:C.muted}}>{label}: </span>
+      <span style={{color:C.text,fontWeight:500,...(mono?{fontFamily:"ui-monospace,Consolas,monospace",letterSpacing:0.2}:null)}}>{value}</span>
+    </span>
+  );
+}
+
 // Masked value with a one-tap reveal — used for every credential-shaped field
 // (Login PIN, Card PIN, Email/Internet password), both on the compact card and
 // in the full record panel. stopPropagation so tapping it never also opens/
@@ -1105,7 +1119,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summar
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:C.header,flexShrink:0}}>
           <div>
             <div style={{fontWeight:500,fontSize:17}}>{title}</div>
-            <div style={{fontSize:12,color:C.muted,marginTop:3}}>{subtitle}</div>
+            <div style={{fontSize:13.5,lineHeight:1.5,color:C.muted,marginTop:4}}>{subtitle}</div>
           </div>
           <button onClick={onClose} style={{cursor:"pointer",padding:"7px 16px",fontSize:13,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:8}}>
             <i className="ti ti-x" aria-hidden="true" style={{fontSize:15}}/> Close
@@ -2918,7 +2932,28 @@ export default function App() {
   };
   const openBankDetail = b => {
     const tx = transactions.filter(t=>txInBank(t,b)).sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time));
-    setDetailModal({title:b.name,subtitle:`Holder: ${b.holder} · BSB: ${b.bsb||"—"} · Acc: ${b.account||"—"} · PayID: ${b.payid||"—"} · ${tx.length} transactions · Balance: ${fmt(b.balance)}`,transactions:tx,yesterday:b.yBalance});
+    // Title is the HOLDER, matching the bank card itself (which has always led with
+    // the holder) — the account belongs to a person, and several accounts often share
+    // one bank name. The bank name moves into the line below so nothing is lost.
+    // The subtitle is JSX rather than a joined string so the values can carry their own
+    // weight/typeface: BSB, account and PayID are digit strings that read badly in the
+    // body face at label brightness. DetailModal renders whatever it is handed, so the
+    // other popups can go on passing plain strings.
+    setDetailModal({
+      title: b.holder || b.name,
+      subtitle: (
+        <span style={{display:"inline-flex",flexWrap:"wrap",alignItems:"baseline",columnGap:14,rowGap:2}}>
+          <KV label="Bank" value={b.name}/>
+          <KV label="BSB" value={(b.bsb||"").trim()||"—"} mono/>
+          <KV label="Acc" value={(b.account||"").trim()||"—"} mono/>
+          <KV label="PayID" value={(b.payid||"").trim()||"—"} mono/>
+          <KV label="Transactions" value={tx.length}/>
+          <KV label="Balance" value={fmt(b.balance)}/>
+        </span>
+      ),
+      transactions: tx,
+      yesterday: b.yBalance,
+    });
   };
 
   const nav = [

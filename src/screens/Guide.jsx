@@ -38,6 +38,9 @@ const SECTIONS = [
   { id: 'alltypes',    icon: 'ti-category',         roles: ['staff', 'manager', 'master'] },
   { id: 'txoptions',   icon: 'ti-checkbox',         roles: ['staff', 'manager', 'master'] },
   { id: 'members',     icon: 'ti-users',            roles: ['staff', 'manager', 'master'] },
+  // Every role sees this: the page is open to all, and the warning it powers
+  // shows up in the entry form that staff use all day.
+  { id: 'blacklist',   icon: 'ti-user-off',         roles: ['staff', 'manager', 'master'] },
   { id: 'banks',       icon: 'ti-building-bank',    roles: ['staff', 'manager', 'master'] },
   // Shown to every role: Game Kiosk Details is open to staff too, and the section
   // itself says which of the four pages are master/manager-only.
@@ -382,6 +385,35 @@ function Mockup({ id }) {
           <Pin x={214} y={42} n="2" />
           <Pin x={186} y={96} n="3" />
           <Pin x={296} y={42} n="4" />
+        </svg>
+      );
+    case 'blacklist':
+      return (
+        <svg {...svgProps}>
+          <rect x="20" y="14" width="280" height="172" rx="12" fill={cv('--surface')} stroke={cv('--border')} />
+          {/* search box + "Add to blacklist" */}
+          <rect x="36" y="26" width="120" height="18" rx="6" fill={cv('--surface-2')} stroke={cv('--border')} />
+          <rect x="228" y="26" width="56" height="18" rx="6" fill={cv('--accent')} />
+          {/* the shared table: a header, then one row per reported person */}
+          <rect x="36" y="54" width="248" height="14" rx="4" fill={cv('--header')} stroke={cv('--border')} />
+          {[0, 1, 2].map((i) => (
+            <g key={i}>
+              <rect x="36" y={72 + i * 20} width="248" height="16" rx="4" fill={i % 2 ? cv('--surface-2') : 'transparent'} />
+              <rect x="46" y={77 + i * 20} width="50" height="6" rx="3" fill={cv('--border-strong')} />
+              <rect x="110" y={77 + i * 20} width="44" height="6" rx="3" fill={cv('--border-strong')} />
+              <rect x="170" y={77 + i * 20} width="60" height="6" rx="3" fill={cv('--border-strong')} />
+            </g>
+          ))}
+          {/* the red warning that shows under a transaction's name / phone field */}
+          <rect x="36" y="140" width="248" height="30" rx="8" fill={cv('--danger')} opacity="0.16" />
+          <rect x="36" y="140" width="248" height="30" rx="8" fill="none" stroke={cv('--danger')} />
+          <circle cx="52" cy="149" r="4" fill={cv('--danger')} />
+          <rect x="64" y="146" width="90" height="6" rx="3" fill={cv('--danger')} opacity="0.85" />
+          <rect x="64" y="158" width="140" height="5" rx="2.5" fill={cv('--border-strong')} />
+          <Pin x={156} y={35} n="1" />
+          <Pin x={284} y={35} n="2" />
+          <Pin x={284} y={100} n="3" />
+          <Pin x={36} y={155} n="4" />
         </svg>
       );
     case 'search':
@@ -757,16 +789,26 @@ const T = {
         title: 'The members directory',
         intro: 'Every person you transact for is a member. The directory keeps their details and history in one place.',
         steps: [
-          'Open Members to search by name, member ID or phone number.',
+          'Open Members to search by name, member ID or phone number, and use Sort to reorder the list — newest or oldest joined, A–Z or Z–A, most transactions, or recent activity.',
           'Click a member to see their full transaction history.',
           'Add a new member when someone is not on the list yet.',
+        ],
+      },
+      blacklist: {
+        title: 'Blacklist Member',
+        intro: 'A shared list of people to be careful with. This is the one page whose information is not private to your company — it is shared with every company in your country, so what you add appears on their list and what they add appears on yours. It only works once your provider has set your company’s country.',
+        steps: [
+          'The list shows each person’s name and phone, the payment details they used (PayID, BSB and account number), the reason, and which company reported them. Search, sort and page through it like any other list.',
+          'Anyone can add someone — staff included. Fill in whatever you know, and the form warns you as you type if that phone, PayID or account number is already on the list.',
+          'Check carefully before you save: an entry can never be edited afterwards, by anyone. Only a master can remove one, and removing it is the only way to fix a wrong entry.',
+          'You do not have to check the list by hand. Type a name or phone number into a transaction and a red “On the blacklist” warning appears under the field, with the reason and who reported it. It is only a warning — it never stops you saving, because there are good reasons to pay someone out.',
         ],
       },
       banks: {
         title: 'Bank accounts & store credit',
         intro: 'Money lives in bank accounts and in store credit. Keeping these right makes your totals trustworthy.',
         steps: [
-          'Open Banks to see each account and its current balance.',
+          'Open Banks to see each account, its current balance, and the details kept with it — BSB, account number, PayID, and a Login PIN and VPN if you save those. Deleting an account erases its PIN and VPN for good.',
           'When a transaction uses a bank, choose the right one so the balance stays correct.',
           'Store credit covers unclaimed amounts — use it when a transaction draws from credit, not a bank.',
           'Click a bank’s card to open its history — the BSB, account number and PayID sit at the top. If an OTP link is saved for that account, an “OTP link” button appears on the card so you can jump straight there while you work.',
@@ -788,7 +830,7 @@ const T = {
         steps: [
           'Set any of the six filters: keyword, member, bank, from date, to date and entry type. They stack, so each one you add narrows the results further, and the count updates as you go. “Clear filters” resets them all at once.',
           'The keyword box searches the member name, member ID, bank and notes. Type a number instead and it matches the amount exactly — “1,500” finds entries of exactly 1,500, whether the money went in or out.',
-          'CSV, Excel and PDF export exactly what the filters are showing at that moment, so filter first and export second.',
+          'CSV, Excel and PDF export exactly what the filters are showing at that moment, so filter first and export second. These buttons are for master and manager only — a staff account will not see them.',
           'Set a From or To date and a row of totals appears above the results: money in, money out, the net, and the store balance. With no date set there are no totals — just the list.',
         ],
       },
@@ -803,11 +845,11 @@ const T = {
       },
       team: {
         title: 'Managing your team',
-        intro: 'Managers and masters create and manage the accounts under them, on the console.',
+        intro: 'Managers and masters create and manage the accounts under them, on the console. Both can also set the company logo, which then shows in the sidebar, the top bar and the console in place of the company name.',
         steps: [
           'In Team & accounts, fill the form to create an account. A master can add managers and staff; a manager can add staff.',
           'Each new account gets a temporary password — share it, and they change it on first sign-in.',
-          "Use a row's controls to deactivate, edit or remove an account you manage.",
+          "Each row shows whether that person is online now or when they were last seen, plus the address they last signed in from. Use the row's controls to deactivate, edit or remove an account you manage.",
         ],
       },
       roles: {
@@ -1023,16 +1065,26 @@ const T = {
         title: '会员名录',
         intro: '你为之交易的每个人都是会员。名录把他们的资料和历史集中在一处。',
         steps: [
-          '打开“会员”，按姓名、会员编号或电话号码搜索。',
+          '打开“会员”，按姓名、会员编号或电话号码搜索；用“Sort（排序）”调整顺序——最新或最早加入、A–Z 或 Z–A、交易最多，或最近活跃。',
           '点击某个会员，查看其完整交易历史。',
           '当某人还不在名单上时，添加新会员。',
+        ],
+      },
+      blacklist: {
+        title: '黑名单会员',
+        intro: '一份需要提防的人员共享名单。这是唯一一个数据不属于你公司私有的页面——它与你所在国家的每一家公司共享：你添加的会出现在他们的名单上，他们添加的也会出现在你的名单上。需要供应商先为公司设置好国家，此功能才可用。',
+        steps: [
+          '名单会显示每个人的姓名和电话、所用的收款信息（PayID、BSB 和账号）、原因，以及是哪家公司上报的。可以像其他列表一样搜索、排序和翻页。',
+          '任何人都可以添加，包括员工。把你知道的信息填上即可；输入时若该电话、PayID 或账号已在名单上，表单会立即提示。',
+          '保存前请务必核对：条目一旦保存，任何人都无法再修改。只有主管可以删除，而删除是纠正错误条目的唯一办法。',
+          '你不必手动去查这份名单。在交易中输入姓名或电话时，字段下方会出现红色的“On the blacklist（在黑名单上）”提示，并显示原因和上报公司。它只是提醒——绝不会阻止你保存，因为有些情况确实需要给对方付款。',
         ],
       },
       banks: {
         title: '银行账户与商店额度',
         intro: '资金存放在银行账户和商店额度中。把它们维护准确，你的总额才可信。',
         steps: [
-          '打开“银行”，查看每个账户及其当前余额。',
+          '打开“银行”，查看每个账户、当前余额，以及随附保存的资料——BSB、账号、PayID，若有填写还包括登录 PIN 和 VPN。删除账户时，其 PIN 和 VPN 也会被一并永久清除。',
           '当交易涉及银行时，选对账户，余额才会保持正确。',
           '商店额度用于未领取的金额——当交易从额度（而非银行）扣款时使用它。',
           '点击某个银行的卡片可打开它的交易历史——BSB、账号和 PayID 就显示在顶部。如果该账户保存了 OTP 链接，卡片上会出现“OTP link”按钮，办理业务时可直接跳转过去。',
@@ -1054,7 +1106,7 @@ const T = {
         steps: [
           '设置六个筛选条件中的任意几个：关键词、会员、银行、开始日期、结束日期和记录类型。它们会叠加，每多加一个，结果就更精确，数量也会随之实时更新。点击“Clear filters（清除筛选）”可一次全部重置。',
           '关键词框会搜索会员姓名、会员编号、银行和备注。若改为输入数字，则按金额精确匹配——输入“1,500”会找出金额正好是 1,500 的记录，无论是进账还是出账。',
-          'CSV、Excel 和 PDF 导出的正是当前筛选后显示的内容，所以请先筛选，再导出。',
+          'CSV、Excel 和 PDF 导出的正是当前筛选后显示的内容，所以请先筛选，再导出。这些按钮仅限主管和经理——员工账号看不到它们。',
           '设置开始或结束日期后，结果上方会出现一排汇总：收入、支出、净额以及商店余额。不设日期就没有汇总，只有列表。',
         ],
       },
@@ -1069,11 +1121,11 @@ const T = {
       },
       team: {
         title: '管理你的团队',
-        intro: '经理和主管在控制台上创建并管理其下属的账户。',
+        intro: '经理和主管在控制台上创建并管理其下属的账户。两者也都可以设置公司标志，设置后会在侧边栏、顶栏和控制台中代替公司名称显示。',
         steps: [
           '在“团队与账户”中填写表单创建账户。主管可添加经理和员工；经理可添加员工。',
           '每个新账户都会有一个临时密码——把它告诉对方，对方首次登录时自行修改。',
-          '使用某一行的控件，可停用、编辑或删除你所管理的账户。',
+          '每一行都会显示该成员当前是否在线，或最后一次在线的时间，以及最后一次登录所用的地址。使用该行的控件，可停用、编辑或删除你所管理的账户。',
         ],
       },
       roles: {
@@ -1289,16 +1341,26 @@ const T = {
         title: 'បញ្ជីឈ្មោះសមាជិក',
         intro: 'មនុស្សគ្រប់រូបដែលអ្នកធ្វើប្រតិបត្តិការជំនួស គឺជាសមាជិក។ បញ្ជីនេះរក្សាព័ត៌មាន និងប្រវត្តិរបស់ពួកគេនៅកន្លែងតែមួយ។',
         steps: [
-          'បើក «សមាជិក» ដើម្បីស្វែងរកតាមឈ្មោះ លេខសម្គាល់សមាជិក ឬលេខទូរស័ព្ទ។',
+          'បើក «សមាជិក» ដើម្បីស្វែងរកតាមឈ្មោះ លេខសម្គាល់សមាជិក ឬលេខទូរស័ព្ទ ហើយប្រើ «Sort» ដើម្បីរៀបលំដាប់ឡើងវិញ — ចូលរួមថ្មីបំផុត ឬចាស់បំផុត A–Z ឬ Z–A ប្រតិបត្តិការច្រើនបំផុត ឬសកម្មភាពថ្មីៗ។',
           'ចុចលើសមាជិកម្នាក់ ដើម្បីមើលប្រវត្តិប្រតិបត្តិការពេញលេញរបស់គេ។',
           'បន្ថែមសមាជិកថ្មី នៅពេលនរណាម្នាក់មិនទាន់មាននៅក្នុងបញ្ជី។',
+        ],
+      },
+      blacklist: {
+        title: 'សមាជិកបញ្ជីខ្មៅ',
+        intro: 'បញ្ជីរួមនៃមនុស្សដែលត្រូវប្រុងប្រយ័ត្ន។ នេះជាទំព័រតែមួយគត់ដែលព័ត៌មានរបស់វាមិនឯកជនចំពោះក្រុមហ៊ុនអ្នកទេ — វាត្រូវបានចែករំលែកជាមួយគ្រប់ក្រុមហ៊ុនក្នុងប្រទេសរបស់អ្នក ដូច្នេះអ្វីដែលអ្នកបន្ថែម នឹងបង្ហាញនៅលើបញ្ជីរបស់ពួកគេ ហើយអ្វីដែលពួកគេបន្ថែម ក៏បង្ហាញនៅលើបញ្ជីរបស់អ្នកដែរ។ វាដំណើរការលុះត្រាតែអ្នកផ្គត់ផ្គង់បានកំណត់ប្រទេសរបស់ក្រុមហ៊ុនរួចហើយ។',
+        steps: [
+          'បញ្ជីបង្ហាញឈ្មោះ និងលេខទូរស័ព្ទរបស់មនុស្សម្នាក់ៗ ព័ត៌មានទូទាត់ដែលបានប្រើ (PayID, BSB និងលេខគណនី) មូលហេតុ និងក្រុមហ៊ុនណាដែលបានរាយការណ៍។ អ្នកអាចស្វែងរក តម្រៀប និងបើកមើលទំព័របាន ដូចបញ្ជីដទៃទៀត។',
+          'គ្រប់គ្នាអាចបន្ថែមមនុស្សម្នាក់បាន រួមទាំងបុគ្គលិកផងដែរ។ បំពេញអ្វីដែលអ្នកដឹង ហើយទម្រង់នឹងព្រមានអ្នកភ្លាមៗ បើលេខទូរស័ព្ទ PayID ឬលេខគណនីនោះមាននៅក្នុងបញ្ជីរួចហើយ។',
+          'ពិនិត្យឱ្យបានហ្មត់ចត់មុននឹងរក្សាទុក៖ ធាតុមួយមិនអាចកែប្រែបានឡើយក្រោយពេលរក្សាទុក ទោះជានរណាក៏ដោយ។ មានតែប្រធានទេដែលអាចលុបវាបាន ហើយការលុបគឺជាមធ្យោបាយតែមួយគត់ដើម្បីកែធាតុខុស។',
+          'អ្នកមិនចាំបាច់ពិនិត្យបញ្ជីដោយដៃទេ។ វាយឈ្មោះ ឬលេខទូរស័ព្ទចូលក្នុងប្រតិបត្តិការ នោះការព្រមានពណ៌ក្រហម «On the blacklist» នឹងបង្ហាញនៅក្រោមប្រអប់នោះ ព្រមទាំងមូលហេតុ និងអ្នករាយការណ៍។ វាគ្រាន់តែជាការព្រមានប៉ុណ្ណោះ — វាមិនរារាំងអ្នកពីការរក្សាទុកទេ ព្រោះមានហេតុផលត្រឹមត្រូវខ្លះក្នុងការបើកប្រាក់ឱ្យគេ។',
         ],
       },
       banks: {
         title: 'គណនីធនាគារ និងឥណទានហាង',
         intro: 'លុយស្ថិតនៅក្នុងគណនីធនាគារ និងឥណទានហាង។ ការរក្សាឱ្យត្រឹមត្រូវ ធ្វើឱ្យចំនួនសរុបរបស់អ្នកគួរឱ្យទុកចិត្ត។',
         steps: [
-          'បើក «ធនាគារ» ដើម្បីមើលគណនីនីមួយៗ និងសមតុល្យបច្ចុប្បន្នរបស់វា។',
+          'បើក «ធនាគារ» ដើម្បីមើលគណនីនីមួយៗ សមតុល្យបច្ចុប្បន្នរបស់វា និងព័ត៌មានដែលរក្សាទុកជាមួយវា — BSB លេខគណនី PayID និង PIN ចូល ព្រមទាំង VPN បើអ្នករក្សាទុកវា។ ការលុបគណនីមួយ ក៏លុប PIN និង VPN របស់វាចោលជារៀងរហូតដែរ។',
           'នៅពេលប្រតិបត្តិការប្រើធនាគារ សូមជ្រើសឱ្យត្រូវ ដើម្បីឱ្យសមតុល្យនៅត្រឹមត្រូវ។',
           'ឥណទានហាងគ្របដណ្តប់លើចំនួនមិនទាន់ដក — ប្រើវានៅពេលប្រតិបត្តិការដកពីឥណទាន មិនមែនពីធនាគារ។',
           'ចុចលើកាតរបស់ធនាគារណាមួយ ដើម្បីបើកប្រវត្តិប្រតិបត្តិការរបស់វា — BSB លេខគណនី និង PayID ស្ថិតនៅខាងលើ។ បើមានតំណ OTP បានរក្សាទុកសម្រាប់គណនីនោះ ប៊ូតុង «OTP link» នឹងបង្ហាញនៅលើកាត ដើម្បីឱ្យអ្នកទៅដល់វាដោយផ្ទាល់ពេលកំពុងធ្វើការ។',
@@ -1320,7 +1382,7 @@ const T = {
         steps: [
           'កំណត់តម្រងណាមួយក្នុងចំណោមប្រាំមួយ៖ ពាក្យគន្លឹះ សមាជិក ធនាគារ ថ្ងៃចាប់ផ្ដើម ថ្ងៃបញ្ចប់ និងប្រភេទកំណត់ត្រា។ ពួកវាបូកបញ្ចូលគ្នា ដូច្នេះរាល់តម្រងដែលអ្នកបន្ថែម បង្រួមលទ្ធផលកាន់តែតូច ហើយចំនួនផ្លាស់ប្ដូរភ្លាមៗ។ «Clear filters» កំណត់ពួកវាឡើងវិញទាំងអស់ក្នុងពេលតែមួយ។',
           'ប្រអប់ពាក្យគន្លឹះស្វែងរកឈ្មោះសមាជិក លេខសម្គាល់សមាជិក ធនាគារ និងចំណាំ។ បើអ្នកវាយលេខវិញ វាផ្គូផ្គងចំនួនទឹកប្រាក់ដោយជាក់លាក់ — «1,500» រកឃើញកំណត់ត្រាដែលមានចំនួន 1,500 ត្រង់ៗ ទោះជាលុយចូល ឬចេញក៏ដោយ។',
-          'CSV, Excel និង PDF នាំចេញត្រឹមតែអ្វីដែលតម្រងកំពុងបង្ហាញនៅពេលនោះ ដូច្នេះត្រងជាមុនសិន រួចទើបនាំចេញ។',
+          'CSV, Excel និង PDF នាំចេញត្រឹមតែអ្វីដែលតម្រងកំពុងបង្ហាញនៅពេលនោះ ដូច្នេះត្រងជាមុនសិន រួចទើបនាំចេញ។ ប៊ូតុងទាំងនេះសម្រាប់តែប្រធាន និងអ្នកគ្រប់គ្រងប៉ុណ្ណោះ — គណនីបុគ្គលិកនឹងមិនឃើញវាទេ។',
           'កំណត់ថ្ងៃចាប់ផ្ដើម ឬថ្ងៃបញ្ចប់ នោះជួរចំនួនសរុបនឹងបង្ហាញនៅពីលើលទ្ធផល៖ ប្រាក់ចូល ប្រាក់ចេញ ចំនួនសុទ្ធ និងសមតុល្យហាង។ បើមិនកំណត់ថ្ងៃ គ្មានចំនួនសរុបទេ — មានតែបញ្ជី។',
         ],
       },
@@ -1335,11 +1397,11 @@ const T = {
       },
       team: {
         title: 'ការគ្រប់គ្រងក្រុមរបស់អ្នក',
-        intro: 'អ្នកគ្រប់គ្រង និងប្រធាន បង្កើត និងគ្រប់គ្រងគណនីនៅក្រោមខ្លួន នៅលើផ្ទាំងបញ្ជា។',
+        intro: 'អ្នកគ្រប់គ្រង និងប្រធាន បង្កើត និងគ្រប់គ្រងគណនីនៅក្រោមខ្លួន នៅលើផ្ទាំងបញ្ជា។ ទាំងពីរក៏អាចកំណត់រូបសញ្ញាក្រុមហ៊ុនបានដែរ ដែលបន្ទាប់មកបង្ហាញនៅរបារចំហៀង របារខាងលើ និងផ្ទាំងបញ្ជា ជំនួសឈ្មោះក្រុមហ៊ុន។',
         steps: [
           'នៅ «ក្រុម និងគណនី» បំពេញទម្រង់ដើម្បីបង្កើតគណនី។ ប្រធានអាចបន្ថែមអ្នកគ្រប់គ្រង និងបុគ្គលិក រីឯអ្នកគ្រប់គ្រងអាចបន្ថែមបុគ្គលិក។',
           'គណនីថ្មីនីមួយៗទទួលបានពាក្យសម្ងាត់បណ្ដោះអាសន្ន — ប្រាប់គេ ហើយគេនឹងប្ដូរវានៅពេលចូលលើកដំបូង។',
-          'ប្រើឧបករណ៍បញ្ជានៅជួរនីមួយៗ ដើម្បីផ្អាក កែ ឬលុបគណនីដែលអ្នកគ្រប់គ្រង។',
+          'ជួរនីមួយៗបង្ហាញថាតើមនុស្សនោះកំពុងលើបណ្ដាញឥឡូវនេះ ឬពេលណាដែលឃើញគេចុងក្រោយ ព្រមទាំងអាសយដ្ឋានដែលគេចូលចុងក្រោយ។ ប្រើឧបករណ៍បញ្ជានៅជួរនីមួយៗ ដើម្បីផ្អាក កែ ឬលុបគណនីដែលអ្នកគ្រប់គ្រង។',
         ],
       },
       roles: {

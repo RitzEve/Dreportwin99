@@ -327,7 +327,8 @@ export async function setCompanyLogo(companyId, logo) {
   return { ok: true };
 }
 
-/** Master sets (or clears) their OWN company's logo (via a SECURITY DEFINER function). */
+/** Master or manager sets (or clears) their OWN company's logo (via a SECURITY DEFINER
+ *  function; manager was added in migration-032, which also caps the value at 512 kB). */
 export async function setOwnCompanyLogo(logo) {
   const me = await getCurrentUser();
   if (!me) return { ok: false, error: 'Not signed in.' };

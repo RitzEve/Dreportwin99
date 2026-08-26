@@ -137,7 +137,11 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
           <button className="btn btn-primary">Open <i className="ti ti-arrow-right" aria-hidden="true" /></button>
         </section>
 
-        {user.role === ROLES.MASTER && <CompanyLogo company={company} />}
+        {/* Logo: master OR manager (migration-032). The real gate is set_company_logo,
+            which pins the update to the caller's OWN company_id — this condition only
+            decides whether the card is drawn. Timezone stays master-only on purpose:
+            changing it re-buckets which day every existing transaction falls in. */}
+        {(user.role === ROLES.MASTER || user.role === ROLES.MANAGER) && <CompanyLogo company={company} />}
         {user.role === ROLES.MASTER && <CompanyTimezone company={company} />}
         <MyNationality user={user} onSaved={refresh} />
 

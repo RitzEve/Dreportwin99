@@ -5,6 +5,7 @@ import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
+import { suggestMembersByName } from "../lib/nameMatch.js";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -1811,7 +1812,15 @@ export default function App() {
 
   const handleNameInput = val => {
     setForm(f=>({...f,memberName:val})); setSuggestIndex(-1); setIdSuggestions([]); setPhoneSuggestions([]);
-    setNameSuggestions(val.length>0 ? liveMembers.filter(m=>m.name.toLowerCase().includes(val.toLowerCase())) : []);
+    // Ranked rather than a plain substring filter — a name pasted out of the
+    // casino backend often arrives with a character fused to the first word
+    // ("GMONIQUE FEDERICO WILLIS"), which the old filter matched to nothing at
+    // all. See lib/nameMatch.js for the tiers. `_tier` rides along on a copy so
+    // the row can mark inexact matches; everything downstream still reads a
+    // plain member (name / id / phone), so selectMember is untouched.
+    setNameSuggestions(val.length>0
+      ? suggestMembersByName(val, liveMembers).map(x=>({...x.m,_tier:x.tier}))
+      : []);
   };
   const handleIdInput = val => {
     setForm(f=>({...f,memberId:val})); setSuggestIndex(-1); setNameSuggestions([]); setPhoneSuggestions([]);
@@ -3663,7 +3672,13 @@ export default function App() {
                       {nameSuggestions.map((m,idx)=>(
                         <div key={m.id} onMouseDown={()=>selectMember(m)} onMouseEnter={()=>setSuggestIndex(idx)} style={{padding:"10px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.border}`,background:idx===suggestIndex?C.surface2:C.bg,color:C.text}}>
                           <span style={{fontWeight:500}}><i className="ti ti-user" aria-hidden="true" style={{fontSize:14,marginRight:6,color:C.accent}}/>{m.name}</span>
-                          <span style={{color:C.muted,fontSize:11,background:C.surface2,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{m.id}</span>
+                          <span style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                            {/* Marks a row that is NOT a straight match on what was typed, so
+                                a near-miss can't be mistaken for the name in the box. Worth the
+                                pixel here: picking the wrong person files real money against them. */}
+                            {m._tier<3&&<span style={{color:C.muted,fontSize:10,fontStyle:"italic"}}>similar</span>}
+                            <span style={{color:C.muted,fontSize:11,background:C.surface2,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{m.id}</span>
+                          </span>
                         </div>
                       ))}
                     </div>

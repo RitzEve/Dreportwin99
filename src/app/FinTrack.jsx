@@ -5,7 +5,7 @@ import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
-import { suggestMembersByName } from "../lib/nameMatch.js";
+import { suggestMembersByName, suggestMembersByPhone } from "../lib/memberMatch.js";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -1815,7 +1815,7 @@ export default function App() {
     // Ranked rather than a plain substring filter — a name pasted out of the
     // casino backend often arrives with a character fused to the first word
     // ("GMONIQUE FEDERICO WILLIS"), which the old filter matched to nothing at
-    // all. See lib/nameMatch.js for the tiers. `_tier` rides along on a copy so
+    // all. See lib/memberMatch.js for the tiers. `_tier` rides along on a copy so
     // the row can mark inexact matches; everything downstream still reads a
     // plain member (name / id / phone), so selectMember is untouched.
     setNameSuggestions(val.length>0
@@ -1828,7 +1828,10 @@ export default function App() {
   };
   const handlePhoneInput = val => {
     setForm(f=>({...f,memberPhone:val})); setSuggestIndex(-1); setNameSuggestions([]); setIdSuggestions([]);
-    setPhoneSuggestions(val.length>0 ? liveMembers.filter(m=>(m.phone||"").toLowerCase().includes(val.toLowerCase())) : []);
+    // Matched on DIGITS, not the string as typed: "0412 345 678" stored against
+    // "0412345678" typed shared no character run at all, because the spaces sit
+    // in the middle of the number. See lib/memberMatch.js.
+    setPhoneSuggestions(val.length>0 ? suggestMembersByPhone(val, liveMembers).map(x=>x.m) : []);
   };
   // Picking any suggestion fills the member's name + ID + phone, and closes all lists.
   const selectMember = m => { setForm(f=>({...f,memberName:m.name,memberId:m.id,memberPhone:m.phone||""})); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setSuggestIndex(-1); };

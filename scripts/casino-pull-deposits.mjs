@@ -55,12 +55,20 @@
 // ============================================================================
 
 // ---- Brand profiles --------------------------------------------------------
-// apiUrl/merchantId here are defaults; anything in .env overrides them.
+// apiUrl here is a default; anything in .env overrides it.
+//
+// merchantId is DELIBERATELY null for every brand -- it must come from .env.
+// Do not be tempted to read it off the MANAGE API page: the field there is
+// "Grant Access To Master BO", which is the merchant a key is granted access
+// TO, not the merchant the brand IS. They are different numbers, and getting
+// it wrong does not throw -- the API happily returns a DIFFERENT merchant's
+// transactions, which would then be filed into a DRW company as if they were
+// yours. Get this value from the brand's own account details.
 const PROFILES = {
   megabet: {
     label: 'MegaBet26',
     apiUrl: 'https://jkaswn9.u55y38.com/api/v1/index.php',
-    merchantId: '18159',              // "Grant Access To Master BO" on the API page
+    merchantId: null,
     urlVerified: false,               // host confirmed; /api/v1 path assumed, same platform
   },
   xmen9: {
@@ -248,6 +256,27 @@ async function fetchAll(range) {
 }
 
 // ---- reporting -------------------------------------------------------------
+
+// Every transaction carries the merchant it belongs to. If that does not match
+// the merchantId we asked with, we are looking at someone else's data -- say so
+// loudly rather than quietly importing it. Returns true if anything looks off.
+function merchantMismatch(rows) {
+  const seen = [...new Set(rows.map((t) => String(t.merchantId ?? '')).filter(Boolean))];
+  if (!seen.length) return false;
+
+  const asked = String(CONFIG.merchantId);
+  const foreign = seen.filter((m) => m !== asked);
+  if (!foreign.length) return false;
+
+  console.log('\n  !! MERCHANT MISMATCH');
+  console.log(`     asked for merchantId ${asked}`);
+  console.log(`     but these rows belong to: ${seen.join(', ')}`);
+  console.log('     These transactions are not this brand\'s. Do NOT run --live.');
+  console.log('     Check the merchant id -- note the MANAGE API page\'s');
+  console.log('     "Grant Access To Master BO" is a DIFFERENT number.\n');
+  return true;
+}
+
 function surveyReport(rows) {
   console.log('\n=== WHAT ' + PROFILE.label.toUpperCase() + ' ACTUALLY RETURNED ===\n');
 
@@ -266,6 +295,10 @@ function surveyReport(rows) {
   for (const [k, v] of Object.entries(byStatus).sort((a, b) => b[1] - a[1])) {
     console.log(`    ${pad(k, 26)} ${String(v).padStart(6)}`);
   }
+
+  const merchants = [...new Set(rows.map((t) => t.merchantId).filter(Boolean))];
+  console.log(`\n  merchantId on the returned rows: ${merchants.join(', ') || '(none)'}`);
+  merchantMismatch(rows);
 
   console.log(`
   READ THIS CAREFULLY:
@@ -319,12 +352,25 @@ function dryRunReport(rows, range) {
   const total = rows.reduce((s, t) => s + Number(t.cash || 0), 0);
   console.log('\n  ' + '-'.repeat(100));
   console.log(`  total value: ${money(total)}`);
+
+  if (merchantMismatch(rows)) return;
+
   console.log(`\n  WOULD insert ${rows.length} rows into gateway_events as '${BRAND}:<id>' (status 'pending').`);
   console.log('  Re-run with --live once these numbers look right.\n');
 }
 
 // ---- the live write --------------------------------------------------------
 async function writeToInbox(rows) {
+  // Refuse, do not merely warn. Importing another merchant's transactions into
+  // a tenant's books is not something to leave to whether anyone read a warning.
+  if (merchantMismatch(rows)) {
+    fail(
+      'Refusing to write: the returned rows do not all belong to merchant '
+        + CONFIG.merchantId + '.',
+      'Fix the merchant id and re-run the dry run first.',
+    );
+  }
+
   requireConfig(['companyId', 'gatewayId']);
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     fail('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in your .env.');

@@ -48,8 +48,14 @@
 //
 //    MEGABET_CASINO_ACCESS_ID     / CASINO_ACCESS_ID
 //    MEGABET_CASINO_ACCESS_TOKEN  / CASINO_ACCESS_TOKEN
-//    MEGABET_CASINO_MERCHANT_ID   / CASINO_MERCHANT_ID  (profile default if unset)
+//    MEGABET_CASINO_MERCHANT_ID   / CASINO_MERCHANT_ID  (OPTIONAL - see below)
 //    MEGABET_CASINO_API_URL       / CASINO_API_URL      (profile default if unset)
+//
+//  merchantId is optional. The docs list it as "Required" in every parameter
+//  table but then say "if possible, please add a merchantId param" -- the key
+//  already identifies its merchant. Leave it unset on the first run and the
+//  report prints the merchant the rows actually came back with. That is the
+//  real merchant id, straight from the data, with nothing guessed.
 //    MEGABET_DRW_COMPANY_ID       / DRW_COMPANY_ID      (--live only)
 //    MEGABET_DRW_GATEWAY_ID       / DRW_GATEWAY_ID      (--live only)
 // ============================================================================
@@ -174,7 +180,14 @@ async function fetchPage(pageIndex, range) {
   form.append('module', SETTINGS.module);
   form.append('accessId', CONFIG.accessId);
   form.append('accessToken', CONFIG.accessToken);
-  form.append('merchantId', CONFIG.merchantId);
+  // Optional on purpose. The docs list merchantId as "Required" in the
+  // parameter table but the note above the operations says "if possible,
+  // please add a merchantId param" -- i.e. the key itself already identifies
+  // the merchant. Omitting it is therefore the safe default: better to let the
+  // key speak for itself than to guess a number and silently pull someone
+  // else's books. Run once without it and the report prints the merchant the
+  // rows actually came back with -- that is your real merchant id.
+  if (CONFIG.merchantId) form.append('merchantId', CONFIG.merchantId);
   form.append('pageIndex', String(pageIndex));
   form.append('sDate', range.sDate);
   form.append('eDate', range.eDate);
@@ -263,6 +276,22 @@ async function fetchAll(range) {
 function merchantMismatch(rows) {
   const seen = [...new Set(rows.map((t) => String(t.merchantId ?? '')).filter(Boolean))];
   if (!seen.length) return false;
+
+  // Nothing was asked for, so nothing can disagree. But if more than one
+  // merchant came back, this key reaches across merchants and the rows must
+  // not be filed under a single DRW company unexamined.
+  if (!CONFIG.merchantId) {
+    if (seen.length > 1) {
+      console.log('\n  !! MORE THAN ONE MERCHANT IN THESE RESULTS');
+      console.log(`     rows belong to: ${seen.join(', ')}`);
+      console.log('     This key spans merchants. Set the merchant id for this');
+      console.log('     brand before importing, or you will mix two sets of books.\n');
+      return true;
+    }
+    console.log(`\n  This key's merchant id is ${seen[0]}  <-- put this in .env as `
+      + `${BRAND.toUpperCase()}_CASINO_MERCHANT_ID`);
+    return false;
+  }
 
   const asked = String(CONFIG.merchantId);
   const foreign = seen.filter((m) => m !== asked);
@@ -410,14 +439,14 @@ async function writeToInbox(rows) {
 
 // ---- main ------------------------------------------------------------------
 (async () => {
-  requireConfig(['accessId', 'accessToken', 'merchantId']);
+  requireConfig(['accessId', 'accessToken']);
 
   const range = dateRange(DAYS);
 
   console.log('');
   console.log(`  ${SURVEY ? 'SURVEY' : LIVE ? 'LIVE' : 'DRY RUN'}  -  ${PROFILE.label} deposit puller`);
   console.log(`  ${CONFIG.apiUrl}${PROFILE.urlVerified ? '' : '   (URL unverified for this brand)'}`);
-  console.log(`  merchant ${CONFIG.merchantId}`);
+  console.log(`  merchant ${CONFIG.merchantId ?? '(not set - letting the key identify itself)'}`);
   console.log(`  window ${range.sDate} -> ${range.eDate}\n`);
 
   const rows = await fetchAll(range);

@@ -42,6 +42,16 @@
 //  Leave the "Show ... mobile / bank account / email" boxes off unless you
 //  actually need those fields to match a deposit.
 //
+//  THE IP WHITELIST IS MANDATORY. Confirmed by trying: submitting the form
+//  with the IP Address field empty is rejected with "Invalid API IP". So this
+//  script must run from an address you have whitelisted on the key, which
+//  rules out the usual serverless hosts -- Supabase edge functions, Netlify
+//  functions and GitHub Actions all have changing egress IPs.
+//
+//  For testing, whitelist the machine you run this from (check its address at
+//  https://api.ipify.org). For unattended scheduled runs you need a host with
+//  a fixed IP. A 403 from the casino almost always means the address changed.
+//
 //  Put the values in .env (gitignored). The per-brand variable wins and the
 //  plain one is the fallback, so one .env can hold several brands. The brand
 //  name goes FIRST -- for --brand=megabet:

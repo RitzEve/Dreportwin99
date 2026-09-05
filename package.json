@@ -1,10 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.7.1",
+  "version": "2.7.2",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "The Search page's Keyword box now finds names the same forgiving way the entry form does. Pasting \"GMONIQUE FEDERICO WILLIS\" into Keyword used to return nothing even though \"Monique Federico Willis\" had plenty of history; now it brings that history up, and it copes with a missing middle name, first and last swapped, hyphens and extra spaces too. Nothing you could find before has stopped being findable — the change only ever adds results. Searching by ID, bank, notes or an exact amount works exactly as it did.",
     "Searching for a member by phone number now ignores how the number is written. Almost every number on file is stored in the international form (61…), so typing it the ordinary way — 0412 345 678 — used to find nobody at all, and you had to know to type 61 first. Now 0412 345 678, 0412345678, +61 412 345 678 and 61412345678 all find the same person, and spaces, dashes or brackets no longer matter. Typing just the first few digits, or a run from the middle, still works as before.",
     "Searching for a member by name is far more forgiving. Pasting a name that came through with a stray character stuck to it — \"GMONIQUE FEDERICO WILLIS\" instead of \"Monique Federico Willis\" — used to find nothing at all, so the entry got filed under a brand new name and the member ended up with two records. Now the real member comes up. It also copes with a missing middle name, first and last swapped around, a hyphen, an extra space, or a full stop on the end. Anything that isn't an exact match on what you typed is labelled \"similar\" so you can see at a glance which row is the straight match, and the closest match is always listed first.",
     "The popup that opens when you click a bank card now leads with the account HOLDER's name instead of the bank name, matching the card itself — several accounts often share one bank. The bank name moves to the line just below it, so nothing is lost. That line is also bigger now, and the BSB, account number and PayID are set in a clearer figure typeface so they are easier to check against a statement. The member popup's detail line got the same size increase.",

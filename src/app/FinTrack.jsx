@@ -5,7 +5,7 @@ import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
-import { suggestMembersByName, suggestMembersByPhone } from "../lib/memberMatch.js";
+import { suggestMembersByName, suggestMembersByPhone, matchMemberName, nameTokens } from "../lib/memberMatch.js";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -1782,9 +1782,35 @@ export default function App() {
     // comes from the entry type. A non-numeric keyword leaves amtQuery null (text only).
     const numTerm = term.replace(/[,\s]/g,"");
     const amtQuery = numTerm!=="" && !isNaN(Number(numTerm)) ? Math.abs(Number(numTerm)) : null;
+    /*
+     * The member-NAME half of the keyword uses the same forgiving matcher as the
+     * entry form, so a pasted "GMONIQUE FEDERICO WILLIS" finds the same history
+     * that "Monique Federico Willis" does. It can only ever ADD results — the
+     * matcher's top tier IS the old substring test — so nothing that used to be
+     * found stops being found.
+     *
+     * ID / bank / notes deliberately keep the plain substring test. Notes are free
+     * prose, where word-level matching would drag in unrelated entries, and this
+     * page sums money over whatever is showing.
+     *
+     * Speed matters here in a way it doesn't in the dropdown: this runs over EVERY
+     * transaction on every keystroke, and the biggest company is past 14k. For a
+     * one-word keyword the matcher provably collapses to a two-way substring (its
+     * word-level tier needs two words on both sides), so that case is done inline
+     * and 14k names never get tokenised.
+     */
+    const nTerm = normalizeName(term);
+    const termIsMultiWord = nameTokens(term).length >= 2;
+    const nameHit = v => {
+      if (termIsMultiWord) return matchMemberName(term, v).tier > 0;
+      const s = normalizeName(v);
+      // `s &&` matters: without it an empty member name makes term.includes("")
+      // true and every blank-name entry matches.
+      return !!s && (s.includes(nTerm) || nTerm.includes(s));
+    };
     return transactions.filter(t=>{
-      // Keyword matches name / ID / bank / notes (text, substring) OR the exact amount.
-      const matchTerm = !term || [t.memberId,t.memberName,t.bank,t.notes].some(v=>String(v||"").toLowerCase().includes(term)) || (amtQuery!==null && Math.abs(Number(t.amount)||0)===amtQuery);
+      // Keyword matches name (forgiving) / ID / bank / notes (substring) OR the exact amount.
+      const matchTerm = !term || nameHit(t.memberName) || [t.memberId,t.bank,t.notes].some(v=>String(v||"").toLowerCase().includes(term)) || (amtQuery!==null && Math.abs(Number(t.amount)||0)===amtQuery);
       const matchFrom = !search.dateFrom||t.date>=search.dateFrom;
       const matchTo = !search.dateTo||t.date<=search.dateTo;
       const matchType = !search.type||t.type===search.type;

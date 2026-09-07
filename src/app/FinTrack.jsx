@@ -5,7 +5,7 @@ import useIsMobile from "../lib/useIsMobile.js";
 import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
-import { suggestMembersByName, suggestMembersByPhone, matchMemberName, nameTokens } from "../lib/memberMatch.js";
+import { suggestMembersByName, suggestMembersByPhone, matchMemberName, matchMemberPhone, nameTokens } from "../lib/memberMatch.js";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -3023,7 +3023,27 @@ export default function App() {
   const memberFiltered = useMemo(()=>{
     const q = memberSearch.trim().toLowerCase();
     if(!q) return liveMembers;
-    return liveMembers.filter(m=>(m.name||"").toLowerCase().includes(q)||(m.id||"").toLowerCase().includes(q)||(m.phone||"").toLowerCase().includes(q));
+    // Name and phone run through the same forgiving matchers the entry form and
+    // the Search page use, so looking someone up behaves identically wherever you
+    // do it: a pasted "GMONIQUE FEDERICO WILLIS" finds "Monique Federico Willis",
+    // and 0412 345 678 finds a number stored the international way. Strictly
+    // additive — both matchers keep the old substring test as their lowest tier,
+    // so nothing that used to be findable stops being findable.
+    const nQ = normalizeName(q);
+    const termIsMultiWord = nameTokens(q).length >= 2;
+    const nameHit = v => {
+      // One word can never reach the word-agreement tier (it needs two words on
+      // BOTH sides), so it provably collapses to a two-way substring. Inlined
+      // rather than calling the matcher: same answer, no tokenising per member.
+      if(termIsMultiWord) return matchMemberName(q, v).tier > 0;
+      const s = normalizeName(v);
+      // `s &&` matters: without it nQ.includes("") is true and every member with
+      // no name recorded matches every search.
+      return !!s && (s.includes(nQ) || nQ.includes(s));
+    };
+    // ID keeps the plain substring test on purpose — it is an exact identifier,
+    // not prose, and partial IDs are how staff actually search it.
+    return liveMembers.filter(m=>nameHit(m.name)||(m.id||"").toLowerCase().includes(q)||matchMemberPhone(q,m.phone).tier>0);
   },[liveMembers,memberSearch]);
   // Members are appended as they're added, so a member's index in `members` is its join
   // ORDER. Every sort reuses that index as a stable tiebreaker — and for the joined

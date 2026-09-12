@@ -1355,6 +1355,60 @@ export default function App() {
   // other side on the next save. `members` therefore stays the full array (that's what
   // gets saved); everything that reads or displays members uses `liveMembers`.
   const liveMembers = useMemo(()=>members.filter(m=>!m.deleted),[members]);
+
+  /*
+   * Which transactions belong to which member, built ONCE per data change.
+   * Declared up here beside liveMembers because BOTH the Search page filter and
+   * the Members page read it, and Search runs first.
+   *
+   * The member ID is the real link. The NAME is a fallback for transactions filed
+   * before a member's ID changed -- the V2.6.x member-edit bug left transactions
+   * carrying a superseded ID, and those are only reachable by name now.
+   *
+   * That fallback used to be an exact `===`, which silently dropped any
+   * transaction whose name differed by capitalisation or spacing. Measured on
+   * 2026-09-11: 46 real transactions across two companies, $2,928 of deposits,
+   * missing from their member's totals. Everything else in the app already
+   * normalises; this was the last exact name comparison left.
+   *
+   * Deliberately NOT fuzzy. This decides whose money a transaction counts as, so
+   * "close enough" would credit the wrong person -- case and spacing only, the
+   * same line lib/memberMatch.js draws against the blacklist warning.
+   *
+   * An EMPTY name never matches. The old `===` made a member with no name match
+   * every transaction with no name; there are no nameless members today but 276
+   * such transactions, so one nameless member would have swallowed all 276 at
+   * once. That is a collision, not a link.
+   *
+   * Shape matters as much as correctness here: the five call sites each used to
+   * scan every transaction per member, which is 869 x 15,018 on the biggest
+   * company. Normalising inside that loop measured 8.5 SECONDS. Building the
+   * index once is 11ms, and reads are a Map lookup -- faster than the 125ms the
+   * exact-match version already cost.
+   */
+  const memberTxIndex = useMemo(()=>{
+    const byId = new Set(), byName = new Map();
+    for(const m of liveMembers){
+      byId.add(m.id);
+      const n = normalizeName(m.name);
+      // Two members really can share a name; both must keep getting the transaction.
+      if(n){ const a = byName.get(n); a ? a.push(m.id) : byName.set(n,[m.id]); }
+    }
+    const out = new Map();
+    const push = (id,t)=>{ const a = out.get(id); a ? a.push(t) : out.set(id,[t]); };
+    for(const t of transactions){
+      let hitId = null;
+      if(byId.has(t.memberId)){ push(t.memberId,t); hitId = t.memberId; }
+      const ids = byName.get(normalizeName(t.memberName));
+      // `id!==hitId` stops a transaction matching on BOTH id and name counting twice.
+      if(ids) for(const id of ids) if(id!==hitId) push(id,t);
+    }
+    return out;
+  },[liveMembers,transactions]);
+  // Transactions for one member, newest-relevant callers filter `deleted` themselves.
+  // Returns a fresh array: the index's own arrays must never be sorted in place.
+  const txOf = m => memberTxIndex.get(m.id) || [];
+
   const [nextId,setNextId] = useState(1);
   const [offDays,setOffDays] = useState([]);
   const [offForm,setOffForm] = useState({employeeId:"",reason:""});
@@ -1808,6 +1862,18 @@ export default function App() {
       // true and every blank-name entry matches.
       return !!s && (s.includes(nTerm) || nTerm.includes(s));
     };
+    /*
+     * The Member dropdown stores a member ID (`String(m.id)`), so the old test
+     * `t.memberName===search.member` compared a NAME against an ID and could never
+     * fire -- Search was matching on the raw ID alone, and so missed transactions
+     * that only reach their member by name. Resolve the selection through the same
+     * index the Members page uses, so both screens show one member the same rows.
+     *
+     * The `t.memberId===search.member` fallback below keeps this a strict superset:
+     * if a member is deleted while their filter is still applied they drop out of
+     * the index, and without it their rows would silently vanish from the results.
+     */
+    const selMemberTx = search.member ? new Set(memberTxIndex.get(search.member) || []) : null;
     return transactions.filter(t=>{
       // Keyword matches name (forgiving) / ID / bank / notes (substring) OR the exact amount.
       const matchTerm = !term || nameHit(t.memberName) || [t.memberId,t.bank,t.notes].some(v=>String(v||"").toLowerCase().includes(term)) || (amtQuery!==null && Math.abs(Number(t.amount)||0)===amtQuery);
@@ -1815,10 +1881,10 @@ export default function App() {
       const matchTo = !search.dateTo||t.date<=search.dateTo;
       const matchType = !search.type||t.type===search.type;
       const matchBank = !search.bank||(selBank?txInBank(t,selBank):false);
-      const matchMember = !search.member||(t.memberId===search.member||t.memberName===search.member);
+      const matchMember = !selMemberTx||selMemberTx.has(t)||t.memberId===search.member;
       return matchTerm&&matchFrom&&matchTo&&matchType&&matchBank&&matchMember;
     }).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  },[transactions,search,banks]);
+  },[transactions,search,banks,memberTxIndex]);
   // Money in/out + store balance for whatever the Search filters currently show.
   // "As of" the To date (or From, or today) drives the store closing balance.
   const searchSummary = useMemo(()=>{
@@ -2936,57 +3002,6 @@ export default function App() {
     if(!newMember.id.trim()) setNextId(n=>n+1);
     setNewMember({name:"",phone:"",id:""}); setNewMemberError(""); setShowMemberModal(false);
   };
-
-  /*
-   * Which transactions belong to which member, built ONCE per data change.
-   *
-   * The member ID is the real link. The NAME is a fallback for transactions filed
-   * before a member's ID changed -- the V2.6.x member-edit bug left transactions
-   * carrying a superseded ID, and those are only reachable by name now.
-   *
-   * That fallback used to be an exact `===`, which silently dropped any
-   * transaction whose name differed by capitalisation or spacing. Measured on
-   * 2026-09-11: 46 real transactions across two companies, $2,928 of deposits,
-   * missing from their member's totals. Everything else in the app already
-   * normalises; this was the last exact name comparison left.
-   *
-   * Deliberately NOT fuzzy. This decides whose money a transaction counts as, so
-   * "close enough" would credit the wrong person -- case and spacing only, the
-   * same line lib/memberMatch.js draws against the blacklist warning.
-   *
-   * An EMPTY name never matches. The old `===` made a member with no name match
-   * every transaction with no name; there are no nameless members today but 276
-   * such transactions, so one nameless member would have swallowed all 276 at
-   * once. That is a collision, not a link.
-   *
-   * Shape matters as much as correctness here: the five call sites each used to
-   * scan every transaction per member, which is 869 x 15,018 on the biggest
-   * company. Normalising inside that loop measured 8.5 SECONDS. Building the
-   * index once is 11ms, and reads are a Map lookup -- faster than the 125ms the
-   * exact-match version already cost.
-   */
-  const memberTxIndex = useMemo(()=>{
-    const byId = new Set(), byName = new Map();
-    for(const m of liveMembers){
-      byId.add(m.id);
-      const n = normalizeName(m.name);
-      // Two members really can share a name; both must keep getting the transaction.
-      if(n){ const a = byName.get(n); a ? a.push(m.id) : byName.set(n,[m.id]); }
-    }
-    const out = new Map();
-    const push = (id,t)=>{ const a = out.get(id); a ? a.push(t) : out.set(id,[t]); };
-    for(const t of transactions){
-      let hitId = null;
-      if(byId.has(t.memberId)){ push(t.memberId,t); hitId = t.memberId; }
-      const ids = byName.get(normalizeName(t.memberName));
-      // `id!==hitId` stops a transaction matching on BOTH id and name counting twice.
-      if(ids) for(const id of ids) if(id!==hitId) push(id,t);
-    }
-    return out;
-  },[liveMembers,transactions]);
-  // Transactions for one member, newest-relevant callers filter `deleted` themselves.
-  // Returns a fresh array: the index's own arrays must never be sorted in place.
-  const txOf = m => memberTxIndex.get(m.id) || [];
 
   const memberRows = () => liveMembers.map(m=>{
     const mTx = txOf(m).filter(t=>!t.deleted);

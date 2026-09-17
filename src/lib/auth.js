@@ -15,6 +15,7 @@
  */
 
 import { supabase, makeSignupClient } from './supabaseClient.js';
+import { bankTermsFor } from './banks.js';
 
 export const ROLES = { PROVIDER: 'provider', SUB_PROVIDER: 'sub-provider', MASTER: 'master', MANAGER: 'manager', STAFF: 'staff', OWNER: 'owner' };
 
@@ -1200,15 +1201,20 @@ export async function listBlacklistMembers() {
  * means nothing to the person filling in the form — translate it into the field
  * they need to look at. Name and phone are deliberately NOT unique (one person
  * uses several aliases and numbers), so there is nothing to translate for those.
+ *
+ * `country` picks the words (Singapore says PayNow / bank-branch code). The
+ * entry's own country is the right one: RLS only lets a company insert into its
+ * own country's pool, so by the time a unique index can object, the two match.
  */
-function blacklistDuplicateError(error) {
+function blacklistDuplicateError(error, country) {
+  const t = bankTermsFor(country);
   const m = error?.message || String(error || '');
   if (!/duplicate key|unique constraint/i.test(m)) return null;
   if (/blacklist_members_payid_uniq/i.test(m)) {
-    return 'That PayID is already on the blacklist — search the list for it to see the existing entry.';
+    return `That ${t.payid} is already on the blacklist — search the list for it to see the existing entry.`;
   }
   if (/blacklist_members_account_uniq/i.test(m)) {
-    return 'That BSB and account number are already on the blacklist — search the list for the account number to see the existing entry.';
+    return `That ${t.bsbInline} and account number are already on the blacklist — search the list for the account number to see the existing entry.`;
   }
   return null;
 }
@@ -1240,7 +1246,7 @@ export async function addBlacklistMember(fields) {
   const { data, error } = await supabase.from('blacklist_members').insert(row).select().single();
   if (error) {
     if (isBlacklistMissing(error)) return { ok: false, error: BLACKLIST_SETUP_ERROR };
-    const dup = blacklistDuplicateError(error);
+    const dup = blacklistDuplicateError(error, fields.country);
     // Must be checked BEFORE friendly(), which maps any "duplicate key" to
     // "That email is already in use." — true for the signup path it was written
     // for, nonsense here.

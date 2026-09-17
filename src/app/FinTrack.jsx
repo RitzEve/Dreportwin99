@@ -6,7 +6,7 @@ import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
 import { suggestMembersByName, suggestMembersByPhone, matchMemberName, matchMemberPhone, nameTokens } from "../lib/memberMatch.js";
-import { bankOptionsFor } from "../lib/banks.js";
+import { bankOptionsFor, bankTermsFor, relabelBankTerm } from "../lib/banks.js";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -43,6 +43,12 @@ const SESSION_DEFAULT = {
   operatorName: "Operator",
 };
 const readSession = () => (typeof window!=="undefined" && window.FINTRACK_SESSION) || SESSION_DEFAULT;
+// BSB / PayID in the company's own terms (lib/banks.js -- Singapore says
+// "Bank/branch code" and "PayNow"). Read from the LIVE session at render time:
+// the label tables further down are built once at module load, so baking the
+// words in there would freeze them on whichever company signed in first.
+const bankTerms = () => bankTermsFor(readSession().country);
+const relabel = label => relabelBankTerm(label, readSession().country);
 
 // The company's real accounts (master/manager/staff), used to build the shift
 // roster cards and the off-day counts — read fresh per mount, same reason as
@@ -441,7 +447,7 @@ function BlDuplicateNotice({hit, field, blocking}) {
         {" — "}under <strong>{hit.name}</strong>{hit.reason?`: ${hit.reason}`:""}
         <span style={{display:"block",marginTop:2,color:C.muted}}>
           {blocking
-            ? "Saving will be refused. Each PayID and bank account can only appear once."
+            ? `Saving will be refused. Each ${bankTerms().payid} and bank account can only appear once.`
             : "You can still save — the same person is often reported under more than one name."}
           {hit.addedByCompany?` Reported by ${hit.addedByCompany}.`:""}
         </span>
@@ -595,10 +601,10 @@ function BankDetailCard({bd, onOpen, onEdit, onDelete, onToggleFrozen, onAddToBa
       {added&&<div style={{marginBottom:9}}><span style={{fontSize:10,fontWeight:600,color:C.accent,background:C.accentBg,border:`1px solid ${C.accent}`,borderRadius:20,padding:"2px 8px",display:"inline-flex",alignItems:"center",gap:3}}><i className="ti ti-check" aria-hidden="true" style={{fontSize:11}}/>Added to Bank Accounts</span></div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px 12px",background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 10px",marginBottom:11,fontSize:12}}>
         {BD_CARD_FIELDS.map(([key,label,masked])=>(
-          <div key={key}><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>{label}</div>
+          <div key={key}><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>{relabel(label)}</div>
             <div style={{color:C.text,fontWeight:500}}>{masked?<Masked value={bd[key]}/>:(bd[key]||"—")}</div></div>
         ))}
-        <div style={{gridColumn:"1/-1"}}><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>PayID</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-all"}}>{bd.payid||"—"}</div></div>
+        <div style={{gridColumn:"1/-1"}}><div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>{bankTerms().payid}</div><div style={{color:C.text,fontWeight:500,wordBreak:"break-all"}}>{bd.payid||"—"}</div></div>
         <div style={{gridColumn:"1/-1"}}>
           <div style={{fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.04em",color:C.muted,marginBottom:1}}>OTP link</div>
           {bd.otpLink
@@ -652,7 +658,7 @@ function BankDetailPanel({bd, onClose, panelRef}) {
                 {g.fields.map(([key,label,type,icon])=>(
                   <div key={key} style={type==="textarea"?{gridColumn:"1/-1"}:null}>
                     <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,textTransform:"uppercase",letterSpacing:"0.03em",color:C.muted,marginBottom:2}}>
-                      <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:10.5}}/>{label}
+                      <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:10.5}}/>{relabel(label)}
                     </div>
                     <div style={{fontSize:13,fontWeight:500}}><BdFieldValue fieldKey={key} type={type} value={bd[key]}/></div>
                   </div>
@@ -1260,6 +1266,7 @@ export default function App() {
   // component re-mounts on every login, so company name, operator, and the data
   // key below all track whichever company just signed in.
   const SESSION = readSession();
+  const BT = bankTermsFor(SESSION.country); // BSB / PayID wording for this company
   // Normalise once here so every consumer below (cards, dropdowns, sorts, name
   // matching) can trust name/operatorId are non-empty strings — a single malformed
   // account row (e.g. a legacy profile with no name) must not be able to crash the
@@ -3042,9 +3049,9 @@ export default function App() {
       subtitle: (
         <span style={{display:"inline-flex",flexWrap:"wrap",alignItems:"baseline",columnGap:14,rowGap:2}}>
           <KV label="Bank" value={b.name}/>
-          <KV label="BSB" value={(b.bsb||"").trim()||"—"} mono/>
+          <KV label={BT.bsb} value={(b.bsb||"").trim()||"—"} mono/>
           <KV label="Acc" value={(b.account||"").trim()||"—"} mono/>
-          <KV label="PayID" value={(b.payid||"").trim()||"—"} mono/>
+          <KV label={BT.payid} value={(b.payid||"").trim()||"—"} mono/>
           <KV label="Transactions" value={tx.length}/>
           <KV label="Balance" value={fmt(b.balance)}/>
         </span>
@@ -3442,7 +3449,7 @@ export default function App() {
                   <FluidDropdown value={newBank.name} placeholder="— Select bank —" ariaLabel="Bank name"
                     options={bankOptionsFor(SESSION.country, newBank.name)}
                     onChange={v=>setNewBank(b=>({...b,name:v}))}/></div>
-                {[["holder","Holder's name","e.g. Company Ltd"],["bsb","BSB number (optional)","e.g. 062-000"],["account","Account number (optional)","e.g. 1234567890"],["payid","PayID (optional)","e.g. name@company.com"],["otpLink","OTP link (optional)","e.g. https://…"],["loginPin","Login PIN (optional)","e.g. 1234"],["vpn","VPN (optional)","e.g. Melbourne node"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
+                {[["holder","Holder's name","e.g. Company Ltd"],["bsb",`${BT.bsbField} (optional)`,BT.bsbExample],["account","Account number (optional)","e.g. 1234567890"],["payid",`${BT.payid} (optional)`,BT.payidExample],["otpLink","OTP link (optional)","e.g. https://…"],["loginPin","Login PIN (optional)","e.g. 1234"],["vpn","VPN (optional)","e.g. Melbourne node"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
                   <div key={k}><label style={labelStyle}>{label}</label>
                     <input type={k==="balance"?"number":"text"} placeholder={ph} value={newBank[k]} onChange={e=>setNewBank(b=>({...b,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 ))}
@@ -3474,7 +3481,7 @@ export default function App() {
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                     {g.fields.map(([key,label,type,icon])=>(
                       <div key={key} style={type==="textarea"||key==="bankName"?{gridColumn:"1/-1"}:null}>
-                        <label style={{...labelStyle,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12,color:C.muted}}/>{label}</label>
+                        <label style={{...labelStyle,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12,color:C.muted}}/>{relabel(label)}</label>
                         {key==="bankName" ? (
                           <FluidDropdown value={bdForm.bankName} placeholder="— Select bank —" ariaLabel="Bank name"
                             options={bankOptionsFor(SESSION.country, bdForm.bankName)}
@@ -3642,7 +3649,7 @@ export default function App() {
               {BL_FIELDS.map(([key,label,icon,required])=>(
                 <div key={key} className="bl-form-group" style={{marginBottom:13}}>
                   <label style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:C.muted,marginBottom:5}}>
-                    <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12.5}}/>{label}{required&&<span style={{color:"#dc2626"}}>*</span>}
+                    <i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12.5}}/>{relabel(label)}{required&&<span style={{color:"#dc2626"}}>*</span>}
                   </label>
                   {key==="reason" ? (
                     <textarea rows={3} value={blForm[key]} onChange={e=>setBlForm(f=>({...f,[key]:e.target.value}))}
@@ -3666,7 +3673,7 @@ export default function App() {
                       BSB alone is a bank branch shared by thousands of people
                       and means nothing on its own. */}
                   {key==="phone"    && <BlDuplicateNotice hit={blDupPhone}   field="number"         blocking={false}/>}
-                  {key==="payid"    && <BlDuplicateNotice hit={blDupPayid}   field="PayID"          blocking/>}
+                  {key==="payid"    && <BlDuplicateNotice hit={blDupPayid}   field={BT.payid}       blocking/>}
                   {key==="accountNo"&& <BlDuplicateNotice hit={blDupAccount} field="account number" blocking/>}
                 </div>
               ))}
@@ -4270,7 +4277,7 @@ export default function App() {
               {banksLive.length>0&&(
                 <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
                   <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
-                  <input type="text" value={bankSearch} onChange={e=>setBankSearch(e.target.value)} placeholder="Search holder, bank, account or PayID…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  <input type="text" value={bankSearch} onChange={e=>setBankSearch(e.target.value)} placeholder={`Search holder, bank, account or ${BT.payid}…`} style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
                   {bankSearch&&<button type="button" onClick={()=>setBankSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
                 </div>
               )}
@@ -4285,7 +4292,7 @@ export default function App() {
                     {editingBank===b.id?(
                       <div onClick={e=>e.stopPropagation()}>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                          {[["name","Bank name"],["holder","Holder's name"],["bsb","BSB number"],["account","Account number"],["payid","PayID"],["otpLink","OTP link"],["loginPin","Login PIN"],["vpn","VPN"],["balance","Opening balance"]].map(([k,lbl])=>(
+                          {[["name","Bank name"],["holder","Holder's name"],["bsb",BT.bsbField],["account","Account number"],["payid",BT.payid],["otpLink","OTP link"],["loginPin","Login PIN"],["vpn","VPN"],["balance","Opening balance"]].map(([k,lbl])=>(
                             <div key={k}><label style={{fontSize:11,color:C.muted,display:"block",marginBottom:2}}>{lbl}</label>
                               <input type={k==="balance"?"number":"text"} value={editBankForm[k]} onChange={e=>setEditBankForm(f=>({...f,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box",fontSize:12,padding:"4px 8px"}}/></div>
                           ))}
@@ -4304,9 +4311,9 @@ export default function App() {
                           {b.blocked&&<span style={{flexShrink:0,fontSize:10,fontWeight:600,color:dark?"#7dd3fc":"#0369a1",background:dark?"#0e2a3a":"#e0f2fe",border:"1px solid #38bdf8",borderRadius:4,padding:"1px 6px",display:"inline-flex",alignItems:"center",gap:3}}><i className="ti ti-snowflake" aria-hidden="true" style={{fontSize:11}}/>Frozen</span>}
                         </div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Bank: {b.name}</div>
-                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>BSB: {b.bsb||"—"}</div>
+                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>{BT.bsb}: {b.bsb||"—"}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>Account: {b.account}</div>
-                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>PayID: {b.payid||"—"}</div>
+                        <div style={{fontSize:12,color:C.muted,marginBottom:2}}>{BT.payid}: {b.payid||"—"}</div>
                         <div style={{fontSize:12,color:C.muted,marginBottom:2}}>VPN: {b.vpn||"—"}</div>
                         {/* Same masked reveal the Bank Details page uses for its Login PIN, so the
                             value isn't sitting in the open on a card that stays on screen all day. */}
@@ -4365,7 +4372,7 @@ export default function App() {
               {bankDetails.length>0&&(
                 <div style={{position:"relative",maxWidth:420,marginBottom:14}}>
                   <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
-                  <input type="text" value={bdSearch} onChange={e=>setBdSearch(e.target.value)} placeholder="Search holder, bank, agent, BSB, account or PayID…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                  <input type="text" value={bdSearch} onChange={e=>setBdSearch(e.target.value)} placeholder={`Search holder, bank, agent, ${BT.bsbInline}, account or ${BT.payid}…`} style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
                   {bdSearch&&<button type="button" onClick={()=>setBdSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
                 </div>
               )}
@@ -4506,7 +4513,7 @@ export default function App() {
                 <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
                   <div style={{position:"relative",flex:"1 1 300px",maxWidth:460}}>
                     <i className="ti ti-search" aria-hidden="true" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:15,pointerEvents:"none"}}/>
-                    <input type="text" value={blSearch} onChange={e=>setBlSearch(e.target.value)} placeholder="Search name, phone, PayID, account, reason…" style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
+                    <input type="text" value={blSearch} onChange={e=>setBlSearch(e.target.value)} placeholder={`Search name, phone, ${BT.payid}, account, reason…`} style={{width:"100%",boxSizing:"border-box",padding:"8px 34px"}}/>
                     {blSearch&&<button type="button" onClick={()=>setBlSearch("")} aria-label="Clear search" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",color:C.muted,fontSize:15,display:"flex",padding:4}}><i className="ti ti-x" aria-hidden="true"/></button>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,color:C.muted}}>

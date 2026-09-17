@@ -81,3 +81,52 @@ export function bankOptionsFor(country, current) {
   const list = cur && !choices.includes(cur) ? [cur, ...choices] : choices;
   return [{ value: '', label: '— Select bank —' }, ...list.map((b) => ({ value: b, label: b }))];
 }
+
+// ---------------------------------------------------------------------------
+// BSB and PayID are Australian terms. Singapore identifies an account by bank
+// and branch code, and its instant-payment alias is PayNow. Only the WORDS
+// change: the stored fields are still `bsb` and `payid`, which is deliberate --
+// the blacklist's duplicate check is a unique index on (country, bsb,
+// account_no) and on (country, payid), and it works just as well on Singapore
+// values. Renaming the fields themselves would break that for nothing.
+//
+// Singapore only, by request; every other country keeps the wording it has
+// always had. The default block is those exact strings -- change one and every
+// Australian company sees it.
+// ---------------------------------------------------------------------------
+const DEFAULT_TERMS = Object.freeze({
+  bsb: 'BSB',                          // short label: cards, popups, detail panels
+  bsbField: 'BSB number',              // form label (add / edit bank account)
+  bsbInline: 'BSB',                    // mid-sentence, e.g. a search placeholder
+  bsbExample: 'e.g. 062-000',
+  payid: 'PayID',
+  payidExample: 'e.g. name@company.com',
+});
+
+const TERMS_BY_COUNTRY = {
+  // 4-digit bank code + 3-digit branch code; 7171 is DBS / POSB.
+  Singapore: Object.freeze({
+    bsb: 'Bank/branch code',
+    bsbField: 'Bank/branch code',
+    bsbInline: 'bank/branch code',
+    bsbExample: 'e.g. 7171-001',
+    payid: 'PayNow',
+    payidExample: 'e.g. mobile number or UEN',
+  }),
+};
+
+/** The words to show for BSB / PayID in a given country. */
+export function bankTermsFor(country) {
+  return TERMS_BY_COUNTRY[String(country || '').trim()] || DEFAULT_TERMS;
+}
+
+/*
+ * For the label tables that are built once at module load (Bank Details fields,
+ * the Blacklist form). Swaps a label only when it is EXACTLY "BSB" or "PayID" --
+ * a whole-string match, never a substring replace, so nothing else can be caught.
+ */
+export function relabelBankTerm(label, country) {
+  if (label === 'BSB') return bankTermsFor(country).bsb;
+  if (label === 'PayID') return bankTermsFor(country).payid;
+  return label;
+}

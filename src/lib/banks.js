@@ -90,6 +90,9 @@ export function bankOptionsFor(country, current) {
 // account_no) and on (country, payid), and it works just as well on Singapore
 // values. Renaming the fields themselves would break that for nothing.
 //
+// The VPN field's example names a node in the country, so it follows the same
+// rule (V2.7.8).
+//
 // Singapore only, by request; every other country keeps the wording it has
 // always had. The default block is those exact strings -- change one and every
 // Australian company sees it.
@@ -101,6 +104,7 @@ const DEFAULT_TERMS = Object.freeze({
   bsbExample: 'e.g. 062-000',
   payid: 'PayID',
   payidExample: 'e.g. name@company.com',
+  vpnExample: 'e.g. Melbourne node',
 });
 
 const TERMS_BY_COUNTRY = {
@@ -112,6 +116,7 @@ const TERMS_BY_COUNTRY = {
     bsbExample: 'e.g. 7171-001',
     payid: 'PayNow',
     payidExample: 'e.g. mobile number or UEN',
+    vpnExample: 'e.g. Singapore node',
   }),
 };
 

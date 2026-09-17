@@ -3449,7 +3449,7 @@ export default function App() {
                   <FluidDropdown value={newBank.name} placeholder="— Select bank —" ariaLabel="Bank name"
                     options={bankOptionsFor(SESSION.country, newBank.name)}
                     onChange={v=>setNewBank(b=>({...b,name:v}))}/></div>
-                {[["holder","Holder's name","e.g. Company Ltd"],["bsb",`${BT.bsbField} (optional)`,BT.bsbExample],["account","Account number (optional)","e.g. 1234567890"],["payid",`${BT.payid} (optional)`,BT.payidExample],["otpLink","OTP link (optional)","e.g. https://…"],["loginPin","Login PIN (optional)","e.g. 1234"],["vpn","VPN (optional)","e.g. Melbourne node"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
+                {[["holder","Holder's name","e.g. Company Ltd"],["bsb",`${BT.bsbField} (optional)`,BT.bsbExample],["account","Account number (optional)","e.g. 1234567890"],["payid",`${BT.payid} (optional)`,BT.payidExample],["otpLink","OTP link (optional)","e.g. https://…"],["loginPin","Login PIN (optional)","e.g. 1234"],["vpn","VPN (optional)",BT.vpnExample],["balance","Opening balance","0"]].map(([k,label,ph])=>(
                   <div key={k}><label style={labelStyle}>{label}</label>
                     <input type={k==="balance"?"number":"text"} placeholder={ph} value={newBank[k]} onChange={e=>setNewBank(b=>({...b,[k]:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 ))}

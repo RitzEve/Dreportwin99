@@ -6,6 +6,7 @@ import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
 import { suggestMembersByName, suggestMembersByPhone, matchMemberName, matchMemberPhone, nameTokens } from "../lib/memberMatch.js";
+import { bankOptionsFor } from "../lib/banks.js";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -60,14 +61,7 @@ const buyNote = (amt, rate) => {
   return (amt!=="" && rate!=="" && amt!=null && rate!=null && !isNaN(a) && !isNaN(r)) ? `${amt}x${rate}=${Math.round(a*r*100)/100}` : "";
 };
 const INIT_BANKS = ["Acleda Bank","ABA Bank","Canadia Bank","Maybank","Wing Bank"];
-const BANK_CHOICES = [
-  "Commonwealth Bank of Australia (CBA)","Westpac Banking Corporation","National Australia Bank (NAB)",
-  "Australia and New Zealand Banking Group (ANZ)","Bank of Queensland (BOQ)","Bendigo and Adelaide Bank",
-  "Suncorp Bank","Macquarie Bank","Bankwest","Bank of Melbourne","St.George","BankSA","Bank Australia",
-  "Great Southern Bank","Beyond Bank","People First Bank","Newcastle Greater Mutual Group (NGM)",
-  "Teachers Mutual Bank","ING Australia","HSBC Bank Australia","Judo Bank","Ubank","Up Bank",
-  "Payment Gateway","Others"
-];
+// Bank-name dropdown lists are per country now: see lib/banks.js (bankOptionsFor).
 const TYPE_COLORS = {
   "Regular Deposit":"#16a34a","Regular Withdrawal":"#dc2626",
   "Unclaimed Credit":"#d97706","Mistake":"#7c3aed",
@@ -3446,7 +3440,7 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
                 <div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Bank name</label>
                   <FluidDropdown value={newBank.name} placeholder="— Select bank —" ariaLabel="Bank name"
-                    options={[{value:"",label:"— Select bank —"},...BANK_CHOICES.map(b=>({value:b,label:b}))]}
+                    options={bankOptionsFor(SESSION.country, newBank.name)}
                     onChange={v=>setNewBank(b=>({...b,name:v}))}/></div>
                 {[["holder","Holder's name","e.g. Company Ltd"],["bsb","BSB number (optional)","e.g. 062-000"],["account","Account number (optional)","e.g. 1234567890"],["payid","PayID (optional)","e.g. name@company.com"],["otpLink","OTP link (optional)","e.g. https://…"],["loginPin","Login PIN (optional)","e.g. 1234"],["vpn","VPN (optional)","e.g. Melbourne node"],["balance","Opening balance","0"]].map(([k,label,ph])=>(
                   <div key={k}><label style={labelStyle}>{label}</label>
@@ -3483,7 +3477,7 @@ export default function App() {
                         <label style={{...labelStyle,display:"flex",alignItems:"center",gap:5}}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:12,color:C.muted}}/>{label}</label>
                         {key==="bankName" ? (
                           <FluidDropdown value={bdForm.bankName} placeholder="— Select bank —" ariaLabel="Bank name"
-                            options={[{value:"",label:"— Select bank —"},...BANK_CHOICES.map(b=>({value:b,label:b}))]}
+                            options={bankOptionsFor(SESSION.country, bdForm.bankName)}
                             onChange={v=>setBdForm(f=>({...f,bankName:v}))}/>
                         ) : type==="textarea" ? (
                           <textarea value={bdForm[key]} onChange={e=>setBdForm(f=>({...f,[key]:e.target.value}))} rows={3} placeholder="Anything else worth noting about this record…" style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>

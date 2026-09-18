@@ -1,10 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.7.8",
+  "version": "2.7.9",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "The Bank name list and the banking wording now cover the Asia-Pacific countries, not just Australia and Singapore. A company in Cambodia, Thailand, Vietnam, the Philippines, Indonesia, Hong Kong, China, Taiwan, Japan, South Korea, India, Malaysia or New Zealand gets its own banks in the dropdown and its own wording — for example Thailand shows PromptPay ID, India shows IFSC code and UPI ID, Malaysia shows DuitNow ID, and Hong Kong shows FPS ID. Any other country now shows “Bank/branch code” and “Payment ID” instead of the Australian terms, with Payment Gateway and Others in the bank list. Australian companies see no change at all. If your bank isn’t listed, pick Others and rename the card from the Bank Accounts page.",
     "For Singapore companies, the example under VPN when you add a bank account now says “e.g. Singapore node” instead of Melbourne. Everyone else sees it exactly as before.",
     "Singapore companies now see Singapore banking terms. Wherever the app used to say BSB it now says Bank/branch code, and PayID now says PayNow — on the Bank Accounts and Bank Details pages (the add and edit forms, the cards, the popup and the search boxes) and on the Blacklist Member page. The example hints change too, e.g. 7171-001 for a DBS branch, and a mobile number or UEN for PayNow. Only the wording changes: what you've saved stays exactly as it is. Companies in Australia and every other country see no change at all.",
     "The Bank name dropdown — when you add a bank account or a bank detail — now lists the banks for your own company's country. Singapore companies see DBS, POSB, OCBC, UOB and the other Singapore banks instead of Australian ones, and Malaysia and New Zealand have their own lists too. Australian companies see exactly the same list as before. If your bank isn't listed, pick Others, then rename the card from the Bank Accounts page.",

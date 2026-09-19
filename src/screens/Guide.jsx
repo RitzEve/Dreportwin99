@@ -57,10 +57,10 @@ const SECTIONS = [
 // so the guide and the app read as one thing. The chart rows are language-neutral
 // (a sign + a token key); the words come from the per-language `tok` / `rowLabels`.
 const TK_ORDER = ['unclaimedDep', 'redeposit', 'storeWd', 'actualPaid', 'storePaid', 'buyAud'];
-const TK_UI = { unclaimedDep: 'Unclaimed Credit', redeposit: 'Redeposit', storeWd: 'Store withdraw', actualPaid: 'Actual paid amount', storePaid: 'Store + actual paid', buyAud: 'Buy AUD' };
+const TK_UI = { unclaimedDep: 'Unclaimed Credit', redeposit: 'Redeposit', storeWd: 'Store withdraw', actualPaid: 'Actual paid amount', storePaid: 'Store + actual paid', buyAud: 'Buy currency' };
 const TK_COLOR = { unclaimedDep: '#d97706', redeposit: '#2563eb', storeWd: '#d97706', actualPaid: '#0d9488', storePaid: '#7c3aed', buyAud: '#db2777' };
 const TK_ICON = { unclaimedDep: 'ti-coin', redeposit: 'ti-refresh', storeWd: 'ti-building-store', actualPaid: 'ti-cash', storePaid: 'ti-arrows-split-2', buyAud: 'ti-currency-dollar' };
-// Each chart row: 6 cells = [Deposits, Withdrawals, Bank, Store, Unclaimed, Buy/Sell AUD].
+// Each chart row: 6 cells = [Deposits, Withdrawals, Bank, Store, Unclaimed, Buy/Sell currency].
 // A cell is [sign, tokenKey] or null (no change).
 const CHART_ROWS = [
   { key: 'plainDep',     cells: [['+', 'amt'], null, ['+', 'amt'], null, null, null] },
@@ -81,7 +81,7 @@ const TYPE_ORDER = ['deposit', 'withdrawal', 'unclaimed', 'transfer', 'store', '
 const TYPE_UI = {
   deposit: 'Regular Deposit', withdrawal: 'Regular Withdrawal', unclaimed: 'Unclaimed Credit',
   transfer: 'Transfer', store: 'Store', mistake: 'Mistake', rental: 'Rental', adjust: 'Adjust', other: 'Other',
-  bankblock: 'Bank Block', buysellaud: 'Buy/Sell AUD',
+  bankblock: 'Bank Block', buysellaud: 'Buy/Sell currency',
 };
 const TYPE_COLOR = {
   deposit: '#16a34a', withdrawal: '#dc2626', unclaimed: '#d97706', transfer: '#6366f1',
@@ -675,13 +675,13 @@ const T = {
       alltypes: {
         title: 'All entry types explained',
         intro: "FinTrack has several entry types. Each one is for a different kind of money movement — this is what each one actually does to your totals and to a bank, if you pick one.",
-        note: 'Rule of thumb: Regular Deposit, Regular Withdrawal, Unclaimed Credit, Rental, Adjust, Other and Buy/Sell AUD are "straight" entries — picking a bank just means that money sits in that bank too, in the same direction. Store and Mistake are different: picking a bank actually moves money between that total and the bank, in opposite directions (banking cash INTO the bank). Bank Block always requires a bank, and moves the other way — money comes OUT of that bank and into the Bank Block total. Transfer only ever moves money between banks.',
+        note: 'Rule of thumb: Regular Deposit, Regular Withdrawal, Unclaimed Credit, Rental, Adjust, Other and Buy/Sell currency are "straight" entries — picking a bank just means that money sits in that bank too, in the same direction. Store and Mistake are different: picking a bank actually moves money between that total and the bank, in opposite directions (banking cash INTO the bank). Bank Block always requires a bank, and moves the other way — money comes OUT of that bank and into the Bank Block total. Transfer only ever moves money between banks.',
         rowsHeader: 'Entry type',
         colHeaders: ['Its own total', 'If you also pick a bank'],
         rowLabels: {
           deposit: 'Regular Deposit', withdrawal: 'Regular Withdrawal', unclaimed: 'Unclaimed Credit',
           transfer: 'Transfer', store: 'Store', mistake: 'Mistake', rental: 'Rental', adjust: 'Adjust', other: 'Other',
-          bankblock: 'Bank Block', buysellaud: 'Buy/Sell AUD',
+          bankblock: 'Bank Block', buysellaud: 'Buy/Sell currency',
         },
         chartCells: {
           deposit: ['+ amount → Total deposits', '+ amount, same bank'],
@@ -694,7 +694,7 @@ const T = {
           adjust: ['± amount → Adjustments', '± amount, same direction'],
           other: ['± amount (no dashboard total)', '± amount, same direction'],
           bankblock: ['+ amount → Bank Block total', 'required · − bank, + Bank Block (opposite)'],
-          buysellaud: ['± amount → Buy/Sell AUD balance', '± amount, same direction'],
+          buysellaud: ['± amount → Buy/Sell currency balance', '± amount, same direction'],
         },
         items: {
           deposit: {
@@ -748,18 +748,18 @@ const T = {
             example: 'ABA Bank is frozen with $800 tracked in it. Record an $800 Bank Block on ABA Bank → ABA Bank −$800 · Bank Block total +$800.',
           },
           buysellaud: {
-            for: 'Tracks your Buy/Sell AUD balance — AUD currency you buy into stock and sell back down. No name required, amount can be positive (buy) or negative (sell). An optional Rate field writes amount × rate into the note as a memo — it never changes any total.',
-            formula: 'Buy/Sell AUD balance += amount. If a bank is picked, that bank += amount too (same direction — not opposite like Store).',
-            example: ['Buy $500 of AUD at rate 1.35, ABA Bank picked → Buy/Sell AUD balance +$500 · ABA Bank +$500 · note auto-fills "500x1.35=675" as a memo.', 'A Regular Withdrawal ticked "Buy AUD" draws this balance back down — see the tick-box section below.'],
+            for: 'Tracks your Buy/Sell currency balance — currency you buy into stock and sell back down. No name required, amount can be positive (buy) or negative (sell). An optional Rate field writes amount × rate into the note as a memo — it never changes any total.',
+            formula: 'Buy/Sell currency balance += amount. If a bank is picked, that bank += amount too (same direction — not opposite like Store).',
+            example: ['Buy $500 of currency at rate 1.35, ABA Bank picked → Buy/Sell currency balance +$500 · ABA Bank +$500 · note auto-fills "500x1.35=675" as a memo.', 'A Regular Withdrawal ticked "Buy currency" draws this balance back down — see the tick-box section below.'],
           },
         },
       },
       txoptions: {
         title: 'Deposit & withdrawal options (the tick-boxes)',
         intro: "Most entries are a plain deposit or withdrawal. For special cases you can tick a box. The box never changes how big the withdrawal is — it only changes WHERE the money comes from, and anything left over is saved as the member's Unclaimed credit.",
-        note: 'Rule of thumb: Total Withdrawals always shows the full amount. The tick-box only splits where it is funded from — a bank, store credit, your Buy/Sell AUD balance, or kept as Unclaimed credit. Left-over = amount − store − bank paid − Buy AUD used.',
+        note: 'Rule of thumb: Total Withdrawals always shows the full amount. The tick-box only splits where it is funded from — a bank, store credit, your Buy/Sell currency balance, or kept as Unclaimed credit. Left-over = amount − store − bank paid − Buy currency used.',
         rowsHeader: 'Entry / option',
-        colHeaders: ['Deposits total', 'Withdrawals total', 'Bank balance', 'Store credit', 'Unclaimed credit', 'Buy/Sell AUD'],
+        colHeaders: ['Deposits total', 'Withdrawals total', 'Bank balance', 'Store credit', 'Unclaimed credit', 'Buy/Sell currency'],
         rowLabels: {
           plainDep: 'Plain deposit',
           plainWd: 'Plain withdrawal',
@@ -768,7 +768,7 @@ const T = {
           storeWd: 'Store withdraw',
           actualPaid: 'Actual paid amount',
           storePaid: 'Store + actual paid',
-          buyAud: 'Buy AUD',
+          buyAud: 'Buy currency',
         },
         tok: { amt: 'amount', store: 'store', paid: 'paid', left: 'left-over', buy: 'buy amount' },
         items: {
@@ -798,9 +798,9 @@ const T = {
             example: 'Withdraw $100, store $60, bank pays $30 → Withdrawals +$100, Store −$60, bank −$30, and the $10 left-over becomes Unclaimed credit.',
           },
           buyAud: {
-            for: 'A withdrawal paid from your Buy/Sell AUD balance instead of a bank. (Tick it on a Regular Withdrawal.)',
-            formula: 'Withdrawal = Buy/Sell AUD used + left-over   ·   left-over → Unclaimed',
-            example: 'Withdraw $80, Buy AUD amount $60 → Withdrawals +$80, Buy/Sell AUD balance −$60, and the $20 left-over becomes Unclaimed credit. No bank is touched.',
+            for: 'A withdrawal paid from your Buy/Sell currency balance instead of a bank. (Tick it on a Regular Withdrawal.)',
+            formula: 'Withdrawal = Buy/Sell currency used + left-over   ·   left-over → Unclaimed',
+            example: 'Withdraw $80, Buy currency amount $60 → Withdrawals +$80, Buy/Sell currency balance −$60, and the $20 left-over becomes Unclaimed credit. No bank is touched.',
           },
         },
       },
@@ -951,13 +951,13 @@ const T = {
       alltypes: {
         title: '所有记录类型说明',
         intro: 'FinTrack 有多种记录类型，每一种对应不同的资金变动。以下说明每种类型到底会对你的总额，以及（如果你选择）对某个银行做了什么。',
-        note: '要点：普通存款、普通取款、未领取额度、租金、调整、其他和买卖澳元，都是”直接”记录——选了银行，只表示这笔钱也放在那家银行里，方向相同。商店和差错不同：选了银行后，钱会在该总额与银行之间”相反方向”移动（把现金存入银行）。银行冻结则必须选择银行，方向相反——钱从该银行出来，进入银行冻结总额。转账则永远只在银行之间移动资金。',
+        note: '要点：普通存款、普通取款、未领取额度、租金、调整、其他和买卖货币，都是”直接”记录——选了银行，只表示这笔钱也放在那家银行里，方向相同。商店和差错不同：选了银行后，钱会在该总额与银行之间”相反方向”移动（把现金存入银行）。银行冻结则必须选择银行，方向相反——钱从该银行出来，进入银行冻结总额。转账则永远只在银行之间移动资金。',
         rowsHeader: '记录类型',
         colHeaders: ['自身总额', '如果同时选择银行'],
         rowLabels: {
           deposit: '普通存款', withdrawal: '普通取款', unclaimed: '未领取额度',
           transfer: '转账', store: '商店', mistake: '差错', rental: '租金', adjust: '调整', other: '其他',
-          bankblock: '银行冻结', buysellaud: '买卖澳元',
+          bankblock: '银行冻结', buysellaud: '买卖货币',
         },
         chartCells: {
           deposit: ['+ 金额 → 存款总额', '+ 金额，同一银行'],
@@ -970,7 +970,7 @@ const T = {
           adjust: ['± 金额 → 调整', '± 金额，方向相同'],
           other: ['± 金额（没有仪表盘总额）', '± 金额，方向相同'],
           bankblock: ['+ 金额 → 银行冻结总额', '必选 · − 银行，+ 银行冻结（相反）'],
-          buysellaud: ['± 金额 → 买卖澳元余额', '± 金额，方向相同'],
+          buysellaud: ['± 金额 → 买卖货币余额', '± 金额，方向相同'],
         },
         items: {
           deposit: {
@@ -1024,18 +1024,18 @@ const T = {
             example: 'ABA 银行被冻结，里面记录着 $800。为 ABA 银行记一笔 $800 银行冻结 → ABA 银行 −$800 · 银行冻结总额 +$800。',
           },
           buysellaud: {
-            for: '记录你的”买卖澳元”余额——你买入囤积、再卖出的澳元现金或额度。不需要填写姓名，金额可正（买入）可负（卖出）。可选的”汇率”栏会把 金额×汇率 的结果写进备注，仅作备忘，不影响任何总额。',
-            formula: '买卖澳元余额 += 金额。如果选择了银行，该银行余额也 += 金额（方向相同——不像商店那样相反）。',
-            example: ['以汇率 1.35 买入 $500 澳元，选择 ABA 银行 → 买卖澳元余额 +$500 · ABA 银行 +$500 · 备注自动填入 “500x1.35=675”。', '勾选”Buy AUD”的普通取款可以把这笔余额领出来——见下面章节。'],
+            for: '记录你的”买卖货币”余额——你买入囤积、再卖出的现金或额度。不需要填写姓名，金额可正（买入）可负（卖出）。可选的”汇率”栏会把 金额×汇率 的结果写进备注，仅作备忘，不影响任何总额。',
+            formula: '买卖货币余额 += 金额。如果选择了银行，该银行余额也 += 金额（方向相同——不像商店那样相反）。',
+            example: ['以汇率 1.35 买入 $500，选择 ABA 银行 → 买卖货币余额 +$500 · ABA 银行 +$500 · 备注自动填入 “500x1.35=675”。', '勾选”Buy currency”的普通取款可以把这笔余额领出来——见下面章节。'],
           },
         },
       },
       txoptions: {
         title: '存款与取款的选项（勾选框）',
         intro: '大多数记录就是普通的存款或取款。遇到特殊情况时，你可以勾选一个方框。勾选框从不改变取款的金额，它只改变这笔钱从哪里出——剩下未被覆盖的部分会作为该会员的”未领取额度”保存。',
-        note: '要点：取款总额始终显示完整金额。勾选框只决定这笔钱从哪里出——银行、商店额度、买卖澳元余额，或记为未领取额度。剩余 = 金额 − 商店 − 银行支付 − 购买澳元金额。',
+        note: '要点：取款总额始终显示完整金额。勾选框只决定这笔钱从哪里出——银行、商店额度、买卖货币余额，或记为未领取额度。剩余 = 金额 − 商店 − 银行支付 − 购买货币金额。',
         rowsHeader: '记录 / 选项',
-        colHeaders: ['存款总额', '取款总额', '银行余额', '商店额度', '未领取额度', '买卖澳元'],
+        colHeaders: ['存款总额', '取款总额', '银行余额', '商店额度', '未领取额度', '买卖货币'],
         rowLabels: {
           plainDep: '普通存款',
           plainWd: '普通取款',
@@ -1044,7 +1044,7 @@ const T = {
           storeWd: '商店取款',
           actualPaid: '实付金额',
           storePaid: '商店 + 实付',
-          buyAud: '购买澳元',
+          buyAud: '购买货币',
         },
         tok: { amt: '金额', store: '商店', paid: '支付', left: '剩余', buy: '购买金额' },
         items: {
@@ -1074,9 +1074,9 @@ const T = {
             example: '取款 $100，商店 $60，银行支付 $30 → 取款 +$100，商店 −$60，银行 −$30，剩余的 $10 变成未领取额度。',
           },
           buyAud: {
-            for: '用你的”买卖澳元”余额而不是银行来支付的取款。（在”普通取款”上勾选。）',
-            formula: '取款 = 使用的买卖澳元余额 + 剩余   ·   剩余 → 未领取',
-            example: '取款 $80，购买澳元金额 $60 → 取款 +$80，买卖澳元余额 −$60，剩余的 $20 变成未领取额度。不动银行。',
+            for: '用你的”买卖货币”余额而不是银行来支付的取款。（在”普通取款”上勾选。）',
+            formula: '取款 = 使用的买卖货币余额 + 剩余   ·   剩余 → 未领取',
+            example: '取款 $80，购买货币金额 $60 → 取款 +$80，买卖货币余额 −$60，剩余的 $20 变成未领取额度。不动银行。',
           },
         },
       },
@@ -1227,13 +1227,13 @@ const T = {
       alltypes: {
         title: 'ការពន្យល់អំពីប្រភេទកំណត់ត្រាទាំងអស់',
         intro: 'FinTrack មានប្រភេទកំណត់ត្រាច្រើនយ៉ាង។ នីមួយៗសម្រាប់ចលនាលុយផ្សេងគ្នា — នេះជាការពន្យល់ពិតប្រាកដថាមួយៗធ្វើអ្វីខ្លះទៅលើចំនួនសរុបរបស់អ្នក ហើយទៅលើធនាគារមួយ បើអ្នកជ្រើសរើសវា។',
-        note: 'គោលការណ៍៖ ដាក់ប្រាក់ធម្មតា ដកប្រាក់ធម្មតា ឥណទានមិនទាន់ដក ជួល លម្អៃ ផ្សេងៗ និងទិញ/លក់ដុល្លារអូស្ត្រាលី សុទ្ធតែជាកំណត់ត្រា «ត្រង់» — ជ្រើសរើសធនាគារមួយ គ្រាន់តែមានន័យថាលុយនោះក៏នៅក្នុងធនាគារនោះដែរ ក្នុងទិសដៅដូចគ្នា។ ហាង និងកំហុស ខុសគ្នា៖ ជ្រើសរើសធនាគារ ពិតជាផ្លាស់ទីលុយរវាងចំនួននោះ និងធនាគារ ក្នុងទិសដៅផ្ទុយគ្នា (ដាក់សាច់ប្រាក់ចូលធនាគារ)។ ការទប់ស្កាត់ធនាគារ ត្រូវការជ្រើសរើសធនាគារជានិច្ច ហើយទិសដៅផ្ទុយ — លុយចេញពីធនាគារនោះ ចូលទៅចំនួនសរុបទប់ស្កាត់ធនាគារវិញ។ ការផ្ទេរ គឺតែងតែផ្លាស់ទីលុយរវាងធនាគារប៉ុណ្ណោះ។',
+        note: 'គោលការណ៍៖ ដាក់ប្រាក់ធម្មតា ដកប្រាក់ធម្មតា ឥណទានមិនទាន់ដក ជួល លម្អៃ ផ្សេងៗ និងទិញ/លក់រូបិយប័ណ្ណ សុទ្ធតែជាកំណត់ត្រា «ត្រង់» — ជ្រើសរើសធនាគារមួយ គ្រាន់តែមានន័យថាលុយនោះក៏នៅក្នុងធនាគារនោះដែរ ក្នុងទិសដៅដូចគ្នា។ ហាង និងកំហុស ខុសគ្នា៖ ជ្រើសរើសធនាគារ ពិតជាផ្លាស់ទីលុយរវាងចំនួននោះ និងធនាគារ ក្នុងទិសដៅផ្ទុយគ្នា (ដាក់សាច់ប្រាក់ចូលធនាគារ)។ ការទប់ស្កាត់ធនាគារ ត្រូវការជ្រើសរើសធនាគារជានិច្ច ហើយទិសដៅផ្ទុយ — លុយចេញពីធនាគារនោះ ចូលទៅចំនួនសរុបទប់ស្កាត់ធនាគារវិញ។ ការផ្ទេរ គឺតែងតែផ្លាស់ទីលុយរវាងធនាគារប៉ុណ្ណោះ។',
         rowsHeader: 'ប្រភេទកំណត់ត្រា',
         colHeaders: ['ចំនួនសរុបខ្លួនឯង', 'បើអ្នកជ្រើសរើសធនាគារផងដែរ'],
         rowLabels: {
           deposit: 'ដាក់ប្រាក់ធម្មតា', withdrawal: 'ដកប្រាក់ធម្មតា', unclaimed: 'ឥណទានមិនទាន់ដក',
           transfer: 'ការផ្ទេរ', store: 'ហាង', mistake: 'កំហុស', rental: 'ជួល', adjust: 'លម្អៃ', other: 'ផ្សេងៗ',
-          bankblock: 'ការទប់ស្កាត់ធនាគារ', buysellaud: 'ទិញ/លក់ដុល្លារអូស្ត្រាលី',
+          bankblock: 'ការទប់ស្កាត់ធនាគារ', buysellaud: 'ទិញ/លក់រូបិយប័ណ្ណ',
         },
         chartCells: {
           deposit: ['+ ចំនួន → ដាក់ប្រាក់សរុប', '+ ចំនួន ធនាគារដូចគ្នា'],
@@ -1246,7 +1246,7 @@ const T = {
           adjust: ['± ចំនួន → លម្អៃ', '± ចំនួន ទិសដៅដូចគ្នា'],
           other: ['± ចំនួន (គ្មានចំនួនសរុបលើផ្ទាំងគ្រប់គ្រង)', '± ចំនួន ទិសដៅដូចគ្នា'],
           bankblock: ['+ ចំនួន → ចំនួនសរុបទប់ស្កាត់ធនាគារ', 'ត្រូវការជាចាំបាច់ · − ធនាគារ + ទប់ស្កាត់ធនាគារ (ផ្ទុយគ្នា)'],
-          buysellaud: ['± ចំនួន → សមតុល្យទិញ/លក់ដុល្លារអូស្ត្រាលី', '± ចំនួន ទិសដៅដូចគ្នា'],
+          buysellaud: ['± ចំនួន → សមតុល្យទិញ/លក់រូបិយប័ណ្ណ', '± ចំនួន ទិសដៅដូចគ្នា'],
         },
         items: {
           deposit: {
@@ -1300,18 +1300,18 @@ const T = {
             example: 'ធនាគារ ABA ត្រូវបានទប់ស្កាត់ដោយមានចំនួន $800 កំពុងតាមដាន។ កត់ត្រាទប់ស្កាត់ធនាគារ $800 លើធនាគារ ABA → ធនាគារ ABA −$800 · ចំនួនសរុបទប់ស្កាត់ធនាគារ +$800។',
           },
           buysellaud: {
-            for: 'តាមដានសមតុល្យ «ទិញ/លក់ដុល្លារអូស្ត្រាលី» របស់អ្នក — សាច់ប្រាក់ ឬឥណទានដុល្លារអូស្ត្រាលីដែលអ្នកទិញចូល និងលក់ចេញ។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមាន (ទិញ) ឬអវិជ្ជមាន (លក់)។ វាល «អត្រា» ជាជម្រើស នឹងសរសេរ ចំនួន × អត្រា ទៅក្នុងចំណាំ ជាការចងចាំតែប៉ុណ្ណោះ — មិនប៉ះពាល់ចំនួនសរុបណាមួយឡើយ។',
-            formula: 'សមតុល្យទិញ/លក់ដុល្លារអូស្ត្រាលី += ចំនួន។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ (ទិសដៅដូចគ្នា — មិនផ្ទុយដូចហាងទេ)។',
-            example: ['ទិញដុល្លារអូស្ត្រាលី $500 ក្នុងអត្រា 1.35 ជ្រើសធនាគារ ABA → សមតុល្យទិញ/លក់ដុល្លារអូស្ត្រាលី +$500 · ធនាគារ ABA +$500 · ចំណាំបំពេញស្វ័យប្រវត្តិ "500x1.35=675"។', 'ការដកប្រាក់ធម្មតាដែលធីក «Buy AUD» អាចទាញសមតុល្យនេះមកវិញបាន — សូមមើលផ្នែកខាងក្រោមស្តីពីប្រអប់ធីក។'],
+            for: 'តាមដានសមតុល្យ «ទិញ/លក់រូបិយប័ណ្ណ» របស់អ្នក — សាច់ប្រាក់ ឬឥណទានរូបិយប័ណ្ណដែលអ្នកទិញចូល និងលក់ចេញ។ មិនត្រូវការឈ្មោះទេ ចំនួនអាចវិជ្ជមាន (ទិញ) ឬអវិជ្ជមាន (លក់)។ វាល «អត្រា» ជាជម្រើស នឹងសរសេរ ចំនួន × អត្រា ទៅក្នុងចំណាំ ជាការចងចាំតែប៉ុណ្ណោះ — មិនប៉ះពាល់ចំនួនសរុបណាមួយឡើយ។',
+            formula: 'សមតុល្យទិញ/លក់រូបិយប័ណ្ណ += ចំនួន។ បើជ្រើសរើសធនាគារ ធនាគារនោះក៏ += ចំនួនដែរ (ទិសដៅដូចគ្នា — មិនផ្ទុយដូចហាងទេ)។',
+            example: ['ទិញរូបិយប័ណ្ណ $500 ក្នុងអត្រា 1.35 ជ្រើសធនាគារ ABA → សមតុល្យទិញ/លក់រូបិយប័ណ្ណ +$500 · ធនាគារ ABA +$500 · ចំណាំបំពេញស្វ័យប្រវត្តិ "500x1.35=675"។', 'ការដកប្រាក់ធម្មតាដែលធីក «Buy currency» អាចទាញសមតុល្យនេះមកវិញបាន — សូមមើលផ្នែកខាងក្រោមស្តីពីប្រអប់ធីក។'],
           },
         },
       },
       txoptions: {
         title: 'ជម្រើសដាក់ប្រាក់ និងដកប្រាក់ (ប្រអប់ធីក)',
         intro: 'កំណត់ត្រាភាគច្រើនគ្រាន់តែជាការដាក់ប្រាក់ ឬដកប្រាក់ធម្មតា។ សម្រាប់ករណីពិសេស អ្នកអាចធីកប្រអប់មួយ។ ប្រអប់នេះមិនផ្លាស់ប្ដូរទំហំនៃការដកប្រាក់ឡើយ — វាគ្រាន់តែផ្លាស់ប្ដូរថាលុយចេញពីណា ហើយផ្នែកដែលនៅសល់ត្រូវរក្សាទុកជា «ឥណទានមិនទាន់ដក» របស់សមាជិក។',
-        note: 'គោលការណ៍៖ ការដកសរុបតែងតែបង្ហាញចំនួនពេញ។ ប្រអប់ធីកគ្រាន់តែបែងចែកថាលុយចេញពីណា — ធនាគារ ឥណទានហាង សមតុល្យទិញ/លក់ដុល្លារអូស្ត្រាលី ឬរក្សាជាឥណទានមិនទាន់ដក។ នៅសល់ = ចំនួន − ហាង − ធនាគារបង់ − ចំនួនទិញដុល្លារអូស្ត្រាលី។',
+        note: 'គោលការណ៍៖ ការដកសរុបតែងតែបង្ហាញចំនួនពេញ។ ប្រអប់ធីកគ្រាន់តែបែងចែកថាលុយចេញពីណា — ធនាគារ ឥណទានហាង សមតុល្យទិញ/លក់រូបិយប័ណ្ណ ឬរក្សាជាឥណទានមិនទាន់ដក។ នៅសល់ = ចំនួន − ហាង − ធនាគារបង់ − ចំនួនទិញរូបិយប័ណ្ណ។',
         rowsHeader: 'កំណត់ត្រា / ជម្រើស',
-        colHeaders: ['ដាក់ប្រាក់សរុប', 'ដកប្រាក់សរុប', 'សមតុល្យធនាគារ', 'ឥណទានហាង', 'ឥណទានមិនទាន់ដក', 'ទិញ/លក់ដុល្លារអូស្ត្រាលី'],
+        colHeaders: ['ដាក់ប្រាក់សរុប', 'ដកប្រាក់សរុប', 'សមតុល្យធនាគារ', 'ឥណទានហាង', 'ឥណទានមិនទាន់ដក', 'ទិញ/លក់រូបិយប័ណ្ណ'],
         rowLabels: {
           plainDep: 'ដាក់ប្រាក់ធម្មតា',
           plainWd: 'ដកប្រាក់ធម្មតា',
@@ -1320,7 +1320,7 @@ const T = {
           storeWd: 'ដកពីហាង',
           actualPaid: 'ចំនួនបង់ពិត',
           storePaid: 'ហាង + បង់ពិត',
-          buyAud: 'ទិញដុល្លារអូស្ត្រាលី',
+          buyAud: 'ទិញរូបិយប័ណ្ណ',
         },
         tok: { amt: 'ចំនួន', store: 'ហាង', paid: 'បង់', left: 'នៅសល់', buy: 'ចំនួនទិញ' },
         items: {
@@ -1350,9 +1350,9 @@ const T = {
             example: 'ដក $100 ហាង $60 ធនាគារបង់ $30 → ដកប្រាក់ +$100 ហាង −$60 ធនាគារ −$30 ហើយ $10 ដែលនៅសល់ក្លាយជាឥណទានមិនទាន់ដក។',
           },
           buyAud: {
-            for: 'ការដកប្រាក់ដែលបង់ពីសមតុល្យទិញ/លក់ដុល្លារអូស្ត្រាលីរបស់អ្នក ជំនួសឱ្យធនាគារ។ (ធីកនៅលើ «ដកប្រាក់ធម្មតា»។)',
-            formula: 'ដកប្រាក់ = ចំនួនទិញ/លក់ដុល្លារអូស្ត្រាលីដែលប្រើ + នៅសល់   ·   នៅសល់ → មិនទាន់ដក',
-            example: 'ដក $80 ចំនួនទិញ $60 → ដកប្រាក់ +$80 សមតុល្យទិញ/លក់ដុល្លារអូស្ត្រាលី −$60 ហើយ $20 ដែលនៅសល់ក្លាយជាឥណទានមិនទាន់ដក។ មិនប៉ះធនាគារ។',
+            for: 'ការដកប្រាក់ដែលបង់ពីសមតុល្យទិញ/លក់រូបិយប័ណ្ណរបស់អ្នក ជំនួសឱ្យធនាគារ។ (ធីកនៅលើ «ដកប្រាក់ធម្មតា»។)',
+            formula: 'ដកប្រាក់ = ចំនួនទិញ/លក់រូបិយប័ណ្ណដែលប្រើ + នៅសល់   ·   នៅសល់ → មិនទាន់ដក',
+            example: 'ដក $80 ចំនួនទិញ $60 → ដកប្រាក់ +$80 សមតុល្យទិញ/លក់រូបិយប័ណ្ណ −$60 ហើយ $20 ដែលនៅសល់ក្លាយជាឥណទានមិនទាន់ដក។ មិនប៉ះធនាគារ។',
           },
         },
       },

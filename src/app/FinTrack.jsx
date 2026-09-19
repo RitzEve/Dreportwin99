@@ -59,6 +59,15 @@ const readTeam = () => (typeof window!=="undefined" && window.FINTRACK_TEAM) || 
 
 const ENTRY_TYPES = ["Regular Deposit","Regular Withdrawal","Unclaimed Credit","Transfer","Store","Mistake","Rental","Adjust","Other","Bank Block","Buy/Sell AUD"];
 const SIGNED_TYPES = ["Unclaimed Credit","Mistake","Rental","Store","Adjust","Other","Buy/Sell AUD"];
+// The strings above are DATA, not words on a screen: every saved transaction carries
+// one in its `type` field, and the stats, filters, balances and keyboard shortcuts all
+// key off them. So they never change — renaming one would orphan every row that already
+// holds the old spelling. TYPE_LABELS only changes what gets PRINTED. "Buy/Sell AUD"
+// names a currency that is wrong for every company outside Australia, so it prints as
+// "Buy/Sell currency"; the amounts themselves are in whatever currency the company keeps
+// its books in, which the app has never tracked, so the label says no more than it knows.
+const TYPE_LABELS = { "Buy/Sell AUD": "Buy/Sell currency" };
+const typeLabel = (t) => TYPE_LABELS[t] || t;
 // Buy/Sell AUD entry: amount × rate is auto-written to the note (e.g. 5x3=15). The
 // tracked value is the top amount; the rate/product are note-only. Returns "" unless
 // both are present so it never clears a manual note.
@@ -226,12 +235,12 @@ const ftHelpersDefined = true;
 const _removedDupA = null;
 const exportCSV = (rows,name,members) => {
   const header = TX_COLS.join(",");
-  const lines = rows.map(r=>TX_COLS.map(c=>csvEscape(c==="date"?fmtDate(r.date):c==="memberPhone"?phoneForTx(r,members):r[c])).join(","));
+  const lines = rows.map(r=>TX_COLS.map(c=>csvEscape(c==="date"?fmtDate(r.date):c==="type"?typeLabel(r.type):c==="memberPhone"?phoneForTx(r,members):r[c])).join(","));
   downloadBlob([header,...lines].join("\n"),`${name}.csv`,"text/csv;charset=utf-8;");
 };
 const exportExcel = (rows,name,members) => {
   const head = "<tr>"+TX_COLS.map(c=>`<th>${c}</th>`).join("")+"</tr>";
-  const body = rows.map(r=>"<tr>"+TX_COLS.map(c=>`<td>${String((c==="date"?fmtDate(r.date):c==="memberPhone"?phoneForTx(r,members):r[c])??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
+  const body = rows.map(r=>"<tr>"+TX_COLS.map(c=>`<td>${String((c==="date"?fmtDate(r.date):c==="type"?typeLabel(r.type):c==="memberPhone"?phoneForTx(r,members):r[c])??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1">${head}${body}</table></body></html>`;
   downloadBlob(html,`${name}.xls`,"application/vnd.ms-excel");
 };
@@ -239,7 +248,7 @@ const exportPDF = (rows,title,members) => {
   const w = window.open("","_blank");
   if(!w) return;
   const head = "<tr>"+["Date","Time","Type","Amount","ID","Member/Ref","Phone","Bank","Operator","Receipt","Notes"].map(c=>`<th>${c}</th>`).join("")+"</tr>";
-  const body = rows.map(r=>"<tr>"+[fmtDate(r.date),r.time,r.type,amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,phoneForTx(r,members),r.bank,r.operator||"",r.receipt||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
+  const body = rows.map(r=>"<tr>"+[fmtDate(r.date),r.time,typeLabel(r.type),amtDisplay(r).sign+amtDisplay(r).val,r.memberId||"",r.memberName,phoneForTx(r,members),r.bank,r.operator||"",r.receipt||"",r.notes||""].map(c=>`<td>${String(c).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>").join("");
   w.document.write(`<html><head><title>${title}</title><style>body{font-family:sans-serif;padding:20px}h2{font-weight:500}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0}</style></head><body><h2>${title}</h2><table>${head}${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 };
@@ -335,8 +344,8 @@ function Amt({t}) {
 
 function TxBadge({type}) {
   const c = TYPE_COLORS[type]||"#888";
-  if(isPaleColor(c) && !dark) return <span style={{background:c,color:STORE_INK,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:600,whiteSpace:"nowrap",border:`1px solid ${STORE_INK}55`}}>{type}</span>;
-  return <span style={{background:c+"26",color:c,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:500,whiteSpace:"nowrap",border:`1px solid ${c}55`}}>{type}</span>;
+  if(isPaleColor(c) && !dark) return <span style={{background:c,color:STORE_INK,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:600,whiteSpace:"nowrap",border:`1px solid ${STORE_INK}55`}}>{typeLabel(type)}</span>;
+  return <span style={{background:c+"26",color:c,fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:500,whiteSpace:"nowrap",border:`1px solid ${c}55`}}>{typeLabel(type)}</span>;
 }
 
 function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
@@ -375,7 +384,7 @@ function TxTable({data, showDelete, onDelete, banks, startIndex=0}) {
                 if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
                 if(t.depositExtra) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#7c3aed"}}><i className="ti ti-plus" aria-hidden="true"/>Deposit extra</span>;
-                if(t.buyAud) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#db2777"}}><i className="ti ti-currency-dollar" aria-hidden="true"/>Buy AUD</span>;
+                if(t.buyAud) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#db2777"}}><i className="ti ti-currency-dollar" aria-hidden="true"/>Buy currency</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                 const holder = (b&&b.holder) || t.bankHolder || "";
                 const isTransferLeg = t.type==="Transfer In"||t.type==="Transfer Out";
@@ -1204,7 +1213,7 @@ function DetailModal({title,subtitle,transactions,onClose,banks,yesterday,summar
                 if(t.storeWithdraw) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-building-store" aria-hidden="true"/>Store withdraw</span>;
                 if(t.redeposit) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#2563eb"}}><i className="ti ti-refresh" aria-hidden="true"/>Redeposit</span>;
                 if(t.depositExtra) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#7c3aed"}}><i className="ti ti-plus" aria-hidden="true"/>Deposit extra</span>;
-                if(t.buyAud) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#db2777"}}><i className="ti ti-currency-dollar" aria-hidden="true"/>Buy AUD</span>;
+                if(t.buyAud) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#db2777"}}><i className="ti ti-currency-dollar" aria-hidden="true"/>Buy currency</span>;
                 if(t.fromUnclaimed) return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:500,color:"#d97706"}}><i className="ti ti-coin" aria-hidden="true"/>From unclaimed credit{t.claimedFromDate?` · ${fmtDate(t.claimedFromDate)}`:""}</span>;
                         const holder = (b&&b.holder) || t.bankHolder || "";
                         const isTransferLeg = t.type==="Transfer In"||t.type==="Transfer Out";
@@ -2209,8 +2218,8 @@ export default function App() {
     //   3) Unclaimed Credit    +leftover     (leftover = top - buyAud; only when > 0)
     if(form.type==="Regular Withdrawal" && form.buyAud){
       const buyAmt = Number(form.buyAudAmount);
-      if(form.buyAudAmount===""||isNaN(buyAmt)||buyAmt<=0){ setFormError("Enter the Buy AUD amount to use."); window.showToast?.("Error , Please Try Again","error"); return; }
-      if(buyAmt > amt + 1e-9){ setFormError("The Buy AUD amount can't be more than the withdrawal amount above."); window.showToast?.("Error , Please Try Again","error"); return; }
+      if(form.buyAudAmount===""||isNaN(buyAmt)||buyAmt<=0){ setFormError("Enter the Buy currency amount to use."); window.showToast?.("Error , Please Try Again","error"); return; }
+      if(buyAmt > amt + 1e-9){ setFormError("The Buy currency amount can't be more than the withdrawal amount above."); window.showToast?.("Error , Please Try Again","error"); return; }
       const leftover = Math.round((amt - buyAmt)*100)/100;   // any remainder becomes unclaimed credit
       const pairId = `BA-${nextId}`;
       const existingMember = liveMembers.find(m=>(form.memberId && m.id===form.memberId)||(ref && m.name.toLowerCase()===ref.toLowerCase()));
@@ -3231,7 +3240,7 @@ export default function App() {
     {label:"Adjustments", count:stats.adjustments.length, amount:stats.sum(stats.adjustments), color:"#0d9488", onClick:()=>openStatDetail("Adjustments", stats.adjustments)},
     {label:"Other", count:stats.other.length, amount:stats.sum(stats.other), color:"#64748b", onClick:()=>openStatDetail("Other", stats.other)},
     {label:"Bank Blocked", count:stats.bankBlocked.length, amount:stats.sum(stats.bankBlocked), color:"#5b7a99", onClick:()=>openStatDetail("Bank Blocked", stats.bankBlocked)},
-    {label:"Buy/Sell AUD", count:stats.buySellAud.length, amount:stats.sum(stats.buySellAud), color:"#db2777", onClick:()=>openStatDetail("Buy/Sell AUD", stats.buySellAud)},
+    {label:typeLabel("Buy/Sell AUD"), count:stats.buySellAud.length, amount:stats.sum(stats.buySellAud), color:"#db2777", onClick:()=>openStatDetail(typeLabel("Buy/Sell AUD"), stats.buySellAud)},
   ];
   const PRIMARY_STATS = ["Total deposits","Total withdrawals","Win / Loss","Unclaimed credits","Store entries"];
   const primaryStatCards = statCardDefs.filter(c=>PRIMARY_STATS.includes(c.label));
@@ -3761,7 +3770,7 @@ export default function App() {
                 {ENTRY_TYPES.map(t=>{
                   const c = TYPE_COLORS[t]||C.accent;
                   const active = form.type===t;
-                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false,claimDate:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false,rate:"",buyAud:false,buyAudAmount:""}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{t}</button>;
+                  return <button key={t} onClick={()=>setForm(f=>({...f,type:t,fromUnclaimed:false,redeposit:false,claimDate:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false,rate:"",buyAud:false,buyAudAmount:""}))} style={{cursor:"pointer",padding:"8px 14px",fontSize:13,fontWeight:500,borderRadius:8,border:`1.5px solid ${c}`,background:active?c:(dark?c+"22":c+"14"),color:active?"#fff":c}}>{typeLabel(t)}</button>;
                 })}
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
@@ -3906,8 +3915,8 @@ export default function App() {
                         <input type="checkbox" checked={!!form.buyAud} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,buyAud:on,redeposit:on?false:f.redeposit,storeWithdraw:on?false:f.storeWithdraw,actualPaid:on?false:f.actualPaid,storeAndPaid:on?false:f.storeAndPaid}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
                         <span aria-hidden="true" style={box(form.buyAud,"#db2777")}>{form.buyAud&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:13}}/>}</span>
                         <span style={{display:"flex",flexDirection:"column",lineHeight:1.2,minWidth:0}}>
-                          <span style={{fontSize:12.5,fontWeight:500,color:C.text}}>Buy AUD</span>
-                          <span style={{fontSize:10,color:C.muted}}>Uses Buy/Sell AUD · leftover → unclaimed</span>
+                          <span style={{fontSize:12.5,fontWeight:500,color:C.text}}>Buy currency</span>
+                          <span style={{fontSize:10,color:C.muted}}>Uses Buy/Sell currency · leftover → unclaimed</span>
                         </span>
                       </label>
                     </div>
@@ -3942,9 +3951,9 @@ export default function App() {
                     )}
                     {form.buyAud&&(
                       <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:2}}>
-                        <label style={{fontSize:12,fontWeight:500,color:C.text}}>Buy AUD amount to use</label>
+                        <label style={{fontSize:12,fontWeight:500,color:C.text}}>Buy currency amount to use</label>
                         <input type="number" placeholder="e.g. 500" value={form.buyAudAmount} onChange={e=>setForm(f=>({...f,buyAudAmount:e.target.value}))} style={{maxWidth:240,boxSizing:"border-box"}}/>
-                        <span style={{fontSize:11.5,color:C.muted}}>Buy/Sell AUD available: <strong style={{color:C.text}}>{fmt(buySellAudBalance)}</strong>{(Number(form.buyAudAmount)||0)>0 && <> · leftover <strong style={{color:baLeft<0?"#dc2626":C.text}}>{fmt(baLeft)}</strong> → unclaimed credit</>}</span>
+                        <span style={{fontSize:11.5,color:C.muted}}>Buy/Sell currency available: <strong style={{color:C.text}}>{fmt(buySellAudBalance)}</strong>{(Number(form.buyAudAmount)||0)>0 && <> · leftover <strong style={{color:baLeft<0?"#dc2626":C.text}}>{fmt(baLeft)}</strong> → unclaimed credit</>}</span>
                       </div>
                     )}
                   </div>
@@ -4202,7 +4211,7 @@ export default function App() {
                     {ENTRY_TYPES.map(t=>{
                       const c = TYPE_COLORS[t]||C.accent;
                       return <span key={t} style={{fontSize:11.5,color:C.muted,display:"inline-flex",alignItems:"center",gap:5}}>
-                        <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:(isPaleColor(c)&&!dark)?STORE_INK:c,background:(isPaleColor(c)&&!dark)?c:(dark?c+"22":c+"14"),border:`1px solid ${(isPaleColor(c)&&!dark)?STORE_INK+"55":c+"66"}`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{t.replace("Regular ","")}
+                        <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:(isPaleColor(c)&&!dark)?STORE_INK:c,background:(isPaleColor(c)&&!dark)?c:(dark?c+"22":c+"14"),border:`1px solid ${(isPaleColor(c)&&!dark)?STORE_INK+"55":c+"66"}`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{typeLabel(t).replace("Regular ","")}
                       </span>;
                     })}
                     <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>
@@ -4216,7 +4225,7 @@ export default function App() {
                     style={{cursor:"pointer",padding:"16px 14px",fontSize:14,fontWeight:500,borderRadius:10,border:`1.5px solid ${c}`,background:dark?c+"22":c+"12",color:c,display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"transform 0.1s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background=c;e.currentTarget.style.color="#fff";}}
                     onMouseLeave={e=>{e.currentTarget.style.background=dark?c+"22":c+"12";e.currentTarget.style.color=c;}}>
-                    <i className="ti ti-plus" aria-hidden="true" style={{fontSize:18}}/>{t}
+                    <i className="ti ti-plus" aria-hidden="true" style={{fontSize:18}}/>{typeLabel(t)}
                   </button>;
                 })}
                 {/* "More" drawer — the less-common types (Mistake, Rental, Adjust, Other) */}
@@ -4238,7 +4247,7 @@ export default function App() {
                             onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                             <span style={{width:9,height:9,borderRadius:"50%",background:c,flexShrink:0}}/>
                             <i className="ti ti-plus" aria-hidden="true" style={{fontSize:14,color:c,flexShrink:0}}/>
-                            <span>{t}</span>
+                            <span>{typeLabel(t)}</span>
                           </button>
                         );
                       })}
@@ -4717,7 +4726,7 @@ export default function App() {
                 <div><label style={labelStyle}>Bank</label><FluidDropdown value={search.bank} placeholder="All banks" ariaLabel="Filter by bank" options={[{value:"",label:"All banks"},...banksLive.map(b=>({value:String(b.id),label:b.holder?`${b.holder} — ${b.name}`:b.name}))]} onChange={v=>setSearch(s=>({...s,bank:v}))}/></div>
                 <div><label style={labelStyle}>From date</label><input type="date" value={search.dateFrom} onChange={e=>setSearch(s=>({...s,dateFrom:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 <div><label style={labelStyle}>To date</label><input type="date" value={search.dateTo} onChange={e=>setSearch(s=>({...s,dateTo:e.target.value}))} style={{width:"100%",boxSizing:"border-box"}}/></div>
-                <div><label style={labelStyle}>Entry type</label><FluidDropdown value={search.type} placeholder="All types" ariaLabel="Filter by type" options={[{value:"",label:"All types"},...ENTRY_TYPES.map(t=>({value:t,label:t,color:TYPE_COLORS[t]}))]} onChange={v=>setSearch(s=>({...s,type:v}))}/></div>
+                <div><label style={labelStyle}>Entry type</label><FluidDropdown value={search.type} placeholder="All types" ariaLabel="Filter by type" options={[{value:"",label:"All types"},...ENTRY_TYPES.map(t=>({value:t,label:typeLabel(t),color:TYPE_COLORS[t]}))]} onChange={v=>setSearch(s=>({...s,type:v}))}/></div>
               </div>
               <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div style={{fontSize:12,color:C.muted}}>{filteredTx.length} result{filteredTx.length!==1?"s":""} found</div>

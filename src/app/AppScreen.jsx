@@ -183,7 +183,7 @@ export default function AppScreen({ ctx, onExit, onLogout, canReturnToConsole = 
           <i className="ti ti-eye" aria-hidden="true" /> Viewing as owner — read-only. Anything you try to add or change here won't be saved.
         </div>
       )}
-      <Guide open={guideOpen} role={ctx?.user?.role} onClose={() => setGuideOpen(false)} />
+      <Guide open={guideOpen} role={ctx?.user?.role} country={ctx?.company?.country} onClose={() => setGuideOpen(false)} />
       <div style={{ ...styles.appArea, padding: isMobile ? 0 : '16px' }}>
         {Comp ? <Comp /> : loadError ? (
           <div style={styles.loadingWrap}>

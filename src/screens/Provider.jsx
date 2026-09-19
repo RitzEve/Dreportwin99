@@ -142,6 +142,7 @@ export default function Provider({ ctx, onLogout }) {
           <AccountMenu user={user} roleLabel={user.role === 'provider' ? 'Provider' : 'Sub-provider'} onLogout={onLogout} onOpenGuide={() => setGuideOpen(true)} />
         </div>
       </header>
+      {/* No country: a provider spans every company, so the guide keeps its default wording. */}
       <Guide open={guideOpen} role={user.role} onClose={() => setGuideOpen(false)} />
 
       <main style={{ ...styles.main, maxWidth: isWide ? 1320 : styles.main.maxWidth, padding: isMobile ? 14 : 24 }}>

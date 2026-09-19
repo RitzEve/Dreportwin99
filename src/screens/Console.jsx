@@ -124,7 +124,7 @@ export default function Console({ ctx, onOpenApp, onLogout }) {
           <AccountMenu user={user} roleLabel={ROLE_LABEL[user.role]} onLogout={onLogout} onOpenGuide={() => setGuideOpen(true)} />
         </div>
       </header>
-      <Guide open={guideOpen} role={user.role} onClose={() => setGuideOpen(false)} />
+      <Guide open={guideOpen} role={user.role} country={company?.country} onClose={() => setGuideOpen(false)} />
 
       <main style={{ ...styles.main, padding: isMobile ? 14 : 24 }}>
         <section style={styles.launchCard} onClick={onOpenApp} role="button" tabIndex={0}

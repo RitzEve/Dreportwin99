@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ROLES } from '../lib/auth.js';
 import { useEsc } from '../lib/useEsc.js';
+import { bankTermsFor } from '../lib/banks.js';
 
 /*
  * Guide — a full-screen, role-aware, trilingual "how to use" overlay.
@@ -120,7 +121,24 @@ function detectLang() {
   return 'en';
 }
 
-export default function Guide({ open, role, onClose }) {
+/*
+ * All three languages write the bank wording the Australian way — BSB and PayID —
+ * because every company predates the country field. For a company anywhere else
+ * those two words name nothing, so swap them for that country's own terms from
+ * banks.js: the very same words the app's forms, labels and dropdowns now use, so
+ * the guide never describes a box the reader cannot find on screen.
+ *
+ * A plain token swap is enough. BSB and PayID stay Latin inside the Chinese and
+ * Khmer sentences too, and no country's replacement contains the other token.
+ */
+function localiser(country) {
+  const terms = bankTermsFor(country);
+  // Australia: the copy is already correct, so hand back the text untouched.
+  if (terms.bsb === 'BSB' && terms.payid === 'PayID') return (text) => text;
+  return (text) => String(text).replace(/BSB/g, terms.bsb).replace(/PayID/g, terms.payid);
+}
+
+export default function Guide({ open, role, country, onClose }) {
   const [lang, setLang] = useState(detectLang);
   const defaultRole = role === ROLES.PROVIDER || !ROLE_ORDER.includes(role) ? ROLES.MASTER : role;
   const [viewRole, setViewRole] = useState(defaultRole);
@@ -138,6 +156,7 @@ export default function Guide({ open, role, onClose }) {
   }
 
   const t = T[lang];
+  const say = useMemo(() => localiser(country), [country]);
   const sections = useMemo(
     () => SECTIONS.filter((s) => s.roles.includes(viewRole)),
     [viewRole],
@@ -184,7 +203,7 @@ export default function Guide({ open, role, onClose }) {
                   <span className="guide-section-num"><i className={`ti ${s.icon}`} aria-hidden="true" /></span>
                   <h2 style={{ margin: 0, fontSize: 19 }}>{i + 1}. {c.title}</h2>
                 </div>
-                <p style={{ color: 'var(--muted)', margin: '4px 0 0' }}>{c.intro}</p>
+                <p style={{ color: 'var(--muted)', margin: '4px 0 0' }}>{say(c.intro)}</p>
                 {s.id === 'txoptions' ? (
                   <TxOptions c={c} />
                 ) : s.id === 'alltypes' ? (
@@ -192,7 +211,7 @@ export default function Guide({ open, role, onClose }) {
                 ) : (
                   <div className="guide-grid">
                     <ol className="guide-steps">
-                      {c.steps.map((step, j) => <li key={j}>{step}</li>)}
+                      {c.steps.map((step, j) => <li key={j}>{say(step)}</li>)}
                     </ol>
                     <figure className="guide-figure" style={{ margin: 0 }}>
                       <Mockup id={s.id} />
@@ -811,7 +830,7 @@ const T = {
           'Open Banks to see each account, its current balance, and the details kept with it — BSB, account number, PayID, and a Login PIN and VPN if you save those. Deleting an account erases its PIN and VPN for good.',
           'When a transaction uses a bank, choose the right one so the balance stays correct.',
           'Store credit covers unclaimed amounts — use it when a transaction draws from credit, not a bank.',
-          'Click a bank’s card to open its history — the BSB, account number and PayID sit at the top. If an OTP link is saved for that account, an “OTP link” button appears on the card so you can jump straight there while you work.',
+          'Click a bank’s card to open its history — BSB, account number and PayID sit at the top. If an OTP link is saved for that account, an “OTP link” button appears on the card so you can jump straight there while you work.',
         ],
       },
       details: {

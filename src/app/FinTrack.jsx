@@ -92,8 +92,14 @@ const STORE_INK = "#3d2f00"; // dark brown text shown on the solid-yellow chip
 const isPaleColor = c => c===STORE_COLOR; // colours too light to use as plain text
 const goldChip = { background: STORE_COLOR, color: STORE_INK, borderRadius: 5, padding: "1px 7px", fontWeight: 600 };
 // Keyboard shortcuts: Alt + first letter picks an entry type on the Transactions page.
-const SHORTCUT_LETTER = {"Regular Deposit":"D","Regular Withdrawal":"W","Unclaimed Credit":"U","Transfer":"T","Store":"S","Mistake":"M","Rental":"R","Adjust":"A","Other":"O"};
-const TYPE_SHORTCUTS = {d:"Regular Deposit",w:"Regular Withdrawal",u:"Unclaimed Credit",t:"Transfer",s:"Store",m:"Mistake",r:"Rental",a:"Adjust",o:"Other"};
+// Alt + letter opens (or switches to) an entry type from the Transactions page.
+// Both maps are keyed by the STORED type string, never the printed label, and the two
+// must stay in step — a test asserts they are exact mirrors of each other.
+// B is Bank Block; Buy/Sell currency takes C because both labels start with a B and
+// Bank Block had the better claim on it. The other nine letters are first-letter and
+// have been in muscle memory since they shipped, so none of them ever moves.
+const SHORTCUT_LETTER = {"Regular Deposit":"D","Regular Withdrawal":"W","Unclaimed Credit":"U","Transfer":"T","Store":"S","Mistake":"M","Rental":"R","Adjust":"A","Other":"O","Bank Block":"B","Buy/Sell AUD":"C"};
+const TYPE_SHORTCUTS = {d:"Regular Deposit",w:"Regular Withdrawal",u:"Unclaimed Credit",t:"Transfer",s:"Store",m:"Mistake",r:"Rental",a:"Adjust",o:"Other",b:"Bank Block",c:"Buy/Sell AUD"};
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
 const fmt = n => { const v = Number(n)||0; return (v<0?"-$":"$")+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); };

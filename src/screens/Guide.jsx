@@ -667,9 +667,9 @@ const T = {
         title: 'Recording a transaction',
         intro: 'This is the main job: logging money coming in (deposit), going out (withdraw), or credit returned (redeposit).',
         steps: [
-          'Choose the member, then pick the type: deposit, withdraw or redeposit.',
+          'Choose the member, then pick the type: deposit, withdraw or redeposit. A “Keyboard shortcuts” strip above those buttons lets you skip the mouse: hold Alt and press a letter to open that type straight away — Alt+D for a deposit, Alt+W for a withdrawal, Alt+B for Bank Block, and so on. Every letter is the first letter of its type except one: Buy/Sell currency is Alt+C, because Bank Block already had the B. Tap the strip’s heading to fold it away, and it stays folded next time.',
           'Enter the amount and the bank or store it touches, plus a note if useful.',
-          'Press Enter to save — the record appears in the history straight away. Nothing is ever truly erased: a deleted entry stays in the log with a red “Deleted” badge, and just under it, who deleted it and when.',
+          'Press Enter to save — the record appears in the history straight away. Tab moves between fields, ↑ and ↓ pick inside a dropdown, and Esc closes the form. Nothing is ever truly erased: a deleted entry stays in the log with a red “Deleted” badge, and just under it, who deleted it and when.',
         ],
       },
       alltypes: {
@@ -943,9 +943,9 @@ const T = {
         title: '记录一笔交易',
         intro: '这是主要工作：记录入账（存入）、出账（取出）或退回额度（再存入）。',
         steps: [
-          '先选择会员，再选择类型：存入、取出或再存入。',
+          '先选择会员，再选择类型：存入、取出或再存入。按钮上方有一条“Keyboard shortcuts（键盘快捷键）”栏，可以不用鼠标：按住 Alt 再按一个字母，就直接新建该类型的记录——Alt+D 存入、Alt+W 取出、Alt+B 银行冻结，依此类推。每个字母都取自该类型的首字母，只有一个例外：买卖货币是 Alt+C，因为 B 已经被银行冻结用掉了。点一下该栏标题可将它收起，下次仍保持收起。',
           '填写金额以及涉及的银行或商店额度，必要时加上备注。',
-          '点击“确认”保存，记录会立即出现在历史中。任何条目都不会被真正抹去：已删除的条目仍留在记录中，带有红色“Deleted（已删除）”标记，其下方显示由谁在何时删除。',
+          '点击“确认”保存，记录会立即出现在历史中。Tab 切换栏位，↑ ↓ 在下拉选单中选择，Esc 关闭表单。任何条目都不会被真正抹去：已删除的条目仍留在记录中，带有红色“Deleted（已删除）”标记，其下方显示由谁在何时删除。',
         ],
       },
       alltypes: {
@@ -1219,9 +1219,9 @@ const T = {
         title: 'ការកត់ត្រាប្រតិបត្តិការ',
         intro: 'នេះជាការងារសំខាន់៖ កត់ត្រាលុយចូល (ដាក់ប្រាក់) លុយចេញ (ដកប្រាក់) ឬឥណទានដែលត្រឡប់មកវិញ (ដាក់ប្រាក់ឡើងវិញ)។',
         steps: [
-          'ជ្រើសសមាជិក រួចជ្រើសប្រភេទ៖ ដាក់ប្រាក់ ដកប្រាក់ ឬដាក់ប្រាក់ឡើងវិញ។',
+          'ជ្រើសសមាជិក រួចជ្រើសប្រភេទ៖ ដាក់ប្រាក់ ដកប្រាក់ ឬដាក់ប្រាក់ឡើងវិញ។ មានរបារ «Keyboard shortcuts» នៅពីលើប៊ូតុងទាំងនោះ ដែលអនុញ្ញាតឱ្យអ្នកមិនប្រើកណ្តុរ៖ ចុច Alt ជាមួយអក្សរមួយ នឹងបើកប្រភេទនោះភ្លាម — Alt+D សម្រាប់ដាក់ប្រាក់ Alt+W សម្រាប់ដកប្រាក់ Alt+B សម្រាប់ការទប់ស្កាត់ធនាគារ ជាដើម។ អក្សរនីមួយៗជាអក្សរដំបូងនៃប្រភេទរបស់វា លើកលែងតែមួយ៖ ទិញ/លក់រូបិយប័ណ្ណគឺ Alt+C ព្រោះ B ត្រូវបានប្រើសម្រាប់ការទប់ស្កាត់ធនាគារហើយ។ ចុចលើចំណងជើងរបារនេះ ដើម្បីបត់វាទុក ហើយវានឹងនៅបត់នៅពេលក្រោយ។',
           'បញ្ចូលចំនួនទឹកប្រាក់ និងធនាគារ ឬឥណទានហាងដែលពាក់ព័ន្ធ ព្រមទាំងចំណាំបើចាំបាច់។',
-          'ចុច «បញ្ជាក់» ដើម្បីរក្សាទុក។ កំណត់ត្រានឹងបង្ហាញក្នុងប្រវត្តិភ្លាមៗ។ គ្មានអ្វីត្រូវបានលុបចោលពិតប្រាកដទេ៖ ធាតុដែលបានលុប នៅតែស្ថិតក្នុងកំណត់ហេតុ ជាមួយស្លាកក្រហម «Deleted» ហើយនៅខាងក្រោមវា បង្ហាញថាអ្នកណាបានលុប និងនៅពេលណា។',
+          'ចុច «បញ្ជាក់» ដើម្បីរក្សាទុក។ កំណត់ត្រានឹងបង្ហាញក្នុងប្រវត្តិភ្លាមៗ។ Tab ប្តូរវាល ↑ និង ↓ ជ្រើសក្នុងបញ្ជីទម្លាក់ ហើយ Esc បិទទម្រង់។ គ្មានអ្វីត្រូវបានលុបចោលពិតប្រាកដទេ៖ ធាតុដែលបានលុប នៅតែស្ថិតក្នុងកំណត់ហេតុ ជាមួយស្លាកក្រហម «Deleted» ហើយនៅខាងក្រោមវា បង្ហាញថាអ្នកណាបានលុប និងនៅពេលណា។',
         ],
       },
       alltypes: {

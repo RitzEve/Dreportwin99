@@ -91,7 +91,6 @@ const STORE_COLOR = "#FFDE63";
 const STORE_INK = "#3d2f00"; // dark brown text shown on the solid-yellow chip
 const isPaleColor = c => c===STORE_COLOR; // colours too light to use as plain text
 const goldChip = { background: STORE_COLOR, color: STORE_INK, borderRadius: 5, padding: "1px 7px", fontWeight: 600 };
-// Keyboard shortcuts: Alt + first letter picks an entry type on the Transactions page.
 // Alt + letter opens (or switches to) an entry type from the Transactions page.
 // Both maps are keyed by the STORED type string, never the printed label, and the two
 // must stay in step — a test asserts they are exact mirrors of each other.
@@ -1957,7 +1956,7 @@ export default function App() {
   // When the entry modal opens, move focus into it (so Tab cycles the fields).
   useEffect(()=>{ if(!showEntryModal) return undefined; const id=setTimeout(()=>amountRef.current?.focus(),40); return ()=>clearTimeout(id); },[showEntryModal]);
 
-  // Alt + first letter picks an entry type while on the Transactions page.
+  // Alt + a letter picks an entry type while on the Transactions page (see SHORTCUT_LETTER).
   useEffect(()=>{
     const onKey = (e)=>{
       if(!e.altKey||e.ctrlKey||e.metaKey) return;
@@ -4210,7 +4209,7 @@ export default function App() {
                   <i className="ti ti-keyboard" aria-hidden="true" style={{fontSize:15,color:C.accent}}/>
                   Keyboard shortcuts
                   <i className={`ti ti-chevron-${showShortcuts?"up":"down"}`} aria-hidden="true" style={{fontSize:14,color:C.muted,marginLeft:4}}/>
-                  {!showShortcuts&&<span style={{fontSize:11,color:C.muted,fontWeight:400,marginLeft:"auto"}}>Alt + first letter · tap to show</span>}
+                  {!showShortcuts&&<span style={{fontSize:11,color:C.muted,fontWeight:400,marginLeft:"auto"}}>Alt + a letter · tap to show</span>}
                 </button>
                 {showShortcuts&&(
                   <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,marginTop:10}}>

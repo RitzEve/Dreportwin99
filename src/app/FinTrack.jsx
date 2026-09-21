@@ -1466,8 +1466,15 @@ export default function App() {
   const [detailModal,setDetailModal] = useState(null);
   const [dashView,setDashView] = useState("today");
   const [selMonth,setSelMonth] = useState(thisMonth);
-  const [rangeFrom,setRangeFrom] = useState(weekAgo);
-  const [rangeTo,setRangeTo] = useState(today);
+  // Date range: until the person picks their own dates it IS "the last 7 days up to
+  // today", so it moves with the calendar at midnight the way Today does. A date they
+  // pick is kept exactly as chosen. Picking only the From date keeps To following today
+  // ("since the 1st, up to today"); picking the To date fixes both ends, so From can
+  // never roll past a To they chose. Derived, not synced — no effect, no extra render.
+  const [rangeFromPick,setRangeFromPick] = useState(null); // null = follow the calendar
+  const [rangeToPick,setRangeToPick] = useState(null);
+  const rangeFrom = rangeFromPick ?? weekAgo;
+  const rangeTo = rangeToPick ?? today;
 
   const [form,setForm] = useState({type:"Regular Deposit",amount:"",memberId:"",memberName:"",memberPhone:"",bankId:null,notes:"",toBankId:null,date:"",fromUnclaimed:false,redeposit:false,claimDate:"",receipt:"",storeWithdraw:false,storeWithdrawAmount:"",actualPaid:false,actualPaidAmount:"",storeAndPaid:false,depositExtra:false,rate:"",buyAud:false,buyAudAmount:""});
   const [formError,setFormError] = useState("");
@@ -3357,9 +3364,9 @@ export default function App() {
       {dashView==="range"&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:4,flexWrap:"wrap"}}>
           <span style={{fontSize:12,color:C.muted}}>From</span>
-          <input type="date" value={rangeFrom} max={rangeTo||undefined} onChange={e=>setRangeFrom(e.target.value)} style={{boxSizing:"border-box"}}/>
+          <input type="date" value={rangeFrom} max={rangeTo||undefined} onChange={e=>setRangeFromPick(e.target.value)} style={{boxSizing:"border-box"}}/>
           <span style={{fontSize:12,color:C.muted}}>To</span>
-          <input type="date" value={rangeTo} min={rangeFrom||undefined} onChange={e=>setRangeTo(e.target.value)} style={{boxSizing:"border-box"}}/>
+          <input type="date" value={rangeTo} min={rangeFrom||undefined} onChange={e=>{ if(rangeFromPick===null) setRangeFromPick(rangeFrom); setRangeToPick(e.target.value); }} style={{boxSizing:"border-box"}}/>
         </div>
       )}
       <span style={{fontSize:13,color:C.muted,marginLeft:"auto"}}>{dashScopeLabel}</span>

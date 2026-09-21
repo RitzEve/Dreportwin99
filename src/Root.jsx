@@ -92,7 +92,18 @@ export default function Root() {
   useEffect(() => {
     if (!ctx?.user?.id) return undefined;
     let stopped = false;
-    const beat = () => { if (!stopped && document.visibilityState === 'visible') touchPresence(); };
+    const beat = async () => {
+      if (stopped || document.visibilityState !== 'visible') return;
+      // The heartbeat doubles as the "is this account still allowed in?" check. Once an
+      // account is deactivated the database refuses every request (migration-037); this
+      // is how a tab that was already open finds out and goes back to the login page,
+      // instead of sitting on data it can no longer refresh or save.
+      if ((await touchPresence()) === 'deactivated' && !stopped) {
+        stopped = true;
+        await handleLogout();
+        window.showToast?.('This account has been deactivated. Contact your administrator.', 'error');
+      }
+    };
     beat();
     const iv = setInterval(beat, PRESENCE_BEAT_MS);
     // Re-stamp the moment they come back to the tab, so the dot doesn't lag.

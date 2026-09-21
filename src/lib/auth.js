@@ -184,8 +184,26 @@ export async function logout() {
  * been run yet, or the network blips, they fail silently rather than surfacing
  * an error to someone who was only trying to use the app.
  */
+/**
+ * True when the database refused a request because this account has been
+ * deactivated. migration-037 checks that before EVERY request, so from the moment
+ * an account is switched off it can no longer read or change anything.
+ */
+export function isDeactivatedError(error) {
+  return !!error && (error.code === 'account_deactivated' || /deactivated/i.test(error.message || ''));
+}
+
+/**
+ * Still fire-and-forget as far as presence goes, but it now also reports the one
+ * refusal that matters: 'deactivated'. That makes the heartbeat the way a tab that
+ * was ALREADY open finds out its account was switched off (see Root.jsx).
+ */
 export async function touchPresence() {
-  try { await supabase.rpc('touch_presence'); } catch { /* presence is best-effort */ }
+  try {
+    const { error } = await supabase.rpc('touch_presence');
+    if (isDeactivatedError(error)) return 'deactivated';
+  } catch { /* presence is best-effort */ }
+  return 'ok';
 }
 
 export async function clearPresence() {

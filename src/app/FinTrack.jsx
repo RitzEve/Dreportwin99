@@ -1280,6 +1280,11 @@ function ComparisonChart({data}) {
 // after that only the "Try again now" button starts another. Before this, a tab whose
 // download kept failing re-fetched the full record every 20 seconds, indefinitely.
 const LOAD_RETRY_MS = [10000, 20000, 40000, 60000, 60000];
+// Back-off for re-sending a save the server refused. Unlike loading, this never gives
+// up while the page is open: the unsaved entry exists nowhere else. The last step
+// repeats. A failed attempt returns only an error, not the record, so retrying costs
+// the server a little work but downloads nothing.
+const SAVE_RETRY_MS = [5000, 15000, 30000, 60000];
 
 export default function App() {
   // Read the live session for THIS mount (see readSession note up top). The
@@ -1656,19 +1661,43 @@ export default function App() {
   // does it atomically when migration-008 is installed, else the bridge merges client-
   // side), so we send our local data and adopt the authoritative merged result it
   // returns. No pre-read here — that saved an entire extra blob download on every save.
+  // A failed save must never leave an entry sitting on one screen only. On 2026-09-21
+  // one of OP-005's saves hit the database's time limit: the entry showed on OP-005's
+  // screen but never reached the server, and nothing ever sent it again — the update
+  // check even counted it as synced — so no other device could see it. (It was only
+  // rescued because OP-005 happened to record another entry 57 s later.) Now a failed
+  // save is retried on SAVE_RETRY_MS until the server accepts it, and closing the tab
+  // while something is still unsaved asks first. Owners are the exception: their view
+  // is read-only by design, so those saves are meant to be refused.
+  const unsavedRef = useRef(false);            // the server hasn't accepted our latest changes yet
+  const saveFailsRef = useRef(0);              // consecutive failed saves, for the back-off
+  const [saveRetry,setSaveRetry] = useState(0); // bump to send again
   useEffect(()=>{
     if(!loaded) return;
     const payload = {transactions,banks,members,nextId,offDays};
     const serialized = JSON.stringify(payload); // what we send to the server
     const sig = sortedStringify(payload);       // order-independent "has anything changed?" key
-    if(sig === lastSyncRef.current) return; // nothing semantically new (incl. data we just pulled in)
-    let cancelled = false;
+    // Nothing new AND nothing owed. (unsavedRef matters because the update check marks
+    // merged data as synced even when part of it only exists on this screen.)
+    if(sig === lastSyncRef.current && !unsavedRef.current) return;
+    let cancelled = false, retryTimer = null;
     (async()=>{
       try{
         const key = `fintrack-${SESSION.companyId}-v2`;
-        const res = await window.storage.set(key,serialized);
+        let res = null;
+        try{ res = await window.storage.set(key,serialized); }catch(e){ res = null; }
         if(cancelled) return;
-        if(!res){ window.showToast?.("Couldn't save — you may be in a read-only view, or check your connection.","error"); return; }
+        if(!res){
+          if(isOwnerView){ window.showToast?.("Couldn't save — you may be in a read-only view, or check your connection.","error"); return; }
+          unsavedRef.current = true;
+          if(saveFailsRef.current===0) window.showToast?.("Not saved yet — the app will keep trying by itself. Please keep this page open.","error");
+          const delay = SAVE_RETRY_MS[Math.min(saveFailsRef.current, SAVE_RETRY_MS.length-1)];
+          saveFailsRef.current += 1;
+          retryTimer = setTimeout(()=>{ if(!cancelled) setSaveRetry(n=>n+1); }, delay);
+          return;
+        }
+        if(saveFailsRef.current>0) window.showToast?.("Saved — everything is on the server now.","success");
+        unsavedRef.current = false; saveFailsRef.current = 0;
         const serverObj = JSON.parse((res && res.value) ? res.value : serialized);
         // If the server's merge doesn't know about offDays yet (migration-009 not applied),
         // keep our local copy so they aren't lost AND the change-check settles instead of
@@ -1681,10 +1710,18 @@ export default function App() {
         // check that stops the runaway save -> merge -> apply -> save loop.
         if(finalSig !== sig) applyData(serverObj);
         // The write bumped the server's updated_at; let the next poll reconcile it (cheap).
-      }catch(e){ /* save failed — will retry on the next change or poll */ }
+      }catch(e){ /* the server's reply couldn't be read; the next change or retry sends again */ }
     })();
-    return ()=>{ cancelled = true; };
-  },[transactions,banks,members,nextId,offDays,loaded]);
+    return ()=>{ cancelled = true; if(retryTimer) clearTimeout(retryTimer); };
+  },[transactions,banks,members,nextId,offDays,loaded,saveRetry]);
+
+  // Closing or reloading the tab with an unsaved entry would lose it for good, so the
+  // browser asks first ("Leave site? Changes you made may not be saved").
+  useEffect(()=>{
+    const onLeave = e => { if(unsavedRef.current){ e.preventDefault(); e.returnValue = ""; } };
+    window.addEventListener("beforeunload", onLeave);
+    return ()=>window.removeEventListener("beforeunload", onLeave);
+  },[]);
 
   // Auto-refresh — pull other devices' changes WITHOUT wasting egress. Every 20s (only
   // while the tab is visible) we check the tiny server `updated_at` via getMeta(); we

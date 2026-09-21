@@ -150,7 +150,10 @@ export async function login({ identifier, password }) {
   }
   const me = await getCurrentUser();
   if (!me) {
-    await supabase.auth.signOut();
+    // Drop only the session this login just created. A global sign-out here would
+    // throw every other PC on the same login out too — and getCurrentUser() can come
+    // back empty from a mere network blip, not just from a disabled account.
+    await supabase.auth.signOut({ scope: 'local' });
     return { ok: false, error: 'This account has no access yet. Contact your administrator.' };
   }
   return { ok: true, user: me };
@@ -162,7 +165,13 @@ export async function logout() {
   // clear_presence() identifies the row by auth.uid(). Failure is ignored on
   // purpose: never block a sign-out on a presence write.
   try { await clearPresence(); } catch { /* signing out regardless */ }
-  await supabase.auth.signOut();
+  // scope 'local': end THIS browser's session only. The library's default is
+  // 'global', which also cancels every other session of the same login — and
+  // staff share logins across PCs. On 2026-09-21 one desk's six log-outs in an
+  // evening were each signing the other PCs on that login out as well. It is
+  // still a real sign-out: the server cancels this session, not just the browser.
+  // (Locking someone out everywhere is Remove account, which deletes the login.)
+  await supabase.auth.signOut({ scope: 'local' });
 }
 
 // ---- presence: who's signed in right now, and from where ------------------

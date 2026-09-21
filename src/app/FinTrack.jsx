@@ -1353,6 +1353,19 @@ export default function App() {
   const yesterday = dateNDaysAgoInTz(1,tz);
   const weekAgo = dateNDaysAgoInTz(6,tz);
   const thisMonth = today.slice(0,7);
+  // Redraw when the company's DATE changes. Nothing else redraws this (large) component
+  // at midnight — the top-bar clock deliberately re-renders only itself — so "Today" used
+  // to stay on the old day until something else happened to redraw the page, and then it
+  // showed the old day's figures under the new day's date (2026-09-22). Checked every 15 s
+  // and whenever the tab comes back into view; the state only changes, and the page only
+  // redraws, when the date has actually moved on.
+  const [,setDayTick] = useState(today);
+  useEffect(()=>{
+    const check = ()=>setDayTick(dateInTz(tz));
+    const id = setInterval(check, 15000);
+    document.addEventListener("visibilitychange", check);
+    return ()=>{ clearInterval(id); document.removeEventListener("visibilitychange", check); };
+  },[tz]);
   // Live clock for the top bar, ticking in the company's time zone.
   const [page,setPage] = useState("dashboard");
   const [memberPage,setMemberPage] = useState(1);
@@ -1803,7 +1816,7 @@ export default function App() {
     const set = new Set(transactions.map(t=>t.date.slice(0,7)));
     set.add(thisMonth);
     return Array.from(set).sort().reverse();
-  },[transactions]);
+  },[transactions,thisMonth]);
 
   const computeStats = (list) => {
     const active = list.filter(t=>!t.deleted);
@@ -1870,7 +1883,7 @@ export default function App() {
       return transactions.filter(t=>t.date>=lo&&t.date<=hi);
     }
     return transactions.filter(t=>t.date.slice(0,7)===selMonth);
-  },[transactions,dashView,selMonth,rangeFrom,rangeTo]);
+  },[transactions,dashView,selMonth,rangeFrom,rangeTo,today,yesterday,weekAgo]);
   const stats = useMemo(()=>computeStats(dashTx),[dashTx]);
   // All-time unclaimed-credit balance (what a "Deposit from unclaimed credit" draws on).
   const unclaimedBalance = useMemo(()=>transactions.filter(t=>!t.deleted&&t.type==="Unclaimed Credit"&&!t.fundLeg).reduce((s,t)=>s+(t.amount||0),0),[transactions]);
@@ -2970,7 +2983,7 @@ export default function App() {
   const offRecords = useMemo(()=>offLive.filter(o=>o.kind!=='shift'),[offLive]);   // real days off
   const shiftRecords = useMemo(()=>offLive.filter(o=>o.kind==='shift'),[offLive]); // month shift roster rows
   const dayNames = useMemo(()=>{ const mp={}; for(const o of offRecords){ (mp[o.date]||(mp[o.date]=[])).push(o.employee); } return mp; },[offRecords]);
-  const offMonths = useMemo(()=>{ const s=new Set(offRecords.map(o=>o.date.slice(0,7))); s.add(thisMonth); s.add(offCalMonth); return [...s].sort((a,b)=>b.localeCompare(a)); },[offRecords,offCalMonth]);
+  const offMonths = useMemo(()=>{ const s=new Set(offRecords.map(o=>o.date.slice(0,7))); s.add(thisMonth); s.add(offCalMonth); return [...s].sort((a,b)=>b.localeCompare(a)); },[offRecords,offCalMonth,thisMonth]);
   // Who's on each shift for the displayed month.
   const monthShiftRows = useMemo(()=>shiftRecords.filter(r=>r.month===offCalMonth && r.employee),[shiftRecords,offCalMonth]);
   const shiftMorning = useMemo(()=>monthShiftRows.filter(r=>r.shift==='morning').sort((a,b)=>a.employee.localeCompare(b.employee)),[monthShiftRows]);

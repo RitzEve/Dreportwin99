@@ -1,10 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.8.7",
+  "version": "2.8.8",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "At midnight the dashboard now moves to the new day by itself. Before, “Today” could keep showing the previous day’s totals under the new day’s date until something else changed on the page. The month lists on the Monthly view and the Off Days calendar also pick up a new month straight away.",
     "If a save doesn’t go through — a slow connection or a busy moment on the server — the app now keeps trying by itself until it does, and tells you when everything is saved. Before, an entry could show on your own screen without ever reaching anyone else’s. If you try to close the tab while something still hasn’t saved, the browser now asks first. Saves on large companies also have more time before the server gives up.",
     "When an account is deactivated it now stops working straight away — including on any computer where it’s already open, which goes back to the login page within two minutes (or as soon as someone looks at that tab). Before, an already-open screen kept working until it was next reloaded.",
     "Logging out now signs out only the computer you’re on. Before, logging out also signed out every other computer using the same login — so when two people shared a login, one of them logging out could sign the other out too, part-way through their work.",

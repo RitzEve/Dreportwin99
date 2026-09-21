@@ -3,7 +3,9 @@
  * backed by the Supabase `app_data` table (one JSON row per company).
  *
  * The artifact calls:
- *     await window.storage.get(key)      -> { value, updatedAt } | null   (full data blob)
+ *     await window.storage.get(key)      -> { value, updatedAt } | null   (full data blob;
+ *                                           null ONLY for a company with no data yet —
+ *                                           a failed download or lost session THROWS)
  *     await window.storage.getMeta(key)  -> { updatedAt } | null           (tiny — just the timestamp)
  *     await window.storage.set(key, value)  -> { value } | null            (merges + writes)
  *     await window.storage.delete(key)
@@ -28,9 +30,19 @@ if (typeof window !== 'undefined') {
     async get(key) {
       const companyId = companyIdFromKey(key);
       if (!companyId) return null;
+      // Signed out underneath us (e.g. the same login signed out "everywhere" from
+      // another PC): the database would answer with zero rows, which looks exactly
+      // like a brand-new empty company. Say what actually happened instead.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('You have been signed out. Please log in again.');
       const { data, error } = await supabase
         .from('app_data').select('data, updated_at').eq('company_id', companyId).maybeSingle();
-      if (error || !data) return null;
+      // A failed download must never look like an empty company. On 2026-09-21 staff on
+      // a slow VPN saw "No active banks" while their data was still on its way, kept
+      // refreshing, and thought it was gone. Throw, so the app can say so and retry;
+      // null stays reserved for the one real case: a company with no row yet.
+      if (error) throw new Error(error.message || 'Could not download your company data.');
+      if (!data) return null;
       return { value: JSON.stringify(data.data ?? {}), updatedAt: data.updated_at || null };
     },
 

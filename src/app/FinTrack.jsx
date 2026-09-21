@@ -1275,6 +1275,12 @@ function ComparisonChart({data}) {
   );
 }
 
+// Back-off for re-trying a failed first load. Every attempt can re-download the whole
+// company record (megabytes), so it waits longer each time and stops after five —
+// after that only the "Try again now" button starts another. Before this, a tab whose
+// download kept failing re-fetched the full record every 20 seconds, indefinitely.
+const LOAD_RETRY_MS = [10000, 20000, 40000, 60000, 60000];
+
 export default function App() {
   // Read the live session for THIS mount (see readSession note up top). The
   // component re-mounts on every login, so company name, operator, and the data
@@ -1597,17 +1603,50 @@ export default function App() {
     if(d.nextId) setNextId(d.nextId);
   };
 
+  // Initial load. On 2026-09-21 staff behind a slow VPN watched this page say "No
+  // active banks" for up to 2½ minutes while their data was still downloading (or
+  // after the download dropped), refreshed — which starts it all over again — and
+  // believed the data was gone. So the app now stays on a loading screen until the
+  // data has really arrived, and a failed download is shown as a failure and retried.
+  // It is never marked `loaded` after a failure: that used to save the empty state
+  // back to the server and start polling on top of it.
+  const [loadFailed,setLoadFailed] = useState("");       // message from the last failed attempt
+  const [loadAttempt,setLoadAttempt] = useState(0);      // bump to start another attempt
+  const [retryAt,setRetryAt] = useState(null);           // when the next automatic attempt fires
+  const [loadNow,setLoadNow] = useState(()=>Date.now()); // the loading screen's clock
+  const loadStartRef = useRef(Date.now());
+  const loadFailsRef = useRef(0);
   useEffect(()=>{
+    let cancelled = false, retryTimer = null;
+    loadStartRef.current = Date.now();
+    setLoadFailed(""); setRetryAt(null);
     (async()=>{
       const key = `fintrack-${SESSION.companyId}-v2`;
       try{
         const r = await window.storage.get(key);
+        if(cancelled) return;
         if(r&&r.value){ applyData(JSON.parse(r.value)); lastSyncRef.current = sortedStringify(JSON.parse(r.value)); lastMetaRef.current = r.updatedAt || null; }
         try{ await window.storage.delete("fintrack-data"); }catch(e){}
-      }catch(e){ /* first run, no saved data */ }
-      setLoaded(true);
+        setLoaded(true);
+      }catch(e){
+        if(cancelled) return;
+        const delay = LOAD_RETRY_MS[loadFailsRef.current++];
+        setLoadFailed(String((e&&e.message)||e||"Unknown error"));
+        if(delay!=null){
+          setRetryAt(Date.now()+delay);
+          retryTimer = setTimeout(()=>setLoadAttempt(n=>n+1), delay);
+        }
+      }
     })();
-  },[]);
+    return ()=>{ cancelled = true; if(retryTimer) clearTimeout(retryTimer); };
+  },[loadAttempt]);
+  // Ticks the loading screen's counters. Stops the moment the data is in, so it can
+  // never make the whole app re-render every second once it's running.
+  useEffect(()=>{
+    if(loaded) return undefined;
+    const id = setInterval(()=>setLoadNow(Date.now()),1000);
+    return ()=>clearInterval(id);
+  },[loaded]);
 
   // Keep a ref to the latest state so the poller below can MERGE against it without
   // having to restart its timer every time something changes.
@@ -3359,6 +3398,48 @@ export default function App() {
       </div>
     </div>
   );
+
+  // Until the company's data has actually arrived, show that — never the dashboard.
+  // With empty state the dashboard says "No active banks" and "Add a bank account",
+  // which reads as "your data is gone"; and anything typed into it would be thrown
+  // away the moment the real data landed.
+  if(!loaded){
+    const secs = Math.max(0, Math.round((loadNow - loadStartRef.current)/1000));
+    const retryIn = retryAt!=null ? Math.max(0, Math.ceil((retryAt - loadNow)/1000)) : null;
+    return (
+      <div style={{minHeight:isMobile?"auto":620,boxSizing:"border-box",padding:isMobile?"16px":"32px 16px",fontFamily:"var(--font-sans)",color:C.text,background:C.bg,borderRadius:isMobile?0:12,border:isMobile?"none":`1px solid ${C.border}`}}>
+        <div role="status" aria-live="polite" style={{maxWidth:640,margin:"0 auto 12px",padding:"20px 22px",background:C.surface,border:`1px solid ${loadFailed?"#d9770666":C.border}`,borderRadius:12}}>
+          {loadFailed ? (<>
+            <div style={{display:"flex",alignItems:"center",gap:10,fontSize:16,fontWeight:600}}>
+              <i className="ti ti-cloud-off" aria-hidden="true" style={{fontSize:22,color:"#d97706"}}/>
+              Couldn't load your company data
+            </div>
+            <p style={{fontSize:13.5,margin:"10px 0 0",lineHeight:1.55}}>Nothing has been changed. Your data is safe on the server; the download just didn't finish, so the app is waiting instead of showing you an empty page.</p>
+            <p style={{fontSize:13,color:C.muted,margin:"8px 0 0",lineHeight:1.55}}>
+              {retryIn!=null ? `Trying again in ${retryIn}s.` : "Check your connection. If you're using a VPN, try turning it off for this site, then press Try again now."}
+            </p>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginTop:14,flexWrap:"wrap"}}>
+              <button type="button" onClick={()=>setLoadAttempt(n=>n+1)} style={{cursor:"pointer",padding:"8px 16px",minHeight:36,fontSize:13,fontWeight:600,borderRadius:8,border:"none",background:C.accent,color:C.onAccent}}>Try again now</button>
+              <span style={{fontSize:11.5,color:C.muted,overflowWrap:"anywhere"}}>Details: {loadFailed}</span>
+            </div>
+          </>) : (<>
+            <div style={{display:"flex",alignItems:"center",gap:10,fontSize:16,fontWeight:600}}>
+              <i className="ti ti-cloud-download" aria-hidden="true" style={{fontSize:22,color:C.accent}}/>
+              <span>Loading your company data…</span>
+              <span style={{fontSize:13,fontWeight:500,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{secs}s</span>
+            </div>
+            {secs>=8 && <p style={{fontSize:13.5,margin:"10px 0 0",lineHeight:1.55}}>This is taking longer than usual. On a slow connection or a VPN it can take a minute or two. <strong>Please don't refresh</strong>: refreshing starts the download again from the beginning.</p>}
+          </>)}
+        </div>
+        {!loadFailed && <div aria-hidden="true" style={{maxWidth:640,margin:"0 auto",display:"grid",gap:10}}>
+          <div className="skeleton" style={{height:64,borderRadius:12}}/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10}}>
+            {[0,1,2,3].map(i=><div key={i} className="skeleton" style={{height:84,borderRadius:12}}/>)}
+          </div>
+        </div>}
+      </div>
+    );
+  }
 
   return (
     <div style={{display:"flex",minHeight:isMobile?"auto":620,fontFamily:"var(--font-sans)",fontVariantNumeric:"tabular-nums",position:"relative",overflow:"hidden",borderRadius:isMobile?0:12,border:isMobile?"none":`1px solid ${C.border}`}}>

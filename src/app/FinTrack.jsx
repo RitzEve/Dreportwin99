@@ -75,6 +75,19 @@ const buyNote = (amt, rate) => {
   const a = Number(amt), r = Number(rate);
   return (amt!=="" && rate!=="" && amt!=null && rate!=null && !isNaN(a) && !isNaN(r)) ? `${amt}x${rate}=${Math.round(a*r*100)/100}` : "";
 };
+// Withdrawal tick-boxes (Store withdraw / Actual paid amount / Buy currency): ticking one
+// fills its amount with the WHOLE dollars of the withdrawal (150.50 -> 150), so the cents
+// fall through to the leftover -> Unclaimed credit leg the save already writes. Returns ""
+// when there is nothing whole to fill (blank, 0.50, negative), so a field never gets a 0.
+const wholeDollars = (amt) => { const n = Math.floor(Number(amt)); return n > 0 ? String(n) : ""; };
+// A filled-in amount keeps following the Amount box while it still holds what the app put
+// there (or nothing). Once the user types their own figure it is left alone.
+const WHOLE_DOLLAR_FIELDS = [["storeWithdraw","storeWithdrawAmount"],["actualPaid","actualPaidAmount"],["buyAud","buyAudAmount"]];
+const followWholeDollars = (prev, next) => {
+  const was = wholeDollars(prev.amount), now = wholeDollars(next.amount);
+  for (const [tick, field] of WHOLE_DOLLAR_FIELDS)
+    if (prev[tick] && (prev[field] === "" || prev[field] === was)) next[field] = now;
+};
 const INIT_BANKS = ["Acleda Bank","ABA Bank","Canadia Bank","Maybank","Wing Bank"];
 // Bank-name dropdown lists are per country now: see lib/banks.js (bankOptionsFor).
 const TYPE_COLORS = {
@@ -3923,7 +3936,7 @@ export default function App() {
                     onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/>
                   {bankBalanceHint(form.bankId)}</div>
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
-                  <input ref={amountRef} type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>{const nf={...f,amount:e.target.value}; if(f.type==="Buy/Sell AUD"){const n=buyNote(e.target.value,f.rate); if(n) nf.notes=n;} return nf;})} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                  <input ref={amountRef} type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>{const nf={...f,amount:e.target.value}; if(f.type==="Buy/Sell AUD"){const n=buyNote(e.target.value,f.rate); if(n) nf.notes=n;} if(f.type==="Regular Withdrawal") followWholeDollars(f,nf); return nf;})} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 {form.type==="Buy/Sell AUD"&&<div><label style={labelStyle}>Rate</label>
                   <input type="number" placeholder="e.g. 3" value={form.rate} onChange={e=>setForm(f=>{const nf={...f,rate:e.target.value}; const n=buyNote(f.amount,e.target.value); if(n) nf.notes=n; return nf;})} style={{width:"100%",boxSizing:"border-box"}}/>
                   <span style={{fontSize:11,color:C.muted,marginTop:3,display:"block"}}>Amount × rate is written to the note{buyNote(form.amount,form.rate)?`: ${buyNote(form.amount,form.rate)}`:""}.</span></div>}
@@ -4031,7 +4044,7 @@ export default function App() {
                         </span>
                       </label>
                       <label style={pill(form.storeWithdraw,"#d97706")}>
-                        <input type="checkbox" checked={!!form.storeWithdraw} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,storeWithdraw:on,redeposit:on?false:f.redeposit,actualPaid:on?false:f.actualPaid,storeAndPaid:on?false:f.storeAndPaid,buyAud:on?false:f.buyAud}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                        <input type="checkbox" checked={!!form.storeWithdraw} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,storeWithdraw:on,storeWithdrawAmount:on?(wholeDollars(f.amount)||f.storeWithdrawAmount):f.storeWithdrawAmount,redeposit:on?false:f.redeposit,actualPaid:on?false:f.actualPaid,storeAndPaid:on?false:f.storeAndPaid,buyAud:on?false:f.buyAud}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
                         <span aria-hidden="true" style={box(form.storeWithdraw,"#d97706")}>{form.storeWithdraw&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:13}}/>}</span>
                         <span style={{display:"flex",flexDirection:"column",lineHeight:1.2,minWidth:0}}>
                           <span style={{fontSize:12.5,fontWeight:500,color:C.text}}>Store withdraw</span>
@@ -4039,7 +4052,7 @@ export default function App() {
                         </span>
                       </label>
                       <label style={pill(form.actualPaid,"#0d9488")}>
-                        <input type="checkbox" checked={!!form.actualPaid} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,actualPaid:on,redeposit:on?false:f.redeposit,storeWithdraw:on?false:f.storeWithdraw,storeAndPaid:on?false:f.storeAndPaid,buyAud:on?false:f.buyAud}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                        <input type="checkbox" checked={!!form.actualPaid} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,actualPaid:on,actualPaidAmount:on?(wholeDollars(f.amount)||f.actualPaidAmount):f.actualPaidAmount,redeposit:on?false:f.redeposit,storeWithdraw:on?false:f.storeWithdraw,storeAndPaid:on?false:f.storeAndPaid,buyAud:on?false:f.buyAud}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
                         <span aria-hidden="true" style={box(form.actualPaid,"#0d9488")}>{form.actualPaid&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:13}}/>}</span>
                         <span style={{display:"flex",flexDirection:"column",lineHeight:1.2,minWidth:0}}>
                           <span style={{fontSize:12.5,fontWeight:500,color:C.text}}>Actual paid amount</span>
@@ -4055,7 +4068,7 @@ export default function App() {
                         </span>
                       </label>
                       <label style={pill(form.buyAud,"#db2777")}>
-                        <input type="checkbox" checked={!!form.buyAud} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,buyAud:on,redeposit:on?false:f.redeposit,storeWithdraw:on?false:f.storeWithdraw,actualPaid:on?false:f.actualPaid,storeAndPaid:on?false:f.storeAndPaid}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
+                        <input type="checkbox" checked={!!form.buyAud} onChange={e=>{const on=e.target.checked;setForm(f=>({...f,buyAud:on,buyAudAmount:on?(wholeDollars(f.amount)||f.buyAudAmount):f.buyAudAmount,redeposit:on?false:f.redeposit,storeWithdraw:on?false:f.storeWithdraw,actualPaid:on?false:f.actualPaid,storeAndPaid:on?false:f.storeAndPaid}));}} style={{position:"absolute",opacity:0,width:0,height:0}}/>
                         <span aria-hidden="true" style={box(form.buyAud,"#db2777")}>{form.buyAud&&<i className="ti ti-check" aria-hidden="true" style={{fontSize:13}}/>}</span>
                         <span style={{display:"flex",flexDirection:"column",lineHeight:1.2,minWidth:0}}>
                           <span style={{fontSize:12.5,fontWeight:500,color:C.text}}>Buy currency</span>

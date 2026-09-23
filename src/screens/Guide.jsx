@@ -756,7 +756,7 @@ const T = {
       },
       txoptions: {
         title: 'Deposit & withdrawal options (the tick-boxes)',
-        intro: "Most entries are a plain deposit or withdrawal. For special cases you can tick a box. The box never changes how big the withdrawal is — it only changes WHERE the money comes from, and anything left over is saved as the member's Unclaimed credit.",
+        intro: "Most entries are a plain deposit or withdrawal. For special cases you can tick a box. The box never changes how big the withdrawal is — it only changes WHERE the money comes from, and anything left over is saved as the member's Unclaimed credit. Ticking Store withdraw, Actual paid amount or Buy currency fills in the whole dollars for you — $150.50 becomes 150 — and the cents go to Unclaimed credit. If a different amount applies, just type over it.",
         note: 'Rule of thumb: Total Withdrawals always shows the full amount. The tick-box only splits where it is funded from — a bank, store credit, your Buy/Sell currency balance, or kept as Unclaimed credit. Left-over = amount − store − bank paid − Buy currency used.',
         rowsHeader: 'Entry / option',
         colHeaders: ['Deposits total', 'Withdrawals total', 'Bank balance', 'Store credit', 'Unclaimed credit', 'Buy/Sell currency'],
@@ -1032,7 +1032,7 @@ const T = {
       },
       txoptions: {
         title: '存款与取款的选项（勾选框）',
-        intro: '大多数记录就是普通的存款或取款。遇到特殊情况时，你可以勾选一个方框。勾选框从不改变取款的金额，它只改变这笔钱从哪里出——剩下未被覆盖的部分会作为该会员的”未领取额度”保存。',
+        intro: '大多数记录就是普通的存款或取款。遇到特殊情况时，你可以勾选一个方框。勾选框从不改变取款的金额，它只改变这笔钱从哪里出——剩下未被覆盖的部分会作为该会员的”未领取额度”保存。勾选“商店取款”、“实付金额”或“购买货币”时，系统会自动填入整数金额（$150.50 填为 150），零头自动记为未领取额度；如果实际金额不同，直接改写即可。',
         note: '要点：取款总额始终显示完整金额。勾选框只决定这笔钱从哪里出——银行、商店额度、买卖货币余额，或记为未领取额度。剩余 = 金额 − 商店 − 银行支付 − 购买货币金额。',
         rowsHeader: '记录 / 选项',
         colHeaders: ['存款总额', '取款总额', '银行余额', '商店额度', '未领取额度', '买卖货币'],
@@ -1308,7 +1308,7 @@ const T = {
       },
       txoptions: {
         title: 'ជម្រើសដាក់ប្រាក់ និងដកប្រាក់ (ប្រអប់ធីក)',
-        intro: 'កំណត់ត្រាភាគច្រើនគ្រាន់តែជាការដាក់ប្រាក់ ឬដកប្រាក់ធម្មតា។ សម្រាប់ករណីពិសេស អ្នកអាចធីកប្រអប់មួយ។ ប្រអប់នេះមិនផ្លាស់ប្ដូរទំហំនៃការដកប្រាក់ឡើយ — វាគ្រាន់តែផ្លាស់ប្ដូរថាលុយចេញពីណា ហើយផ្នែកដែលនៅសល់ត្រូវរក្សាទុកជា «ឥណទានមិនទាន់ដក» របស់សមាជិក។',
+        intro: 'កំណត់ត្រាភាគច្រើនគ្រាន់តែជាការដាក់ប្រាក់ ឬដកប្រាក់ធម្មតា។ សម្រាប់ករណីពិសេស អ្នកអាចធីកប្រអប់មួយ។ ប្រអប់នេះមិនផ្លាស់ប្ដូរទំហំនៃការដកប្រាក់ឡើយ — វាគ្រាន់តែផ្លាស់ប្ដូរថាលុយចេញពីណា ហើយផ្នែកដែលនៅសល់ត្រូវរក្សាទុកជា «ឥណទានមិនទាន់ដក» របស់សមាជិក។ ពេលធីក «ដកពីហាង» «ចំនួនបង់ពិត» ឬ «ទិញរូបិយប័ណ្ណ» ប្រព័ន្ធនឹងបំពេញចំនួនដុល្លារគត់ឱ្យអ្នក — $150.50 ក្លាយជា 150 — ហើយសេនដែលនៅសល់ទៅជាឥណទានមិនទាន់ដក។ បើចំនួនពិតខុសពីនេះ គ្រាន់តែវាយជំនួសបាន។',
         note: 'គោលការណ៍៖ ការដកសរុបតែងតែបង្ហាញចំនួនពេញ។ ប្រអប់ធីកគ្រាន់តែបែងចែកថាលុយចេញពីណា — ធនាគារ ឥណទានហាង សមតុល្យទិញ/លក់រូបិយប័ណ្ណ ឬរក្សាជាឥណទានមិនទាន់ដក។ នៅសល់ = ចំនួន − ហាង − ធនាគារបង់ − ចំនួនទិញរូបិយប័ណ្ណ។',
         rowsHeader: 'កំណត់ត្រា / ជម្រើស',
         colHeaders: ['ដាក់ប្រាក់សរុប', 'ដកប្រាក់សរុប', 'សមតុល្យធនាគារ', 'ឥណទានហាង', 'ឥណទានមិនទាន់ដក', 'ទិញ/លក់រូបិយប័ណ្ណ'],

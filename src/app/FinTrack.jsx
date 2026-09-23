@@ -1613,7 +1613,7 @@ export default function App() {
   const sidebarMenuRef = useRef(null);
   const moreTypesRef = useRef(null);
   const moreStatsRef = useRef(null);
-  const amountRef = useRef(null); // entry modal: first field to focus on open
+  const bankRef = useRef(null); // entry modal: the bank picker gets the cursor on open
   const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
   const lastMetaRef = useRef(null); // last seen server updated_at — the poller checks this (cheap) before downloading the full blob
   const dataRef = useRef({transactions:[],banks:[],members:[],nextId:1}); // always-current state, so the poller can merge without restarting its timer
@@ -2062,8 +2062,10 @@ export default function App() {
     else if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); setNameSuggestions([]); setIdSuggestions([]); setPhoneSuggestions([]); setSuggestIndex(-1); }
   };
 
-  // When the entry modal opens, move focus into it (so Tab cycles the fields).
-  useEffect(()=>{ if(!showEntryModal) return undefined; const id=setTimeout(()=>amountRef.current?.focus(),40); return ()=>clearTimeout(id); },[showEntryModal]);
+  // When the entry modal opens, put the cursor on the bank picker, not the amount: several
+  // banks are active at once, so a keyboard user confirms or changes the bank first (its
+  // number key picks it) and Tabs on to the amount.
+  useEffect(()=>{ if(!showEntryModal) return undefined; const id=setTimeout(()=>bankRef.current?.focus(),40); return ()=>clearTimeout(id); },[showEntryModal]);
 
   // Alt + a letter picks an entry type while on the Transactions page (see SHORTCUT_LETTER).
   useEffect(()=>{
@@ -3931,18 +3933,19 @@ export default function App() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:12}}>
                 <div><label style={labelStyle}>{form.type==="Bank Block"?"Bank to clear":"Bank account affected (optional)"}</label>
-                  <FluidDropdown value={form.bankId??""} placeholder="— None —" ariaLabel="Bank account affected"
-                    options={[{value:"",label:"— None —"},...(form.type==="Bank Block"?banksLive:activeBanks).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}${b.blocked?" ❄":""}`}))]}
+                  <FluidDropdown value={form.bankId??""} placeholder="— None —" ariaLabel="Bank account affected" buttonRef={bankRef}
+                    options={[{value:"",label:"— None —"},...(form.type==="Bank Block"?banksLive:activeBanks).map((b,i)=>({value:b.id,num:i+1,label:`${i+1}. ${b.holder} — ${b.name}${b.blocked?" ❄":""}`}))]}
                     onChange={v=>setForm(f=>({...f,bankId:v===""?null:Number(v)}))}/>
                   {bankBalanceHint(form.bankId)}</div>
                 <div><label style={labelStyle}>Amount ($){SIGNED_TYPES.includes(form.type)?" — use minus for negative":""}</label>
-                  <input ref={amountRef} type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>{const nf={...f,amount:e.target.value}; if(f.type==="Buy/Sell AUD"){const n=buyNote(e.target.value,f.rate); if(n) nf.notes=n;} if(f.type==="Regular Withdrawal") followWholeDollars(f,nf); return nf;})} style={{width:"100%",boxSizing:"border-box"}}/></div>
+                  <input type="number" placeholder={SIGNED_TYPES.includes(form.type)?"e.g. 100 or -100":"0.00"} value={form.amount} onChange={e=>setForm(f=>{const nf={...f,amount:e.target.value}; if(f.type==="Buy/Sell AUD"){const n=buyNote(e.target.value,f.rate); if(n) nf.notes=n;} if(f.type==="Regular Withdrawal") followWholeDollars(f,nf); return nf;})} style={{width:"100%",boxSizing:"border-box"}}/></div>
                 {form.type==="Buy/Sell AUD"&&<div><label style={labelStyle}>Rate</label>
                   <input type="number" placeholder="e.g. 3" value={form.rate} onChange={e=>setForm(f=>{const nf={...f,rate:e.target.value}; const n=buyNote(f.amount,e.target.value); if(n) nf.notes=n; return nf;})} style={{width:"100%",boxSizing:"border-box"}}/>
                   <span style={{fontSize:11,color:C.muted,marginTop:3,display:"block"}}>Amount × rate is written to the note{buyNote(form.amount,form.rate)?`: ${buyNote(form.amount,form.rate)}`:""}.</span></div>}
+                {/* Each bank keeps the number it has in the source list (the source is skipped, leaving a gap), so a number key means the same bank in both pickers. */}
                 {form.type==="Transfer"&&<div style={{gridColumn:"1/-1"}}><label style={labelStyle}>Destination bank (optional)</label>
                   <FluidDropdown value={form.toBankId??""} placeholder="— None —" ariaLabel="Destination bank"
-                    options={[{value:"",label:"— None —"},...activeBanks.filter(b=>b.id!==form.bankId).map((b,i)=>({value:b.id,label:`${i+1}. ${b.holder} — ${b.name}`}))]}
+                    options={[{value:"",label:"— None —"},...activeBanks.map((b,i)=>({b,n:i+1})).filter(({b})=>b.id!==form.bankId).map(({b,n})=>({value:b.id,num:n,label:`${n}. ${b.holder} — ${b.name}`}))]}
                     onChange={v=>setForm(f=>({...f,toBankId:v===""?null:Number(v)}))}/>
                   {bankBalanceHint(form.toBankId)}</div>}
                 <div style={{position:"relative",gridColumn:"1/-1"}} ref={suggestRef}>
@@ -4370,7 +4373,7 @@ export default function App() {
                         <kbd style={{fontFamily:"inherit",fontSize:11,fontWeight:700,color:(isPaleColor(c)&&!dark)?STORE_INK:c,background:(isPaleColor(c)&&!dark)?c:(dark?c+"22":c+"14"),border:`1px solid ${(isPaleColor(c)&&!dark)?STORE_INK+"55":c+"66"}`,borderRadius:5,padding:"2px 6px"}}>Alt+{SHORTCUT_LETTER[t]}</kbd>{typeLabel(t).replace("Regular ","")}
                       </span>;
                     })}
-                    <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>
+                    <span style={{fontSize:11.5,color:C.muted,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:6}}>In the form — <strong style={{color:C.text,fontWeight:600}}>1 2 3…</strong> picks the bank · <strong style={{color:C.text,fontWeight:600}}>Tab</strong> moves · <strong style={{color:C.text,fontWeight:600}}>↑↓</strong> in dropdowns · <strong style={{color:C.text,fontWeight:600}}>Enter</strong> saves · <strong style={{color:C.text,fontWeight:600}}>Esc</strong> closes</span>
                   </div>
                 )}
               </div>

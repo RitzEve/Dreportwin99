@@ -1,10 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.9.0",
+  "version": "2.9.1",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "New entries now open with the cursor on the bank instead of the amount. Press the bank’s number (1, 2, 3…) to pick it — no need to open the list — or keep the one shown, then press Tab to go to the amount. Two numbers typed quickly reach bank 10 and up.",
     "Recording a withdrawal: ticking Store withdraw, Actual paid amount or Buy currency now fills in the whole dollars of the amount for you — $150.50 becomes 150 — and the 50 cents go to Unclaimed credit, the same as any other leftover. It keeps up if you change the amount, and a figure you type yourself is left alone.",
     "The dashboard’s Date range now follows the calendar too: until you pick your own dates it shows the last 7 days up to today, and moves forward at midnight. Dates you pick yourself stay exactly as you set them — and if you only pick the From date, the To date keeps following today.",
     "At midnight the dashboard now moves to the new day by itself. Before, “Today” could keep showing the previous day’s totals under the new day’s date until something else changed on the page. The month lists on the Monthly view and the Off Days calendar also pick up a new month straight away.",

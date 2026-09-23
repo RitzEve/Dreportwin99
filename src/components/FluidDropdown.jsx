@@ -16,9 +16,12 @@ import { createPortal } from 'react-dom';
  * modals, and follows the trigger if the page scrolls.
  *
  * Props:
- *   options   [{ value, label, icon?, color? }]   icon = Tabler class e.g. "ti-wallet"
+ *   options   [{ value, label, icon?, color?, num? }]   icon = Tabler class e.g. "ti-wallet"
+ *             num = a number key that picks the row outright: the bank pickers number
+ *             their rows "1. …", "2. …", so pressing 2 selects bank 2 without opening
  *   value     currently-selected value (compared loosely, so numbers/strings both work)
  *   onChange  (value) => void
+ *   buttonRef optional ref to the trigger button, so a form can put the cursor on it
  *   placeholder, ariaLabel, width (CSS), style (wrapper override), maxPanelHeight
  */
 
@@ -26,18 +29,21 @@ const ITEM_H = 38;
 
 export default function FluidDropdown({
   options, value, onChange,
-  placeholder = 'Select…', ariaLabel, width = '100%', style, maxPanelHeight = 300,
+  placeholder = 'Select…', ariaLabel, width = '100%', style, maxPanelHeight = 300, buttonRef,
 }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(null);
   const [rect, setRect] = useState(null);
   const [kbIndex, setKbIndex] = useState(-1); // keyboard cursor (arrow-key highlight)
+  const [focused, setFocused] = useState(false); // gold border while focused, like the text inputs
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
   const listRef = useRef(null);
   const typeBuf = useRef('');       // letters typed so far (type-ahead)
   const typeTimer = useRef(null);
   const openedByTyping = useRef(false);
+  const numBuf = useRef('');        // digits typed so far (number picking)
+  const numTimer = useRef(null);
 
   const selected = options.find((o) => String(o.value) === String(value)) || null;
   const selIdx = options.findIndex((o) => String(o.value) === String(value));
@@ -95,8 +101,11 @@ export default function FluidDropdown({
     /* eslint-disable-next-line */
   }, [open]);
 
-  // Drop the pending type-ahead timer if the dropdown unmounts mid-search.
-  useEffect(() => () => { if (typeTimer.current) clearTimeout(typeTimer.current); }, []);
+  // Drop the pending type-ahead / number timers if the dropdown unmounts mid-search.
+  useEffect(() => () => {
+    if (typeTimer.current) clearTimeout(typeTimer.current);
+    if (numTimer.current) clearTimeout(numTimer.current);
+  }, []);
 
   // Keep the keyboard-highlighted row scrolled into view.
   useEffect(() => {
@@ -153,6 +162,24 @@ export default function FluidDropdown({
     }
   };
 
+  /*
+   * Number picking, for lists whose rows carry a `num` (the bank pickers): pressing a
+   * row's number selects it straight away, open or closed, so a keyboard user can
+   * change the bank and Tab on without ever opening the panel. Two digits typed
+   * quickly reach rows 10 and up; a digit that can't extend the number starts over.
+   */
+  const hasNums = options.some((o) => o.num != null);
+  const pickByNumber = (d) => {
+    if (numTimer.current) clearTimeout(numTimer.current);
+    numTimer.current = setTimeout(() => { numBuf.current = ''; }, 700);
+    const byNum = (s) => options.find((o) => o.num != null && String(o.num) === s);
+    const hit = byNum(numBuf.current + d) || byNum(d);
+    numBuf.current = hit ? String(hit.num) : '';
+    if (!hit) return;
+    onChange(hit.value);
+    setOpen(false); setHovered(null);
+  };
+
   const onTriggerKey = (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
@@ -178,6 +205,9 @@ export default function FluidDropdown({
       if (open) { e.preventDefault(); setHovered(null); setKbIndex(options.length - 1); }
     } else if (e.key === 'Tab') {
       if (open) setOpen(false);
+    } else if (hasNums && /^[0-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      pickByNumber(e.key);
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Any other single printable character starts or continues a search.
       // Typing while closed opens the panel on the match, same as a native select.
@@ -190,12 +220,14 @@ export default function FluidDropdown({
   return (
     <div ref={wrapRef} style={{ position: 'relative', width, ...style }}>
       <button
-        type="button" onClick={() => setOpen((o) => !o)} onKeyDown={onTriggerKey} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
+        ref={buttonRef} type="button" onClick={() => setOpen((o) => !o)} onKeyDown={onTriggerKey}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
         style={{
           width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           padding: '8px 12px', minHeight: 38, cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
           background: 'var(--surface)', color: selected ? 'var(--text)' : 'var(--muted)',
-          border: `1px solid ${open ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 8,
+          border: `1px solid ${open || focused ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 8,
           transition: 'border-color 0.15s ease, background 0.15s ease',
         }}
       >

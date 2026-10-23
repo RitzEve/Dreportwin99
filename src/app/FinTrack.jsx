@@ -3083,15 +3083,18 @@ export default function App() {
     const nid = editMemberForm.id.trim(), nname = editMemberForm.name.trim(), nphone = (editMemberForm.phone||"").trim();
     if(!nid||!nname){setEditMemberError("ID and name are required.");return;}
     if(nid!==id && liveMembers.some(m=>m.id===nid)){setEditMemberError("That Member ID already exists.");return;}
+    // updatedAt marks this as the newest edit, so the cross-device merge keeps it over a
+    // copy still showing the old details on another screen (see lib/mergeData.js).
+    const updatedAt = Date.now();
     setMembers(prev=>{
       const cur = prev.find(m=>m.id===id);
       if(!cur) return prev;
-      const row = {...cur,id:nid,name:nname,phone:nphone,deleted:false};
+      const row = {...cur,id:nid,name:nname,phone:nphone,deleted:false,updatedAt};
       if(nid===id) return prev.map(m=>m.id===id?row:m);
       // The ID *is* the merge key, so changing it can't be an in-place rewrite: the old
       // id must be tombstoned, or the merge pairs it with the copy still in the database
       // and the member reappears as a second row under the old id.
-      return [...prev.filter(m=>m.id!==nid).map(m=>m.id===id?{...m,deleted:true}:m), row];
+      return [...prev.filter(m=>m.id!==nid).map(m=>m.id===id?{...m,deleted:true,updatedAt}:m), row];
     });
     setEditingMember(null); setEditMemberError("");
   };

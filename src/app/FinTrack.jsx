@@ -3,7 +3,7 @@ import FluidDropdown from "../components/FluidDropdown.jsx";
 import UpdateBell from "../components/UpdateBell.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
 import { dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
-import { makeBaseline, patchBaseline, diffAgainst, threeWayMerge, adoptRows, sentSignatures } from "../lib/deltaSync.js";
+import { makeBaseline, patchBaseline, diffAgainst, threeWayMerge, adoptRows, sentSignatures, applyRemoteRows } from "../lib/deltaSync.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
 import { suggestMembersByName, suggestMembersByPhone, matchMemberName, matchMemberPhone, nameTokens } from "../lib/memberMatch.js";
@@ -1607,6 +1607,7 @@ export default function App() {
   const bankRef = useRef(null); // entry modal: the bank picker gets the cursor on open
   const baseRef = useRef(makeBaseline({})); // the server's copy of every row as last seen — a save sends only what differs (lib/deltaSync.js)
   const lastMetaRef = useRef(null); // last seen server updated_at — the poller checks this (cheap) before downloading the full blob
+  const revRef = useRef(null); // number of the server's latest change this screen has (V2.9.4); null = no row storage on this database, use the V2.9.3 calls
   const dataRef = useRef({transactions:[],banks:[],members:[],nextId:1}); // always-current state, so the poller can merge without restarting its timer
 
   const [search,setSearch] = useState({term:"",dateFrom:"",dateTo:"",type:"",bank:"",member:""});
@@ -1652,9 +1653,19 @@ export default function App() {
     (async()=>{
       const key = `fintrack-${SESSION.companyId}-v2`;
       try{
-        const r = await window.storage.get(key);
+        // Every row plus the number of the company's latest change (V2.9.4). A database
+        // without row storage answers `missing`: the V2.9.3 whole-record download then.
+        let d = null;
+        const l = window.storage.load ? await window.storage.load(key) : null;
         if(cancelled) return;
-        if(r&&r.value){ const d = JSON.parse(r.value); applyData(d); baseRef.current = makeBaseline(d); lastMetaRef.current = r.updatedAt || null; }
+        if(l && !l.missing){ d = l.data; revRef.current = Number(l.rev) || 0; }
+        else{
+          revRef.current = null;
+          const r = await window.storage.get(key);
+          if(cancelled) return;
+          if(r&&r.value){ d = JSON.parse(r.value); lastMetaRef.current = r.updatedAt || null; }
+        }
+        if(d){ applyData(d); baseRef.current = makeBaseline(d); }
         try{ await window.storage.delete("fintrack-data"); }catch(e){}
         setLoaded(true);
       }catch(e){
@@ -1682,8 +1693,9 @@ export default function App() {
   useEffect(()=>{ dataRef.current = {transactions,banks,members,nextId,offDays}; });
 
   // Save. Only the rows that differ from the server's copy (baseRef) are sent; the database
-  // merges them into the company record (app_data_merge_delta, migration-041) and returns
-  // just those rows, merged. Until V2.9.3 every save sent and received the WHOLE record —
+  // merges them into the company's rows (company_save, migration-042; app_data_merge_delta
+  // on a database without row storage) and returns just those rows, merged. Until V2.9.3
+  // every save sent and received the WHOLE record —
   // 9 MB each way for the biggest company — and between 17 and 27 Oct 2026 overlapping saves
   // of that size ran the database out of memory five times. One save at a time per screen:
   // a change made while a save is on its way goes out right after it.
@@ -1727,8 +1739,16 @@ export default function App() {
     (async()=>{
       let ok = false;
       try{
-        let res = null;
-        try{ res = await window.storage.setDelta(key, delta); }catch(e){ res = null; }
+        let res = null, viaRows = false;
+        if(revRef.current!=null){
+          try{ res = await window.storage.save(key, delta); }catch(e){ res = null; }
+          // The row storage is gone (the switch was undone): the V2.9.3 calls from now on.
+          if(res && res.missing){ revRef.current = null; lastMetaRef.current = null; res = null; }
+          else viaRows = true;
+        }
+        if(!viaRows){
+          try{ res = await window.storage.setDelta(key, delta); }catch(e){ res = null; }
+        }
         if(res && res.missing){
           // migration-041 isn't installed: the old whole-record save, adopting the merged
           // record it returns.
@@ -1746,10 +1766,12 @@ export default function App() {
         ok = true;
         // The server has these rows now, merged.
         patchBaseline(baseRef.current, res.rows, res.nextId);
-        // Nobody else saved since our last download, so the server's record is exactly our
+        // Nobody else saved since our last check, so the server's copy is exactly our
         // baseline: nothing to download on the next update check (it used to re-download
-        // the whole record after every save of our own).
-        if(res.prevUpdatedAt && res.prevUpdatedAt === lastMetaRef.current) lastMetaRef.current = res.updatedAt;
+        // the whole record after every save of our own). Otherwise the next check brings in
+        // the other screens' changes (and this save's rows again, harmlessly).
+        if(viaRows){ if(res.prevRev!=null && Number(res.prevRev) === revRef.current) revRef.current = Number(res.rev); }
+        else if(res.prevUpdatedAt && res.prevUpdatedAt === lastMetaRef.current) lastMetaRef.current = res.updatedAt;
         saved();
         // Take the server's merged version of a row we sent where it differs (e.g. the other
         // side had deleted it), unless the row was edited again while the save was on its way.
@@ -1776,10 +1798,12 @@ export default function App() {
   },[]);
 
   // Auto-refresh — pull other devices' changes WITHOUT wasting egress. Every 20s (only
-  // while the tab is visible) we check the tiny server `updated_at` via getMeta(); we
-  // download the full data blob ONLY when it actually changed, then MERGE it into local
-  // (so a refresh never drops an entry we just made). Also fires the moment the app
-  // regains focus, so returning to it shows the latest right away.
+  // while the tab is visible), and the moment the app regains focus. Since V2.9.4 we ask
+  // for the rows changed after the last change number we saw (a few bytes when nothing
+  // changed) and merge just those in. Until then we checked the tiny server `updated_at`
+  // via getMeta() and downloaded the WHOLE record whenever anything changed — 9 MB for the
+  // biggest company to bring in one new entry. That older way stays as the fallback for a
+  // database without row storage. Either way a refresh never drops an entry we just made.
   useEffect(()=>{
     if(!loaded) return;
     const key = `fintrack-${SESSION.companyId}-v2`;
@@ -1789,6 +1813,34 @@ export default function App() {
       if(typeof document!=="undefined" && document.visibilityState==="hidden") return;
       busy = true;
       try{
+        if(revRef.current!=null){
+          const res = await window.storage.changes(key, revRef.current);
+          // The row storage is gone (the switch was undone): the check below from now on.
+          if(res && res.missing){ revRef.current = null; lastMetaRef.current = null; }
+          else{
+            const rev = res && res.rev!=null ? Number(res.rev) : null;
+            if(rev!=null && rev < revRef.current){
+              // The server's numbering went BACK (restored to an earlier moment): "changed
+              // after N" would miss rows, so start over from a full download.
+              const l = await window.storage.load(key);
+              if(l && !l.missing && l.data){
+                const merged = threeWayMerge(l.data, dataRef.current, baseRef.current);
+                baseRef.current = makeBaseline(l.data);
+                applyData(merged);
+                revRef.current = Number(l.rev) || 0;
+              }
+            }else if(rev!=null && rev > revRef.current){
+              // Rows this screen hasn't changed take the server's version; rows changed here
+              // and not saved yet keep ours (see applyRemoteRows in lib/deltaSync.js).
+              const cur = dataRef.current;
+              const merged = applyRemoteRows(cur, baseRef.current, res.rows, res.nextId);
+              patchBaseline(baseRef.current, res.rows, res.nextId);
+              if(merged !== cur) applyData(merged);
+              revRef.current = rev;
+            }
+            return;
+          }
+        }
         const meta = window.storage.getMeta ? await window.storage.getMeta(key) : null;
         const stamp = meta && meta.updatedAt;
         if(stamp && stamp !== lastMetaRef.current){

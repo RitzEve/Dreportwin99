@@ -10,13 +10,23 @@
  *     await window.storage.set(key, value)  -> { value } | null            (merges + writes the whole record)
  *     await window.storage.setDelta(key, delta) -> { updatedAt, prevUpdatedAt, rows, … } | { missing } | null
  *                                           (merges + writes only the changed rows; V2.9.3)
+ *     await window.storage.load(key)     -> { data, rev } | { missing } | null   (V2.9.4: every row +
+ *                                           the number of the company's latest change; THROWS on failure)
+ *     await window.storage.changes(key, sinceRev) -> { rev, nextId, rows } | { missing } | null
+ *                                           (V2.9.4: only the rows changed after `sinceRev`)
+ *     await window.storage.save(key, delta) -> { rev, prevRev, changed, rows, nextId } | { missing } | null
+ *                                           (V2.9.4: writes only the changed rows)
  *     await window.storage.delete(key)
  * where key looks like `fintrack-<companyId>-v2`. We read/write that company's
  * row; Row-Level Security guarantees a user only ever touches their own company.
  *
  * EGRESS NOTE: the live app polls for other devices' changes. To avoid re-downloading
  * the whole company blob constantly, the poller uses getMeta() (a few bytes) and only
- * calls get() (the full blob) when updated_at actually changed.
+ * calls get() (the full blob) when updated_at actually changed. Since V2.9.4 it asks
+ * changes() instead: an idle check is a few bytes and a busy one carries only the rows
+ * other screens changed. `{ missing }` everywhere means the server doesn't have that
+ * function (an older database, or the switch was undone): the app falls back to the
+ * V2.9.3 calls above.
  */
 
 import { supabase } from './supabaseClient.js';
@@ -26,6 +36,10 @@ function companyIdFromKey(key) {
   const m = /^fintrack-(.+)-v2$/.exec(String(key));
   return m ? m[1] : null;
 }
+
+// The function isn't installed on this database (PostgREST's "not found" for an RPC).
+const isMissing = (error) => error.code === 'PGRST202'
+  || /Could not find the function|does not exist/i.test(error.message || '');
 
 if (typeof window !== 'undefined') {
   window.storage = {
@@ -73,9 +87,7 @@ if (typeof window !== 'undefined') {
 
       // Fallback ONLY when the merge function isn't installed yet. Read the remote blob,
       // merge here (so a concurrent edit isn't clobbered), then write the merged result.
-      const missing = error.code === 'PGRST202'
-        || /Could not find the function|does not exist/i.test(error.message || '');
-      if (!missing) return null; // real error (network/permission) — let the app retry; don't overwrite
+      if (!isMissing(error)) return null; // real error (network/permission) — let the app retry; don't overwrite
 
       let remote = null;
       try {
@@ -101,9 +113,47 @@ if (typeof window !== 'undefined') {
       const { data, error } = await supabase
         .rpc('app_data_merge_delta', { p_company_id: companyId, p_delta: delta });
       if (!error) return data || null;
-      const missing = error.code === 'PGRST202'
-        || /Could not find the function|does not exist/i.test(error.message || '');
-      return missing ? { missing: true } : null;
+      return isMissing(error) ? { missing: true } : null;
+    },
+
+    // Every row of the company (migration-042/043), already parsed, plus `rev`: the number
+    // of its latest change, which the update check then asks "what changed after?". A
+    // company with nothing saved yet comes back empty with rev 0. Like get(), a failure
+    // THROWS — it must never look like an empty company.
+    async load(key) {
+      const companyId = companyIdFromKey(key);
+      if (!companyId) return null;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('You have been signed out. Please log in again.');
+      const { data, error } = await supabase.rpc('company_load', { p_company: companyId });
+      if (error) {
+        if (isMissing(error)) return { missing: true };
+        throw new Error(error.message || 'Could not download your company data.');
+      }
+      const { rev, ...rows } = data || {};
+      return { data: rows, rev: Number(rev) || 0 };
+    },
+
+    // Only the rows changed after change number `sinceRev`: { rev, nextId, rows: { transactions?, … } }.
+    // Nothing changed -> rows is {} (a few bytes). null on any failure (the next check retries).
+    async changes(key, sinceRev) {
+      const companyId = companyIdFromKey(key);
+      if (!companyId) return null;
+      const { data, error } = await supabase
+        .rpc('company_changes', { p_company: companyId, p_since: sinceRev });
+      if (!error) return data || null;
+      return isMissing(error) ? { missing: true } : null;
+    },
+
+    // Save only the rows that changed, straight into the company's rows. The answer has the
+    // merged versions of just those rows and the change numbers before/after this save.
+    async save(key, delta) {
+      const companyId = companyIdFromKey(key);
+      if (!companyId) return null;
+      const { data, error } = await supabase
+        .rpc('company_save', { p_company: companyId, p_delta: delta });
+      if (!error) return data || null;
+      return isMissing(error) ? { missing: true } : null;
     },
 
     async delete() {

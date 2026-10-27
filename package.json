@@ -1,10 +1,11 @@
 {
   "name": "multi-company-portal",
   "private": true,
-  "version": "2.9.3",
+  "version": "2.9.4",
   "type": "module",
   "description": "Multi-company login portal that hosts the FinTrack financial app per tenant, with master/staff accounts.",
   "whatsNew": [
+    "Keeping every screen up to date is now much lighter. Each company’s data is stored entry by entry instead of as one big file, so when someone adds or changes an entry, the other screens download just that entry — usually less than 1 KB — instead of the company’s whole record (up to 9 MB for the biggest companies). Nothing changes in how you use the app.",
     "Saving is now much lighter and faster. Each save sends only what you changed, instead of the company's whole record every time — for the biggest companies that was 9 MB per save, and it is what made saving slow and briefly took the system offline a few times last week. Changes made on other screens now also come in without undoing an edit someone else just made.",
     "Editing a member's name or phone on the Members page now sticks. Before, if another screen still showed the old name, that screen's next deposit for the member put the old name back. Other screens now pick up the new name within about 20 seconds.",
     "New entries now open with the cursor on the bank instead of the amount. Press the bank’s number (1, 2, 3…) to pick it — no need to open the list — or keep the one shown, then press Tab to go to the amount. Two numbers typed quickly reach bank 10 and up.",

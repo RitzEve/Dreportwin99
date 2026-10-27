@@ -16,6 +16,10 @@
  * just edited — and the next full save sent that old version to everyone. Now a row this
  * screen hasn't changed simply takes the server's version; only rows changed here (and not
  * yet saved) are merged with this screen's copy winning, as before.
+ *
+ * V2.9.4: the server keeps every row separately and numbers each change (migration-042/043),
+ * so the update check asks only for the rows changed since the number it last saw and
+ * applyRemoteRows brings them in by the same rule, instead of downloading the whole record.
  */
 import { mergeData, txKey, idKey } from './mergeData.js';
 
@@ -112,6 +116,47 @@ export function threeWayMerge(remote, local, base) {
     });
   }
   return mergeData(remote, mine);
+}
+
+/**
+ * Bring in the rows the server says changed since this screen's last check (V2.9.4). Same
+ * rule as threeWayMerge, one row at a time: a row this screen hasn't changed since the
+ * baseline takes the server's version, a row changed here (not yet saved) is merged with this
+ * screen's copy winning (mergeData), and a row this screen doesn't have is added. Collections
+ * the server sent nothing for keep their identity; if nothing changed, `local` comes back.
+ */
+export function applyRemoteRows(local, base, rows, nextId) {
+  local = local || {};
+  let out = null;
+  for (const [name, keyFn] of COLLECTIONS) {
+    const incoming = rows && rows[name];
+    if (!incoming || !incoming.length) continue;
+    const list = Array.isArray(local[name]) ? local[name] : [];
+    const at = new Map();
+    list.forEach((row, i) => { const k = rowKey(keyFn, row); if (!at.has(k)) at.set(k, i); });
+    const known = base ? base[name] : null;
+    let next = null;
+    for (const srv of incoming) {
+      const k = rowKey(keyFn, srv);
+      const i = at.get(k);
+      let row = srv;
+      if (i !== undefined) {
+        const mine = (next || list)[i];
+        const sig = rowSig(mine);
+        if (!known || known.get(k) !== sig) {
+          const merged = mergeData({ [name]: [srv] }, { [name]: [mine] })[name];
+          row = merged.length === 1 ? merged[0] : mine;
+        }
+        if (rowSig(row) === sig) continue;
+      }
+      if (!next) next = list.slice();
+      if (i === undefined) { at.set(k, next.length); next.push(row); } else next[i] = row;
+    }
+    if (next) { if (!out) out = { ...local }; out[name] = next; }
+  }
+  const n = Math.max(Number(local.nextId || 0), Number(nextId || 0));
+  if (n !== Number(local.nextId || 0)) { if (!out) out = { ...local }; out.nextId = n; }
+  return out || local;
 }
 
 /** key -> signature of the rows a save sends, per collection, for adoptRows below. */

@@ -7,7 +7,9 @@
  *                                           null ONLY for a company with no data yet —
  *                                           a failed download or lost session THROWS)
  *     await window.storage.getMeta(key)  -> { updatedAt } | null           (tiny — just the timestamp)
- *     await window.storage.set(key, value)  -> { value } | null            (merges + writes)
+ *     await window.storage.set(key, value)  -> { value } | null            (merges + writes the whole record)
+ *     await window.storage.setDelta(key, delta) -> { updatedAt, prevUpdatedAt, rows, … } | { missing } | null
+ *                                           (merges + writes only the changed rows; V2.9.3)
  *     await window.storage.delete(key)
  * where key looks like `fintrack-<companyId>-v2`. We read/write that company's
  * row; Row-Level Security guarantees a user only ever touches their own company.
@@ -86,6 +88,22 @@ if (typeof window !== 'undefined') {
         .from('app_data')
         .upsert({ company_id: companyId, data: merged, updated_at: new Date().toISOString() });
       return upErr ? null : { value: JSON.stringify(merged) };
+    },
+
+    // Save only the rows that changed (V2.9.3, migration-041). `delta` is
+    // { transactions?, banks?, members?, offDays?, nextId }. Returns the server's answer
+    // { updatedAt, prevUpdatedAt, changed, rows, nextId } — the merged versions of just
+    // those rows, never the whole record — or { missing: true } when the function isn't
+    // installed (the app then falls back to set()), or null on any other failure.
+    async setDelta(key, delta) {
+      const companyId = companyIdFromKey(key);
+      if (!companyId) return null;
+      const { data, error } = await supabase
+        .rpc('app_data_merge_delta', { p_company_id: companyId, p_delta: delta });
+      if (!error) return data || null;
+      const missing = error.code === 'PGRST202'
+        || /Could not find the function|does not exist/i.test(error.message || '');
+      return missing ? { missing: true } : null;
     },
 
     async delete() {

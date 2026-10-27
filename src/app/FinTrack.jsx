@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import FluidDropdown from "../components/FluidDropdown.jsx";
 import UpdateBell from "../components/UpdateBell.jsx";
 import useIsMobile from "../lib/useIsMobile.js";
-import { mergeData, dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
+import { dedupeByKey, txKey, idKey } from "../lib/mergeData.js";
+import { makeBaseline, patchBaseline, diffAgainst, threeWayMerge, adoptRows, sentSignatures } from "../lib/deltaSync.js";
 import { NATIONALITIES, nationalityCode } from "../lib/nationalities.js";
 import { digitsOnly, countryFromPhone, normalizePhone, normalizeName, extractNumbers } from "../lib/phone.js";
 import { suggestMembersByName, suggestMembersByPhone, matchMemberName, matchMemberPhone, nameTokens } from "../lib/memberMatch.js";
@@ -137,16 +138,6 @@ const dateInTz = tz => { try { return new Intl.DateTimeFormat("en-CA",{timeZone:
 // Includes seconds (HH:MM:SS) — drives both the live top-bar clock and the timestamp
 // stamped onto every saved log record.
 const timeInTz = tz => { try { return new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).format(new Date()); } catch(e){ return new Date().toTimeString().slice(0,8); } };
-// Order-independent signature of a data blob. The server stores `data` as JSONB and returns
-// its keys in Postgres's own canonical order, which never matches the browser's JSON.stringify
-// order. Comparing raw strings therefore ALWAYS looked "changed", so the save effect re-sent
-// the same data forever (a save -> merge -> apply -> save loop that hammered the database).
-// Sorting keys before stringifying makes "did anything actually change?" reliable.
-const sortedStringify = (v) => {
-  if (Array.isArray(v)) return '[' + v.map(sortedStringify).join(',') + ']';
-  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + sortedStringify(v[k])).join(',') + '}';
-  return JSON.stringify(v === undefined ? null : v);
-};
 const dateNDaysAgoInTz = (n,tz) => { const d=new Date(dateInTz(tz)+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()-n); return d.toISOString().split("T")[0]; };
 // Short, friendly city name from an IANA zone, e.g. "Australia/Sydney" -> "Sydney".
 const tzCity = tz => String(tz||"").split("/").pop().replace(/_/g," ");
@@ -1614,7 +1605,7 @@ export default function App() {
   const moreTypesRef = useRef(null);
   const moreStatsRef = useRef(null);
   const bankRef = useRef(null); // entry modal: the bank picker gets the cursor on open
-  const lastSyncRef = useRef(""); // last data we loaded/saved — lets us sync across devices without save/load loops
+  const baseRef = useRef(makeBaseline({})); // the server's copy of every row as last seen — a save sends only what differs (lib/deltaSync.js)
   const lastMetaRef = useRef(null); // last seen server updated_at — the poller checks this (cheap) before downloading the full blob
   const dataRef = useRef({transactions:[],banks:[],members:[],nextId:1}); // always-current state, so the poller can merge without restarting its timer
 
@@ -1663,7 +1654,7 @@ export default function App() {
       try{
         const r = await window.storage.get(key);
         if(cancelled) return;
-        if(r&&r.value){ applyData(JSON.parse(r.value)); lastSyncRef.current = sortedStringify(JSON.parse(r.value)); lastMetaRef.current = r.updatedAt || null; }
+        if(r&&r.value){ const d = JSON.parse(r.value); applyData(d); baseRef.current = makeBaseline(d); lastMetaRef.current = r.updatedAt || null; }
         try{ await window.storage.delete("fintrack-data"); }catch(e){}
         setLoaded(true);
       }catch(e){
@@ -1690,10 +1681,12 @@ export default function App() {
   // having to restart its timer every time something changes.
   useEffect(()=>{ dataRef.current = {transactions,banks,members,nextId,offDays}; });
 
-  // Save. The storage bridge MERGES our changes into the shared company record (the DB
-  // does it atomically when migration-008 is installed, else the bridge merges client-
-  // side), so we send our local data and adopt the authoritative merged result it
-  // returns. No pre-read here — that saved an entire extra blob download on every save.
+  // Save. Only the rows that differ from the server's copy (baseRef) are sent; the database
+  // merges them into the company record (app_data_merge_delta, migration-041) and returns
+  // just those rows, merged. Until V2.9.3 every save sent and received the WHOLE record —
+  // 9 MB each way for the biggest company — and between 17 and 27 Oct 2026 overlapping saves
+  // of that size ran the database out of memory five times. One save at a time per screen:
+  // a change made while a save is on its way goes out right after it.
   // A failed save must never leave an entry sitting on one screen only. On 2026-09-21
   // one of OP-005's saves hit the database's time limit: the entry showed on OP-005's
   // screen but never reached the server, and nothing ever sent it again — the update
@@ -1704,48 +1697,74 @@ export default function App() {
   // is read-only by design, so those saves are meant to be refused.
   const unsavedRef = useRef(false);            // the server hasn't accepted our latest changes yet
   const saveFailsRef = useRef(0);              // consecutive failed saves, for the back-off
+  const saveBusyRef = useRef(false);           // a save is on its way — never two at once from one screen
+  const savePendingRef = useRef(false);        // something changed meanwhile: save again when it lands
+  const retryTimerRef = useRef(null);
   const [saveRetry,setSaveRetry] = useState(0); // bump to send again
+  useEffect(()=>()=>{ if(retryTimerRef.current) clearTimeout(retryTimerRef.current); },[]);
   useEffect(()=>{
     if(!loaded) return;
-    const payload = {transactions,banks,members,nextId,offDays};
-    const serialized = JSON.stringify(payload); // what we send to the server
-    const sig = sortedStringify(payload);       // order-independent "has anything changed?" key
-    // Nothing new AND nothing owed. (unsavedRef matters because the update check marks
-    // merged data as synced even when part of it only exists on this screen.)
-    if(sig === lastSyncRef.current && !unsavedRef.current) return;
-    let cancelled = false, retryTimer = null;
+    if(saveBusyRef.current){ savePendingRef.current = true; return; }
+    const local = {transactions,banks,members,nextId,offDays};
+    const delta = diffAgainst(baseRef.current, local);
+    // Nothing differs from the server's copy: nothing to send and nothing owed.
+    if(!delta){ unsavedRef.current = false; return; }
+    if(retryTimerRef.current){ clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+    saveBusyRef.current = true; savePendingRef.current = false;
+    const key = `fintrack-${SESSION.companyId}-v2`;
+    const failed = ()=>{
+      if(isOwnerView){ window.showToast?.("Couldn't save — you may be in a read-only view, or check your connection.","error"); return; }
+      unsavedRef.current = true;
+      if(saveFailsRef.current===0) window.showToast?.("Not saved yet — the app will keep trying by itself. Please keep this page open.","error");
+      const delay = SAVE_RETRY_MS[Math.min(saveFailsRef.current, SAVE_RETRY_MS.length-1)];
+      saveFailsRef.current += 1;
+      retryTimerRef.current = setTimeout(()=>{ retryTimerRef.current = null; setSaveRetry(n=>n+1); }, delay);
+    };
+    const saved = ()=>{
+      if(saveFailsRef.current>0) window.showToast?.("Saved — everything is on the server now.","success");
+      unsavedRef.current = false; saveFailsRef.current = 0;
+    };
     (async()=>{
+      let ok = false;
       try{
-        const key = `fintrack-${SESSION.companyId}-v2`;
         let res = null;
-        try{ res = await window.storage.set(key,serialized); }catch(e){ res = null; }
-        if(cancelled) return;
-        if(!res){
-          if(isOwnerView){ window.showToast?.("Couldn't save — you may be in a read-only view, or check your connection.","error"); return; }
-          unsavedRef.current = true;
-          if(saveFailsRef.current===0) window.showToast?.("Not saved yet — the app will keep trying by itself. Please keep this page open.","error");
-          const delay = SAVE_RETRY_MS[Math.min(saveFailsRef.current, SAVE_RETRY_MS.length-1)];
-          saveFailsRef.current += 1;
-          retryTimer = setTimeout(()=>{ if(!cancelled) setSaveRetry(n=>n+1); }, delay);
+        try{ res = await window.storage.setDelta(key, delta); }catch(e){ res = null; }
+        if(res && res.missing){
+          // migration-041 isn't installed: the old whole-record save, adopting the merged
+          // record it returns.
+          let full = null;
+          try{ full = await window.storage.set(key, JSON.stringify(local)); }catch(e){ full = null; }
+          if(!full){ failed(); return; }
+          const serverObj = JSON.parse(full.value || JSON.stringify(local));
+          if(serverObj && serverObj.offDays === undefined) serverObj.offDays = local.offDays;
+          baseRef.current = makeBaseline(serverObj);
+          applyData(serverObj);
+          ok = true; saved();
           return;
         }
-        if(saveFailsRef.current>0) window.showToast?.("Saved — everything is on the server now.","success");
-        unsavedRef.current = false; saveFailsRef.current = 0;
-        const serverObj = JSON.parse((res && res.value) ? res.value : serialized);
-        // If the server's merge doesn't know about offDays yet (migration-009 not applied),
-        // keep our local copy so they aren't lost AND the change-check settles instead of
-        // looping (the old function would echo back a blob with no offDays forever).
-        if(serverObj && serverObj.offDays === undefined) serverObj.offDays = payload.offDays;
-        const finalSig = sortedStringify(serverObj);
-        lastSyncRef.current = finalSig;
-        // Only adopt the server's copy when it's GENUINELY different (another device merged
-        // something in) — not when it's the same data with JSONB's keys reordered. This is the
-        // check that stops the runaway save -> merge -> apply -> save loop.
-        if(finalSig !== sig) applyData(serverObj);
-        // The write bumped the server's updated_at; let the next poll reconcile it (cheap).
+        if(!res || !res.rows){ failed(); return; }
+        ok = true;
+        // The server has these rows now, merged.
+        patchBaseline(baseRef.current, res.rows, res.nextId);
+        // Nobody else saved since our last download, so the server's record is exactly our
+        // baseline: nothing to download on the next update check (it used to re-download
+        // the whole record after every save of our own).
+        if(res.prevUpdatedAt && res.prevUpdatedAt === lastMetaRef.current) lastMetaRef.current = res.updatedAt;
+        saved();
+        // Take the server's merged version of a row we sent where it differs (e.g. the other
+        // side had deleted it), unless the row was edited again while the save was on its way.
+        const sent = sentSignatures(delta), rows = res.rows;
+        if(rows.transactions) setTransactions(p=>adoptRows(p, rows.transactions, txKey, sent.transactions));
+        if(rows.banks) setBanks(p=>adoptRows(p, rows.banks, idKey, sent.banks));
+        if(rows.members) setMembers(p=>adoptRows(p, rows.members, idKey, sent.members));
+        if(rows.offDays) setOffDays(p=>adoptRows(p, rows.offDays, txKey, sent.offDays));
+        if(res.nextId != null) setNextId(n=>Math.max(Number(n)||0, Number(res.nextId)||0));
       }catch(e){ /* the server's reply couldn't be read; the next change or retry sends again */ }
+      finally{
+        saveBusyRef.current = false;
+        if(savePendingRef.current){ savePendingRef.current = false; if(ok) setSaveRetry(n=>n+1); }
+      }
     })();
-    return ()=>{ cancelled = true; if(retryTimer) clearTimeout(retryTimer); };
   },[transactions,banks,members,nextId,offDays,loaded,saveRetry]);
 
   // Closing or reloading the tab with an unsaved entry would lose it for good, so the
@@ -1775,9 +1794,12 @@ export default function App() {
         if(stamp && stamp !== lastMetaRef.current){
           const r = await window.storage.get(key);
           if(r && r.value){
-            const merged = mergeData(JSON.parse(r.value), dataRef.current);
+            // Rows this screen hasn't changed take the server's version; rows changed here
+            // and not saved yet keep ours (see threeWayMerge in lib/deltaSync.js).
+            const remote = JSON.parse(r.value);
+            const merged = threeWayMerge(remote, dataRef.current, baseRef.current);
+            baseRef.current = makeBaseline(remote);
             applyData(merged);
-            lastSyncRef.current = sortedStringify(merged);
             lastMetaRef.current = r.updatedAt || stamp;
           }
         }

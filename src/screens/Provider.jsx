@@ -277,7 +277,9 @@ function CreateCompany({ onCreated }) {
 }
 
 /* Owner logins: one login, linked to several companies, for a bird's-eye view
- * (today's deposits/withdrawals/store) without a separate password per company. */
+ * (today's deposits/withdrawals/store) without a separate password per company.
+ * Each owner row can be edited (Name/ID + login email), given a new password, or
+ * linked to companies — the same tools a master row has. */
 function OwnersCard({ companies }) {
   const blank = { name: '', email: '', password: '' };
   const [owners, setOwners] = useState(null);
@@ -285,7 +287,11 @@ function OwnersCard({ companies }) {
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [busy, setBusy] = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
+  const [panel, setPanel] = useState(null); // { id, kind: 'edit' | 'reset' | 'link' } — one open panel at a time
+  const [draft, setDraft] = useState({ name: '', email: '' });
+  const [resetPw, setResetPw] = useState('');
+  const [rowBusy, setRowBusy] = useState(false);
+  const [rowMsg, setRowMsg] = useState(null); // { id, type: 'ok' | 'err', text } — shown on that owner's row
   const [linkBusy, setLinkBusy] = useState(null);
 
   async function refresh() {
@@ -311,6 +317,42 @@ function OwnersCard({ companies }) {
     setLinkBusy(null);
     if (!res.ok) { window.showToast?.(res.error, 'error'); return; }
     refresh();
+  }
+
+  const isOpen = (o, kind) => panel && panel.id === o.id && panel.kind === kind;
+  function openPanel(o, kind) {
+    setRowMsg(null);
+    if (isOpen(o, kind)) { setPanel(null); return; }
+    setPanel({ id: o.id, kind });
+    setDraft({ name: o.name, email: o.email || '' });
+    setResetPw('');
+  }
+
+  // Name/ID is what the owner types to log in (or their email), so a change takes
+  // effect on their next login. Only fields that actually changed are sent.
+  async function saveOwner(e, o) {
+    e.preventDefault();
+    const payload = {};
+    if (draft.name.trim() !== (o.name || '')) payload.name = draft.name;
+    if (draft.email.trim() !== (o.email || '')) payload.email = draft.email;
+    if (!Object.keys(payload).length) { setPanel(null); return; }
+    setRowBusy(true); setRowMsg(null);
+    const res = await updateAccountInfo(o.id, payload);
+    setRowBusy(false);
+    if (!res.ok) { setRowMsg({ id: o.id, type: 'err', text: res.error }); return; }
+    setPanel(null);
+    setRowMsg({ id: o.id, type: 'ok', text: 'Owner details updated.' });
+    refresh();
+  }
+
+  async function resetOwnerPassword(e, o) {
+    e.preventDefault();
+    setRowBusy(true); setRowMsg(null);
+    const res = await adminResetPassword(o.id, resetPw);
+    setRowBusy(false);
+    if (!res.ok) { setRowMsg({ id: o.id, type: 'err', text: res.error }); return; }
+    setPanel(null); setResetPw('');
+    setRowMsg({ id: o.id, type: 'ok', text: `New password set for ${o.name}.` });
   }
 
   return (
@@ -351,10 +393,51 @@ function OwnersCard({ companies }) {
                 </div>
                 <div style={styles.sub}>{o.email} · {o.companyIds.length} compan{o.companyIds.length === 1 ? 'y' : 'ies'} linked</div>
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}>
-                <i className={`ti ti-${expandedId === o.id ? 'chevron-up' : 'link'}`} aria-hidden="true" /> {expandedId === o.id ? 'Close' : 'Link companies'}
-              </button>
-              {expandedId === o.id && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(o, 'edit')}>
+                  <i className="ti ti-pencil" aria-hidden="true" /> Edit
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(o, 'reset')}>
+                  <i className="ti ti-key" aria-hidden="true" /> Reset password
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(o, 'link')}>
+                  <i className={`ti ti-${isOpen(o, 'link') ? 'chevron-up' : 'link'}`} aria-hidden="true" /> {isOpen(o, 'link') ? 'Close' : 'Link companies'}
+                </button>
+              </div>
+              {isOpen(o, 'edit') && (
+                <form onSubmit={(e) => saveOwner(e, o)} style={styles.editBox}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Name / ID (used for login)</label>
+                    <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                      placeholder="e.g. The Boss" />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Login email</label>
+                    <input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                      placeholder="boss@example.com" />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPanel(null)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={rowBusy || !draft.name.trim()}>
+                      <i className={`ti ti-${rowBusy ? 'loader-2' : 'check'}`} aria-hidden="true" /> {rowBusy ? 'Saving…' : 'Save changes'}
+                    </button>
+                  </div>
+                </form>
+              )}
+              {isOpen(o, 'reset') && (
+                <form onSubmit={(e) => resetOwnerPassword(e, o)} style={styles.resetRow}>
+                  <input type="text" value={resetPw} onChange={(e) => setResetPw(e.target.value)}
+                    placeholder={`New password for ${o.name} (≥ 6 characters)`} style={{ flex: 1, minWidth: 0 }} />
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={!resetPw || rowBusy}>Set</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPanel(null); setResetPw(''); }}>Cancel</button>
+                </form>
+              )}
+              {rowMsg && rowMsg.id === o.id && (
+                rowMsg.type === 'ok'
+                  ? <div className="success-text" style={{ width: '100%', margin: 0 }}><i className="ti ti-circle-check" aria-hidden="true" />{rowMsg.text}</div>
+                  : <div className="error-text" style={{ width: '100%', margin: 0 }}>{rowMsg.text}</div>
+              )}
+              {isOpen(o, 'link') && (
                 <div style={{ ...styles.editBox, gap: 2 }}>
                   {companies.length === 0 && <div style={styles.sub}>No companies yet.</div>}
                   {companies.map((c) => {

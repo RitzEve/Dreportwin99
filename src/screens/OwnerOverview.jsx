@@ -46,9 +46,12 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
   // at that point it's the SAME literal date applied to every company, which is
   // what makes a side-by-side comparison across companies meaningful.
   const [pickedDate, setPickedDate] = useState('');
+  const [query, setQuery] = useState(''); // company-name search; filters the cards already loaded
 
   const isToday = !pickedDate;
   const displayDate = pickedDate || todayLocal();
+  const q = query.trim().toLowerCase();
+  const shown = rows && q ? rows.filter((r) => (r.name || '').toLowerCase().includes(q)) : rows;
 
   async function refresh(date) {
     const res = await getOwnerSummaries(date || undefined);
@@ -105,8 +108,29 @@ export default function OwnerOverview({ ctx, onLogout, onOpenCompany }) {
           <p style={styles.emptyText}>No companies are linked to your account yet — ask your provider to link one.</p>
         )}
 
+        {rows && rows.length > 0 && (
+          <div style={styles.searchBar}>
+            <div style={{ ...styles.searchWrap, maxWidth: isMobile ? 'none' : 340 }}>
+              <i className="ti ti-search" aria-hidden="true" style={styles.searchIcon} />
+              <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search company…" aria-label="Search company" style={styles.searchInput} />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} style={styles.searchClear} aria-label="Clear search">
+                  <i className="ti ti-x" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <span style={styles.searchCount}>
+              {q ? `${shown.length} of ${rows.length}` : rows.length} compan{rows.length === 1 ? 'y' : 'ies'}
+            </span>
+          </div>
+        )}
+        {rows && rows.length > 0 && q && shown.length === 0 && (
+          <p style={styles.emptyText}>No companies match “{query.trim()}”.</p>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-          {rows && rows.map((r) => (
+          {shown && shown.map((r) => (
             <CompanyCard key={r.companyId} row={r} isToday={isToday || dateUnsupported}
               onOpen={() => onOpenCompany({ id: r.companyId, name: r.name, logo: r.logo, timezone: r.timezone })} />
           ))}
@@ -180,6 +204,13 @@ const styles = {
   actionsMobile: { display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' },
   main: { flex: 1, width: '100%', maxWidth: 1200, margin: '0 auto', padding: 24 },
   emptyText: { fontSize: 13.5, color: 'var(--muted)' },
+  // Same search field as the provider's Companies list (Provider.jsx).
+  searchBar: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 },
+  searchWrap: { position: 'relative', display: 'flex', alignItems: 'center', flex: '1 1 220px' },
+  searchIcon: { position: 'absolute', left: 11, fontSize: 15, color: 'var(--muted)', pointerEvents: 'none' },
+  searchInput: { width: '100%', padding: '8px 30px 8px 32px' },
+  searchClear: { position: 'absolute', right: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 15, display: 'flex', padding: 4 },
+  searchCount: { fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' },
   companyCard: {
     width: '100%', boxSizing: 'border-box', appearance: 'none', font: 'inherit', color: 'inherit',
     textAlign: 'left', cursor: 'pointer', background: 'var(--surface)', border: '1px solid var(--border)',
